@@ -1,0 +1,6 @@
+numpy
+safetensors
+torch
+tqdm
+tensordict
+scipy
