@@ -12,7 +12,6 @@ merge = sd_mecha.weighted_sum(
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
     device="cuda:0",
-    prune=True,
 )
 
 # perform the entire merge plan and save to output path
