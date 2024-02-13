@@ -1,4 +1,5 @@
 import sd_mecha
+sd_mecha.set_log_level()
 
 
 # plan a simple weighted sum

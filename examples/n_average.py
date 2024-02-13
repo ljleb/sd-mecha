@@ -7,9 +7,9 @@ sd_mecha.set_log_level()
 models = [
     "ghostmix_v20Bakedvae",
     "dreamshaper_332BakedVaeClipFix",
-    # "deliberate_v2",
-    # "darkSushi25D25D_v20",
-    # "CounterfeitV30_v30",
+    "deliberate_v2",
+    "darkSushi25D25D_v20",
+    "CounterfeitV30_v30",
 ]
 
 merge = models[0]
@@ -22,4 +22,4 @@ scheduler = sd_mecha.MergeScheduler(
     work_dtype=torch.float64,
 )
 
-scheduler.merge_and_save(merge, output_path="n_average_test-fp64-rebasin")
+scheduler.merge_and_save(merge, output_path="n_average")
