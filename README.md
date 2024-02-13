@@ -7,9 +7,13 @@ import sd_mecha
 
 # plan a simple weighted sum
 merge = sd_mecha.weighted_sum(
-    "ghostmix_v20Bakedvae",
+    sd_mecha.weighted_sum(
+        "ghostmix_v20Bakedvae",
+        "deliberate_v2",
+        alpha=0.5,
+    ),
     "dreamshaper_332BakedVaeClipFix",
-    alpha=0.5,
+    alpha=0.33,
 )
 
 # scheduler contains default parameters
