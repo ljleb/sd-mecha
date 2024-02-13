@@ -14,7 +14,7 @@ models = [
 
 merge = models[0]
 for i, model in enumerate(models[1:], start=2):
-    merge = sd_mecha.weighted_sum(merge, model, alpha=1/i, rebasin_iters=16)
+    merge = sd_mecha.weighted_sum(model, merge, alpha=(i-1)/i, rebasin_iters=16)
 
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
