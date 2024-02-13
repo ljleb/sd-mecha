@@ -1,8 +1,8 @@
 import logging
-import os
+import pathlib
 from dataclasses import dataclass
 
-import safetensors
+import safetensors.torch
 import torch
 from tensordict import TensorDict
 
@@ -11,11 +11,11 @@ logging.getLogger("sd_meh").addHandler(logging.NullHandler())
 
 @dataclass
 class SDModel:
-    model_path: os.PathLike
+    model_path: pathlib.Path
     device: str
 
     def load_model(self):
-        logging.info(f"Loading: {self.model_path}")
+        logging.info(f"Loading: {self.model_path} to {self.device}")
         if self.model_path.suffix == ".safetensors":
             ckpt = safetensors.torch.load_file(
                 self.model_path,

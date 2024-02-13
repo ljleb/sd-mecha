@@ -13,11 +13,12 @@ models = [
 
 merge = models[0]
 for i, model in enumerate(models[1:], start=2):
-    merge = sd_mecha.weighted_sum(merge, model, alpha=1/i, work_dtype=torch.float64)
+    merge = sd_mecha.weighted_sum(merge, model, alpha=1/i, rebasin_iters=1)
 
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
-    device="cuda:0",
+    work_device="cuda:0",
+    work_dtype=torch.float64,
 )
 
-scheduler.merge_and_save(merge, output_path="n_average_test")
+scheduler.merge_and_save(merge, output_path="n_average_test-fp16-rebasin")

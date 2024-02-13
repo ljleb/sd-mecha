@@ -1,3 +1,4 @@
+import logging
 import pathlib
 import torch
 from typing import Optional
@@ -170,3 +171,7 @@ def clip(model, a, b, device: Optional[str] = None) -> ast_nodes.MergeNode:
         b = ast_nodes.LeafMergeNode(b, device)
 
     return ast_nodes.ClipMergeNode(model, a, b, device)
+
+
+def set_log_level(level: str = "INFO"):
+    logging.basicConfig(format="%(levelname)s: %(message)s", level=level)

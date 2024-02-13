@@ -1,3 +1,4 @@
+import logging
 import pathlib
 
 import safetensors.torch
@@ -16,6 +17,7 @@ class MergeScheduler:
         threads: int = 1,
         device: str = "cpu",
         work_device: Optional[str] = None,
+        work_dtype: Optional[torch.dtype] = None,
     ):
         self.__base_dir = base_dir if base_dir is not None else base_dir
         if isinstance(self.__base_dir, str):
@@ -27,6 +29,7 @@ class MergeScheduler:
         self.__threads = threads
         self.__default_device = device
         self.__default_work_device = work_device
+        self.__default_work_dtype = work_dtype
 
     def symbolic_merge(self, merge_method, a, b, c, alpha, beta, rebasin_iters, device, work_device, work_dtype, prune, threads, weights_clip):
         models = models_dict(a, b, c)
@@ -38,7 +41,7 @@ class MergeScheduler:
             bases,
             merge_method,
             self.__dtype,
-            work_dtype,
+            work_dtype if work_dtype is not None else self.__default_work_dtype,
             weights_clip,
             bool(rebasin_iters),
             rebasin_iters if rebasin_iters is not None else 0,
@@ -61,7 +64,11 @@ class MergeScheduler:
             path = path.with_suffix(".safetensors")
         if not path.is_absolute():
             path = self.__base_dir / path
-        return sd_meh_merge.load_sd_model(path, device if device is not None else self.__default_device)
+
+        if device is None:
+            device = self.__default_device
+
+        return sd_meh_merge.load_sd_model(path, device)
 
     def merge_and_save(self, merge_tree, *, output_path: Optional[pathlib.Path | str] = None):
         merged = merge_tree.visit(self)
@@ -73,6 +80,7 @@ class MergeScheduler:
         if not output_path.suffix:
             output_path = output_path.with_suffix(".safetensors")
 
+        logging.info(f"Saving to {output_path}")
         if output_path.suffix == ".safetensors":
             safetensors.torch.save_file(
                 merged.to_dict(),
