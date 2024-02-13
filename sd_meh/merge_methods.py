@@ -1,8 +1,11 @@
+import functools
 import math
-from typing import Tuple
+import operator
+import textwrap
 
 import torch
 from torch import Tensor
+from typing import Tuple
 
 __all__ = [
     "weighted_sum",
@@ -18,6 +21,7 @@ __all__ = [
     "distribution_crossover",
     "ties_add_difference",
     "add_perpendicular",
+    "rotate",
 ]
 
 
@@ -223,3 +227,93 @@ def add_perpendicular(
     if torch.isnan(res).any():
         return a
     return res.to(a.dtype)
+
+
+def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
+    if alpha == 0 and beta == 0:
+        return a
+
+    is_conv = len(a.shape) == 4 and a.shape[-1] != 1
+    if len(a.shape) == 0 or is_conv or torch.allclose(a.half(), b.half()):
+        return weighted_sum(a, b, beta)
+
+    if len(a.shape) == 4:
+        shape_2d = (-1, functools.reduce(operator.mul, a.shape[1:]))
+    else:
+        shape_2d = (-1, a.shape[-1])
+
+    a_neurons = a.reshape(*shape_2d).double()
+    b_neurons = b.reshape(*shape_2d).double()
+
+    a_centroid = a_neurons.mean(0)
+    b_centroid = b_neurons.mean(0)
+    new_centroid = weighted_sum(a_centroid, b_centroid, alpha)
+    if len(a.shape) == 1 or len(a.shape) == 2 and a.shape[0] == 1:
+        return new_centroid.reshape_as(a)
+
+    a_neurons -= a_centroid
+    b_neurons -= b_centroid
+
+    alpha_is_float = alpha != round(alpha)
+
+    if kwargs["cache"] is not None and "rotation" in kwargs["cache"]:
+        rotation = transform = kwargs["cache"]["rotation"].to(a.device)
+    else:
+        svd_driver = "gesvd" if a.is_cuda else None
+        u, _, v_t = torch.linalg.svd(a_neurons.T @ b_neurons, driver=svd_driver)
+
+        if alpha_is_float:
+            # cancel reflection. without this, eigenvalues often have a complex component
+            #   and then we can't obtain a valid dtype for the merge
+            u[:, -1] /= torch.det(u) * torch.det(v_t)
+
+        rotation = transform = u @ v_t
+        if not torch.isfinite(u).all():
+            raise ValueError(
+                textwrap.dedent(
+                    f"""determinant error: {torch.det(rotation)}.
+                This can happen when merging on the CPU with the "rotate" method.
+                Consider merging on a cuda device, or try setting alpha to 1 for the problematic blocks.
+                See this related discussion for more info: https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"""
+                )
+            )
+
+        if kwargs["cache"] is not None:
+            kwargs["cache"]["rotation"] = rotation.cpu()
+
+    if alpha_is_float:
+        transform = fractional_matrix_power(transform, alpha, kwargs["cache"])
+    elif alpha == 0:
+        transform = torch.eye(
+            len(transform),
+            dtype=transform.dtype,
+            device=transform.device,
+        )
+    elif alpha != 1:
+        transform = torch.linalg.matrix_power(transform, round(alpha))
+
+    if beta != 0:
+        # interpolate the relationship between the neurons
+        a_neurons = weighted_sum(a_neurons, b_neurons @ rotation.T, beta)
+
+    a_neurons @= transform
+    a_neurons += new_centroid
+    return a_neurons.reshape_as(a).to(a.dtype)
+
+
+def fractional_matrix_power(matrix: Tensor, power: float, cache: dict):
+    if cache is not None and "eigenvalues" in cache:
+        eigenvalues = cache["eigenvalues"].to(matrix.device)
+        eigenvectors = cache["eigenvectors"].to(matrix.device)
+        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device)
+    else:
+        eigenvalues, eigenvectors = torch.linalg.eig(matrix)
+        eigenvectors_inv = torch.linalg.inv(eigenvectors)
+        if cache is not None:
+            cache["eigenvalues"] = eigenvalues.cpu()
+            cache["eigenvectors"] = eigenvectors.cpu()
+            cache["eigenvectors_inv"] = eigenvectors_inv.cpu()
+
+    eigenvalues.pow_(power)
+    result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
+    return result.real.to(dtype=matrix.dtype)
