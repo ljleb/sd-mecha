@@ -12,9 +12,9 @@ import torch
 import tensordict
 from tqdm import tqdm
 
-from sd_meh import merge_methods
-from sd_meh.model import SDModel
-from sd_meh.rebasin import (
+from sd_mecha.sd_meh import merge_methods
+from sd_mecha.sd_meh.model import SDModel
+from sd_mecha.sd_meh.rebasin import (
     apply_permutation,
     sdunet_permutation_spec,
     step_weights_and_bases,

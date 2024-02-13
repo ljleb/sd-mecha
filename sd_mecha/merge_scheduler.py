@@ -3,7 +3,7 @@ import pathlib
 import safetensors.torch
 import torch
 
-from sd_meh import utils as sd_meh_utils, merge as sd_meh_merge
+from sd_mecha.sd_meh import utils as sd_meh_utils, merge as sd_meh_merge
 from typing import Optional, Tuple
 
 

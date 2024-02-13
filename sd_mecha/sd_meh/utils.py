@@ -1,9 +1,9 @@
 import inspect
 import logging
 
-from sd_meh import merge_methods
-from sd_meh.merge import NUM_TOTAL_BLOCKS
-from sd_meh.presets import BLOCK_WEIGHTS_PRESETS
+from sd_mecha.sd_meh import merge_methods
+from sd_mecha.sd_meh.merge import NUM_TOTAL_BLOCKS
+from sd_mecha.sd_meh.presets import BLOCK_WEIGHTS_PRESETS
 
 MERGE_METHODS = dict(inspect.getmembers(merge_methods, inspect.isfunction))
 BETA_METHODS = [

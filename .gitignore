@@ -1,2 +1,4 @@
-.idea/
+.idea
 __pycache__
+sd_mecha.egg-info
+build
