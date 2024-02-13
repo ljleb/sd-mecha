@@ -45,7 +45,7 @@ def weighted_sum(
 
 def add_difference(
     a, b, c, *,
-    alpha: float = 1.0,
+    alpha: float = 0.5,
     prune: bool = False,
     threads: int = 1,
     device: str = "cpu",
