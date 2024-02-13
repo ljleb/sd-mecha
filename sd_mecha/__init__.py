@@ -18,9 +18,9 @@ def weighted_sum(
     a, b, *,
     alpha: float = 0.5,
     rebasin_iters: Optional[int] = None,
-    prune: bool = False,
-    threads: int = 1,
-    device: str = "cpu",
+    prune: Optional[bool] = None,
+    threads: Optional[int] = None,
+    device: Optional[str] = None,
     work_device: Optional[str] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
@@ -46,9 +46,9 @@ def weighted_sum(
 def add_difference(
     a, b, c, *,
     alpha: float = 0.5,
-    prune: bool = False,
-    threads: int = 1,
-    device: str = "cpu",
+    prune: Optional[bool] = None,
+    threads: Optional[int] = None,
+    device: Optional[str] = None,
     work_device: Optional[str] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
@@ -77,9 +77,9 @@ def rotate(
     a, b, *,
     alpha: float = 1.0,
     beta: float = 0.0,
-    prune: bool = False,
-    threads: int = 1,
-    device: str = "cpu",
+    prune: Optional[bool] = None,
+    threads: Optional[int] = None,
+    device: Optional[str] = None,
     work_device: Optional[str] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
@@ -106,9 +106,9 @@ def add_perpendicular(
     a, b, c, *,
     alpha: float = 1.0,
     rebasin_iters: Optional[int] = None,
-    prune: bool = False,
-    threads: int = 1,
-    device: str = "cpu",
+    prune: Optional[bool] = None,
+    threads: Optional[int] = None,
+    device: Optional[str] = None,
     work_device: Optional[str] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
@@ -134,7 +134,7 @@ def add_perpendicular(
     )
 
 
-def clip(model, a, b, device: str = None) -> ast_nodes.MergeNode:
+def clip(model, a, b, device: Optional[str] = None) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
         a = ast_nodes.LeafMergeNode(a, device)
     if isinstance(b, (str, pathlib.Path)):
