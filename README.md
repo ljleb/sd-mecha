@@ -1,6 +1,6 @@
 # sd-mecha
 
-sd-mecha is a configuration-based stable diffusion checkpoint merger:
+sd-mecha is a stable diffusion recipe merger:
 
 ```python
 import sd_mecha
