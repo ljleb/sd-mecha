@@ -27,7 +27,6 @@ class SymbolicMergeNode(MergeNode):
         c=None,
         beta: Optional[float] = None,
         rebasin_iters: Optional[int] = None,
-        precision: int = 16,
         prune: bool = False,
         threads: int = 1,
         device: str = "cpu",
@@ -41,7 +40,6 @@ class SymbolicMergeNode(MergeNode):
         self.__alpha = alpha
         self.__beta = beta
         self.__rebasin_iters = rebasin_iters
-        self.__precision = precision
         self.__prune = prune
         self.__threads = threads
         self.__device = device
