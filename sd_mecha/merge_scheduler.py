@@ -11,7 +11,7 @@ class MergeScheduler:
     def __init__(
         self, *,
         base_dir: Optional[pathlib.Path | str] = None,
-        precision: int = 16,
+        dtype: torch.dtype = torch.float16,
         prune: bool = False,
         threads: int = 1,
         device: str = "cpu",
@@ -22,7 +22,7 @@ class MergeScheduler:
             self.__base_dir = pathlib.Path(self.__base_dir)
         self.__base_dir = self.__base_dir.absolute()
 
-        self.__precision = precision
+        self.__dtype = dtype
         self.__prune = prune
         self.__threads = threads
         self.__default_device = device
@@ -37,7 +37,7 @@ class MergeScheduler:
             weights,
             bases,
             merge_method,
-            self.__precision,
+            self.__dtype,
             weights_clip,
             bool(rebasin_iters),
             rebasin_iters if rebasin_iters is not None else 0,
@@ -48,8 +48,8 @@ class MergeScheduler:
         )
 
     def clip_weights(self, model, a, b, device):
-        models = models_dict(a, b, None)
-        return sd_meh_merge.clip_weights(models, model)
+        models = models_dict(a.to(), b, None)
+        return sd_meh_merge.clip_weights(models, model, device)
 
     def load_state_dict(self, path, device):
         if not isinstance(path, (str, pathlib.Path)):

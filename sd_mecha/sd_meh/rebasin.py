@@ -2215,14 +2215,14 @@ def inner_matching(
     p,
     params_a,
     params_b,
-    usefp16,
+    dtype,
     progress,
     number,
     linear_sum,
     perm,
     device,
 ):
-    A = torch.zeros((n, n), dtype=torch.float16) if usefp16 else torch.zeros((n, n))
+    A = torch.zeros((n, n), dtype=dtype)
     A = A.to(device)
 
     for wk, axis in ps.perm_to_axes[p]:
@@ -2231,9 +2231,8 @@ def inner_matching(
         w_a = torch.moveaxis(w_a, axis, 0).reshape((n, -1)).to(device)
         w_b = torch.moveaxis(w_b, axis, 0).reshape((n, -1)).T.to(device)
 
-        if usefp16:
-            w_a = w_a.half().to(device)
-            w_b = w_b.half().to(device)
+        w_a = w_a.to(device, dtype)
+        w_b = w_b.to(device, dtype)
 
         try:
             A += torch.matmul(w_a, w_b)
@@ -2253,9 +2252,8 @@ def inner_matching(
     )
     newL = torch.vdot(torch.flatten(A).float(), torch.flatten(eye_tensor[ci, :]))
 
-    if usefp16:
-        oldL = oldL.half()
-        newL = newL.half()
+    oldL = oldL.to(dtype)
+    newL = newL.to(dtype)
 
     if newL - oldL != 0:
         linear_sum += abs((newL - oldL).item())
@@ -2275,7 +2273,7 @@ def weight_matching(
     params_b,
     max_iter=1,
     init_perm=None,
-    usefp16=False,
+    dtype=torch.float16,
     device="cpu",
 ):
     perm_sizes = {
@@ -2306,7 +2304,7 @@ def weight_matching(
                 p,
                 params_a,
                 params_b,
-                usefp16,
+                dtype,
                 progress,
                 number,
                 linear_sum,
