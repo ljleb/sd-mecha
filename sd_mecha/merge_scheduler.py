@@ -49,9 +49,9 @@ class MergeScheduler:
             threads if threads is not None else self.__threads,
         )
 
-    def clip_weights(self, model, a, b, device):
+    def clip_weights(self, model, a, b):
         models = models_dict(a.to(), b, None)
-        return sd_meh_merge.clip_weights(models, model, device)
+        return sd_meh_merge.clip_weights(models, model)
 
     def load_state_dict(self, path, device):
         if not isinstance(path, (str, pathlib.Path)):

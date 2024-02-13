@@ -1,9 +1,13 @@
 import logging
 import pathlib
 import torch
+from tensordict import TensorDict
 from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha import ast_nodes
+
+
+MergeNode = ast_nodes.MergeNode | str | pathlib.Path | TensorDict
 
 
 def merge_and_save(
@@ -16,7 +20,7 @@ def merge_and_save(
 
 
 def weighted_sum(
-    a, b, *,
+    a: MergeNode, b: MergeNode, *,
     alpha: float = 0.5,
     rebasin_iters: Optional[int] = None,
     threads: Optional[int] = None,
@@ -25,10 +29,10 @@ def weighted_sum(
     work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        a = ast_nodes.LeafMergeNode(a, device)
-    if isinstance(b, (str, pathlib.Path)):
-        b = ast_nodes.LeafMergeNode(b, device)
+    if not isinstance(a, ast_nodes.MergeNode):
+        a = ast_nodes.LeafMergeNode(a)
+    if not isinstance(b, ast_nodes.MergeNode):
+        b = ast_nodes.LeafMergeNode(b)
 
     return ast_nodes.SymbolicMergeNode(
         merge_method="weighted_sum",
@@ -45,19 +49,20 @@ def weighted_sum(
 
 
 def add_difference(
-    a, b, c, *,
+    a: MergeNode, b: MergeNode, c: MergeNode, *,
     alpha: float = 0.5,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
+    work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        a = ast_nodes.LeafMergeNode(a, device)
-    if isinstance(b, (str, pathlib.Path)):
-        b = ast_nodes.LeafMergeNode(b, device)
-    if isinstance(c, (str, pathlib.Path)):
-        c = ast_nodes.LeafMergeNode(c, device)
+    if not isinstance(a, ast_nodes.MergeNode):
+        a = ast_nodes.LeafMergeNode(a)
+    if not isinstance(b, ast_nodes.MergeNode):
+        b = ast_nodes.LeafMergeNode(b)
+    if not isinstance(c, ast_nodes.MergeNode):
+        c = ast_nodes.LeafMergeNode(c)
 
     return ast_nodes.SymbolicMergeNode(
         merge_method="add_difference",
@@ -68,22 +73,24 @@ def add_difference(
         threads=threads,
         device=device,
         work_device=work_device,
+        work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
     )
 
 
 def tensor_sum(
-    a, b, *,
+    a: MergeNode, b: MergeNode, *,
     width: float = 0.5,
     offset: float = 0.0,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
+    work_dtype: Optional[torch.dtype] = None,
 ) -> ast_nodes.MergeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        a = ast_nodes.LeafMergeNode(a, device)
-    if isinstance(b, (str, pathlib.Path)):
-        b = ast_nodes.LeafMergeNode(b, device)
+    if not isinstance(a, ast_nodes.MergeNode):
+        a = ast_nodes.LeafMergeNode(a)
+    if not isinstance(b, ast_nodes.MergeNode):
+        b = ast_nodes.LeafMergeNode(b)
 
     return ast_nodes.SymbolicMergeNode(
         merge_method="tensor_sum",
@@ -94,24 +101,26 @@ def tensor_sum(
         threads=threads,
         device=device,
         work_device=work_device,
+        work_dtype=work_dtype,
     )
 
 
 def add_perpendicular(
-    a, b, c, *,
+    a: MergeNode, b: MergeNode, c: MergeNode, *,
     alpha: float = 1.0,
     rebasin_iters: Optional[int] = None,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
+    work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        a = ast_nodes.LeafMergeNode(a, device)
-    if isinstance(b, (str, pathlib.Path)):
-        b = ast_nodes.LeafMergeNode(b, device)
-    if isinstance(c, (str, pathlib.Path)):
-        c = ast_nodes.LeafMergeNode(c, device)
+    if not isinstance(a, ast_nodes.MergeNode):
+        a = ast_nodes.LeafMergeNode(a)
+    if not isinstance(b, ast_nodes.MergeNode):
+        b = ast_nodes.LeafMergeNode(b)
+    if not isinstance(c, ast_nodes.MergeNode):
+        c = ast_nodes.LeafMergeNode(c)
 
     return ast_nodes.SymbolicMergeNode(
         merge_method="add_perpendicular",
@@ -123,23 +132,25 @@ def add_perpendicular(
         threads=threads,
         device=device,
         work_device=work_device,
+        work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
     )
 
 
 def rotate(
-    a, b, *,
+    a: MergeNode, b: MergeNode, *,
     alpha: float = 1.0,
     beta: float = 0.0,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
+    work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        a = ast_nodes.LeafMergeNode(a, device)
-    if isinstance(b, (str, pathlib.Path)):
-        b = ast_nodes.LeafMergeNode(b, device)
+    if not isinstance(a, ast_nodes.MergeNode):
+        a = ast_nodes.LeafMergeNode(a)
+    if not isinstance(b, ast_nodes.MergeNode):
+        b = ast_nodes.LeafMergeNode(b)
 
     return ast_nodes.SymbolicMergeNode(
         merge_method="rotate",
@@ -150,17 +161,25 @@ def rotate(
         threads=threads,
         device=device,
         work_device=work_device,
+        work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
     )
 
 
-def clip(model, a, b, device: Optional[str] = None) -> ast_nodes.MergeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        a = ast_nodes.LeafMergeNode(a, device)
-    if isinstance(b, (str, pathlib.Path)):
-        b = ast_nodes.LeafMergeNode(b, device)
+def clip(model: MergeNode, a: MergeNode, b: MergeNode) -> ast_nodes.MergeNode:
+    if not isinstance(a, ast_nodes.MergeNode):
+        a = ast_nodes.LeafMergeNode(a)
+    if not isinstance(b, ast_nodes.MergeNode):
+        b = ast_nodes.LeafMergeNode(b)
 
-    return ast_nodes.ClipMergeNode(model, a, b, device)
+    return ast_nodes.ClipMergeNode(model, a, b)
+
+
+def model(
+    state_dict: str | pathlib.Path | TensorDict,
+    device: str = None,
+):
+    return ast_nodes.LeafMergeNode(state_dict, device)
 
 
 def set_log_level(level: str = "INFO"):

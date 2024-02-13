@@ -1,4 +1,7 @@
 import abc
+import pathlib
+
+from tensordict import TensorDict
 import torch
 from typing import Optional
 
@@ -14,7 +17,7 @@ class MergeNode(abc.ABC):
 
 
 class LeafMergeNode(MergeNode):
-    def __init__(self, state_dict, device=None):
+    def __init__(self, state_dict: str | pathlib.Path | TensorDict, device=None):
         self.__state_dict = state_dict
         self.__device = device
 
@@ -74,17 +77,13 @@ class SymbolicMergeNode(MergeNode):
 
 
 class ClipMergeNode(MergeNode):
-    def __init__(self, model, a, b, device=None):
+    def __init__(self, model, a, b):
         self.__model = model
         self.__a = a
         self.__b = b
-        self.__device = device
 
     def visit(self, scheduler):
-        return scheduler.clip_weights(
-            *visit_deeper_first([self.__model, self.__a, self.__b], scheduler),
-            self.__device,
-        )
+        return scheduler.clip_weights(*visit_deeper_first([self.__model, self.__a, self.__b], scheduler))
 
     def depth(self) -> int:
         return max(

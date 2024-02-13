@@ -436,20 +436,16 @@ def merge_key(
         return merged_key
 
 
-def clip_weights(thetas, merged, device=None):
+def clip_weights(thetas, merged):
     for k in thetas["model_a"].keys():
         if k in thetas["model_b"].keys():
-            merged.update({k: clip_weights_key(thetas, merged[k], k, device=device)})
+            merged.update({k: clip_weights_key(thetas, merged[k], k)})
     return merged
 
 
-def clip_weights_key(thetas, merged_weights, key, device=None):
+def clip_weights_key(thetas, merged_weights, key):
     t0 = thetas["model_a"][key]
     t1 = thetas["model_b"][key]
-    if device is not None:
-        t0 = t0.to(device)
-        t1 = t1.to(device)
-
     maximums = torch.maximum(t0, t1)
     minimums = torch.minimum(t0, t1)
     return torch.minimum(torch.maximum(merged_weights, minimums), maximums)
