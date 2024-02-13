@@ -15,5 +15,5 @@ scheduler = sd_mecha.MergeScheduler(
     prune=True,
 )
 
-# as the function name reads, perform the entire merge plan and save to output path
+# perform the entire merge plan and save to output path
 scheduler.merge_and_save(merge, output_path="basic_merge")
