@@ -23,7 +23,7 @@ def weighted_sum(
     threads: int = 1,
     device: str = "cpu",
     work_device: Optional[str] = None,
-    weights_clip_to_ab: bool = False,
+    clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
         a = ast_nodes.LeafMergeNode(a, device)
@@ -41,7 +41,7 @@ def weighted_sum(
         threads=threads,
         device=device,
         work_device=work_device,
-        weights_clip=weights_clip_to_ab,
+        weights_clip=clip_weights_to_ab,
     )
 
 
@@ -53,7 +53,7 @@ def add_difference(
     threads: int = 1,
     device: str = "cpu",
     work_device: Optional[str] = None,
-    weights_clip_to_ab: bool = False,
+    clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
         a = ast_nodes.LeafMergeNode(a, device)
@@ -73,7 +73,7 @@ def add_difference(
         threads=threads,
         device=device,
         work_device=work_device,
-        weights_clip=weights_clip_to_ab,
+        weights_clip=clip_weights_to_ab,
     )
 
 
@@ -86,7 +86,7 @@ def rotate(
     threads: int = 1,
     device: str = "cpu",
     work_device: Optional[str] = None,
-    weights_clip_to_ab: bool = False,
+    clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
         a = ast_nodes.LeafMergeNode(a, device)
@@ -104,7 +104,7 @@ def rotate(
         threads=threads,
         device=device,
         work_device=work_device,
-        weights_clip=weights_clip_to_ab,
+        weights_clip=clip_weights_to_ab,
     )
 
 
@@ -117,7 +117,7 @@ def add_perpendicular(
     threads: int = 1,
     device: str = "cpu",
     work_device: Optional[str] = None,
-    weights_clip_to_ab: bool = False,
+    clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
         a = ast_nodes.LeafMergeNode(a, device)
@@ -138,7 +138,7 @@ def add_perpendicular(
         threads=threads,
         device=device,
         work_device=work_device,
-        weights_clip=weights_clip_to_ab,
+        weights_clip=clip_weights_to_ab,
     )
 
 
