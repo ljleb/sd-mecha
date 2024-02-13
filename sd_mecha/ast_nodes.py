@@ -23,15 +23,16 @@ class SymbolicMergeNode(MergeNode):
         merge_method,
         a,
         b,
-        alpha,
+        alpha: float,
         c=None,
-        beta=None,
-        rebasin_iters=None,
+        beta: Optional[float] = None,
+        rebasin_iters: Optional[int] = None,
         precision: int = 16,
         prune: bool = False,
         threads: int = 1,
         device: str = "cpu",
         work_device: Optional[str] = None,
+        weights_clip: bool = False,
     ):
         self.__merge_method = merge_method
         self.__a = a
@@ -45,6 +46,7 @@ class SymbolicMergeNode(MergeNode):
         self.__threads = threads
         self.__device = device
         self.__work_device = work_device
+        self.__weights_clip = weights_clip
 
     def visit(self, scheduler):
         return scheduler.symbolic_merge(
@@ -57,6 +59,7 @@ class SymbolicMergeNode(MergeNode):
             self.__device, self.__work_device,
             self.__prune,
             self.__threads,
+            self.__weights_clip,
         )
 
 
@@ -68,4 +71,9 @@ class ClipMergeNode(MergeNode):
         self.__device = device
 
     def visit(self, scheduler):
-        return scheduler.clip_weights(self.__model, self.__a.visit(scheduler), self.__b.visit(scheduler), self.__device)
+        return scheduler.clip_weights(
+            self.__model.visit(scheduler),
+            self.__a.visit(scheduler),
+            self.__b.visit(scheduler),
+            self.__device,
+        )
