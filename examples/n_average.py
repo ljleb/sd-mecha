@@ -17,7 +17,6 @@ for i, model in enumerate(models[1:], start=2):
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
     device="cuda:0",
-    prune=True,
 )
 
 scheduler.merge_and_save(merge, output_path="n_average_test")
