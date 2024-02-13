@@ -68,4 +68,4 @@ class ClipMergeNode(MergeNode):
         self.__device = device
 
     def visit(self, scheduler):
-        return scheduler.clip_weights(self.__model, self.__a, self.__b, self.__device)
+        return scheduler.clip_weights(self.__model, self.__a.visit(scheduler), self.__b.visit(scheduler), self.__device)
