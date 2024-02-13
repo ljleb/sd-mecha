@@ -1,4 +1,5 @@
 import abc
+import torch
 from typing import Optional
 
 
@@ -31,6 +32,7 @@ class SymbolicMergeNode(MergeNode):
         threads: int = 1,
         device: str = "cpu",
         work_device: Optional[str] = None,
+        work_dtype: Optional[torch.dtype] = None,
         weights_clip: bool = False,
     ):
         self.__merge_method = merge_method
@@ -44,6 +46,7 @@ class SymbolicMergeNode(MergeNode):
         self.__threads = threads
         self.__device = device
         self.__work_device = work_device
+        self.__work_dtype = work_dtype
         self.__weights_clip = weights_clip
 
     def visit(self, scheduler):
@@ -54,7 +57,7 @@ class SymbolicMergeNode(MergeNode):
             self.__c.visit(scheduler) if self.__c is not None else None,
             self.__alpha, self.__beta,
             self.__rebasin_iters,
-            self.__device, self.__work_device,
+            self.__device, self.__work_device, self.__work_dtype,
             self.__prune,
             self.__threads,
             self.__weights_clip,

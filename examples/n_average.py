@@ -1,4 +1,5 @@
 import sd_mecha
+import torch
 
 
 # 5 example models to average together
@@ -12,7 +13,7 @@ models = [
 
 merge = models[0]
 for i, model in enumerate(models[1:], start=2):
-    merge = sd_mecha.weighted_sum(merge, model, alpha=1/i)
+    merge = sd_mecha.weighted_sum(merge, model, alpha=1/i, work_dtype=torch.float64)
 
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",

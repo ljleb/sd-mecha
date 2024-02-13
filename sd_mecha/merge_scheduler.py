@@ -28,7 +28,7 @@ class MergeScheduler:
         self.__default_device = device
         self.__default_work_device = work_device
 
-    def symbolic_merge(self, merge_method, a, b, c, alpha, beta, rebasin_iters, device, work_device, prune, threads, weights_clip):
+    def symbolic_merge(self, merge_method, a, b, c, alpha, beta, rebasin_iters, device, work_device, work_dtype, prune, threads, weights_clip):
         models = models_dict(a, b, c)
         weights, bases = weights_and_bases(merge_method, alpha, beta)
 
@@ -38,6 +38,7 @@ class MergeScheduler:
             bases,
             merge_method,
             self.__dtype,
+            work_dtype,
             weights_clip,
             bool(rebasin_iters),
             rebasin_iters if rebasin_iters is not None else 0,

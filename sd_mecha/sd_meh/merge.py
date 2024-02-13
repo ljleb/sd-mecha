@@ -165,6 +165,7 @@ def merge_models(
     bases: Dict,
     merge_mode: str,
     dtype: torch.dtype = torch.float16,
+    work_dtype: Optional[torch.dtype] = None,
     weights_clip: bool = False,
     re_basin: bool = False,
     iterations: int = 1,
@@ -184,6 +185,7 @@ def merge_models(
             bases,
             merge_mode,
             dtype=dtype,
+            work_dtype=work_dtype,
             weights_clip=weights_clip,
             iterations=iterations,
             device=device,
@@ -197,6 +199,7 @@ def merge_models(
             bases,
             merge_mode,
             dtype=dtype,
+            work_dtype=work_dtype,
             weights_clip=weights_clip,
             device=device,
             work_device=work_device,
@@ -213,6 +216,7 @@ def simple_merge(
     bases: Dict,
     merge_mode: str,
     dtype: torch.dtype = torch.float16,
+    work_dtype: Optional[torch.dtype] = None,
     weights_clip: bool = False,
     device: str = "cpu",
     work_device: Optional[str] = None,
@@ -232,6 +236,7 @@ def simple_merge(
                     bases,
                     merge_mode,
                     dtype,
+                    work_dtype,
                     weights_clip,
                     device,
                     work_device,
@@ -261,6 +266,7 @@ def rebasin_merge(
     bases: Dict,
     merge_mode: str,
     dtype: torch.dtype = torch.float16,
+    work_dtype: Optional[torch.dtype] = None,
     weights_clip: bool = False,
     iterations: int = 1,
     device="cpu",
@@ -291,6 +297,7 @@ def rebasin_merge(
             new_bases,
             merge_mode,
             dtype,
+            work_dtype,
             False,
             device,
             work_device,
@@ -360,6 +367,7 @@ def merge_key(
     bases: Dict,
     merge_mode: str,
     dtype: torch.dtype = torch.float16,
+    work_dtype: Optional[torch.dtype] = None,
     weights_clip: bool = False,
     device: str = "cpu",
     work_device: Optional[str] = None,
@@ -367,6 +375,9 @@ def merge_key(
 ) -> Optional[Tuple[str, Dict]]:
     if work_device is None:
         work_device = device
+
+    if work_dtype is None:
+        work_dtype = dtype
 
     if KEY_POSITION_IDS in key:
         return
@@ -407,7 +418,7 @@ def merge_key(
         except AttributeError as e:
             raise ValueError(f"{merge_mode} not implemented, aborting merge!") from e
 
-        merge_args = get_merge_method_args(current_bases, thetas, key, work_device, cache)
+        merge_args = get_merge_method_args(current_bases, thetas, key, work_device, work_dtype, cache)
 
         # dealing wiht pix2pix and inpainting models
         if (a_size := merge_args["a"].size()) != (b_size := merge_args["b"].size()):
@@ -416,12 +427,12 @@ def merge_key(
             else:
                 merged_key = merge_args["b"]
         else:
-            merged_key = merge_method(**merge_args).to(device)
+            merged_key = merge_method(**merge_args).to(device, dtype)
 
         if weights_clip:
             merged_key = clip_weights_key(thetas, merged_key, key)
 
-        return merged_key.to(dtype)
+        return merged_key
 
 
 def clip_weights(thetas, merged, device=None):
@@ -458,20 +469,21 @@ def get_merge_method_args(
     thetas: Dict,
     key: str,
     work_device: str,
+    work_dtype: torch.dtype,
     cache: Optional[Dict],
 ) -> Dict:
     if cache is not None and key not in cache:
         cache[key] = {}
 
     merge_method_args = {
-        "a": thetas["model_a"][key].to(work_device),
-        "b": thetas["model_b"][key].to(work_device),
+        "a": thetas["model_a"][key].to(work_device, work_dtype),
+        "b": thetas["model_b"][key].to(work_device, work_dtype),
         **current_bases,
         "cache": cache[key] if cache is not None else None,
     }
 
     if "model_c" in thetas:
-        merge_method_args["c"] = thetas["model_c"][key].to(work_device)
+        merge_method_args["c"] = thetas["model_c"][key].to(work_device, work_dtype)
 
     return merge_method_args
 

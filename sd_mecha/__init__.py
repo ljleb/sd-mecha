@@ -1,6 +1,6 @@
 import pathlib
+import torch
 from typing import Optional
-
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha import ast_nodes
 
@@ -22,6 +22,7 @@ def weighted_sum(
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
+    work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
@@ -39,6 +40,7 @@ def weighted_sum(
         threads=threads,
         device=device,
         work_device=work_device,
+        work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
     )
 
