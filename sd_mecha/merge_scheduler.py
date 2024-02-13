@@ -13,7 +13,6 @@ class MergeScheduler:
         self, *,
         base_dir: Optional[pathlib.Path | str] = None,
         dtype: torch.dtype = torch.float16,
-        prune: bool = True,
         threads: int = 1,
         device: str = "cpu",
         work_device: Optional[str] = None,
@@ -25,13 +24,12 @@ class MergeScheduler:
         self.__base_dir = self.__base_dir.absolute()
 
         self.__dtype = dtype
-        self.__prune = prune
         self.__threads = threads
         self.__default_device = device
         self.__default_work_device = work_device
         self.__default_work_dtype = work_dtype
 
-    def symbolic_merge(self, merge_method, a, b, c, alpha, beta, rebasin_iters, device, work_device, work_dtype, prune, threads, weights_clip):
+    def symbolic_merge(self, merge_method, a, b, c, alpha, beta, rebasin_iters, device, work_device, work_dtype, threads, weights_clip):
         models = models_dict(a, b, c)
         weights, bases = weights_and_bases(merge_method, alpha, beta)
 
@@ -47,7 +45,7 @@ class MergeScheduler:
             rebasin_iters if rebasin_iters is not None else 0,
             device if device is not None else self.__default_device,
             work_device if work_device is not None else self.__default_work_device,
-            prune if prune is not None else self.__prune,
+            True,
             threads if threads is not None else self.__threads,
         )
 

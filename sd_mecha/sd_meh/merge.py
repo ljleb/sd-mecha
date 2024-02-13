@@ -177,7 +177,7 @@ def merge_models(
 ) -> TensorDict:
     thetas = load_thetas(models, prune, device, dtype)
 
-    logging.info(f"start merging with method {merge_mode} on {work_device}")
+    logging.info(f"start merging with method {merge_mode} on device {work_device} and dtype {work_dtype}")
     if re_basin:
         merged = rebasin_merge(
             thetas,
@@ -273,7 +273,8 @@ def rebasin_merge(
     work_device=None,
     threads: int = 1,
 ):
-    # WARNING: not sure how this does when 3 models are involved...
+    if work_device is None:
+        work_device = device
 
     model_a = thetas["model_a"].clone()
     perm_spec = sdunet_permutation_spec()
@@ -319,7 +320,7 @@ def rebasin_merge(
 
         log_vram("weight matching #1 done")
 
-        thetas["model_a"] = apply_permutation(perm_spec, perm_1, thetas["model_a"], work_device)
+        thetas["model_a"].update(apply_permutation(perm_spec, perm_1, thetas["model_a"], work_device))
 
         log_vram("apply perm 1 done")
 
@@ -338,9 +339,9 @@ def rebasin_merge(
         new_alpha = torch.nn.functional.normalize(
             torch.sigmoid(torch.Tensor([y, z])), p=1, dim=0
         ).tolist()[0]
-        thetas["model_a"] = update_model_a(
+        thetas["model_a"].update(update_model_a(
             perm_spec, perm_2, thetas["model_a"], new_alpha, work_device
-        )
+        ))
 
         log_vram("model a updated")
 
