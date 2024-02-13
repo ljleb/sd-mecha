@@ -12,7 +12,7 @@ class MergeScheduler:
         self, *,
         base_dir: Optional[pathlib.Path | str] = None,
         dtype: torch.dtype = torch.float16,
-        prune: bool = False,
+        prune: bool = True,
         threads: int = 1,
         device: str = "cpu",
         work_device: Optional[str] = None,

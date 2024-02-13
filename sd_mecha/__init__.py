@@ -18,7 +18,7 @@ def weighted_sum(
     a, b, *,
     alpha: float = 0.5,
     rebasin_iters: Optional[int] = None,
-    prune: Optional[bool] = False,
+    prune: Optional[bool] = None,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
@@ -46,7 +46,7 @@ def weighted_sum(
 def add_difference(
     a, b, c, *,
     alpha: float = 0.5,
-    prune: Optional[bool] = False,
+    prune: Optional[bool] = None,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
@@ -73,15 +73,14 @@ def add_difference(
     )
 
 
-def rotate(
+def tensor_sum(
     a, b, *,
-    alpha: float = 1.0,
-    beta: float = 0.0,
-    prune: Optional[bool] = False,
+    width: float = 0.5,
+    offset: float = 0.0,
+    prune: Optional[bool] = None,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
-    clip_weights_to_ab: bool = False,
 ) -> ast_nodes.MergeNode:
     if isinstance(a, (str, pathlib.Path)):
         a = ast_nodes.LeafMergeNode(a, device)
@@ -89,16 +88,15 @@ def rotate(
         b = ast_nodes.LeafMergeNode(b, device)
 
     return ast_nodes.SymbolicMergeNode(
-        merge_method="add_difference",
+        merge_method="tensor_sum",
         a=a,
         b=b,
-        alpha=alpha,
-        beta=beta,
+        alpha=width,
+        beta=offset,
         prune=prune,
         threads=threads,
         device=device,
         work_device=work_device,
-        weights_clip=clip_weights_to_ab,
     )
 
 
@@ -106,7 +104,7 @@ def add_perpendicular(
     a, b, c, *,
     alpha: float = 1.0,
     rebasin_iters: Optional[int] = None,
-    prune: Optional[bool] = False,
+    prune: Optional[bool] = None,
     threads: Optional[int] = None,
     device: Optional[str] = None,
     work_device: Optional[str] = None,
@@ -126,6 +124,35 @@ def add_perpendicular(
         c=c,
         alpha=alpha,
         rebasin_iters=rebasin_iters,
+        prune=prune,
+        threads=threads,
+        device=device,
+        work_device=work_device,
+        weights_clip=clip_weights_to_ab,
+    )
+
+
+def rotate(
+    a, b, *,
+    alpha: float = 1.0,
+    beta: float = 0.0,
+    prune: Optional[bool] = None,
+    threads: Optional[int] = None,
+    device: Optional[str] = None,
+    work_device: Optional[str] = None,
+    clip_weights_to_ab: bool = False,
+) -> ast_nodes.MergeNode:
+    if isinstance(a, (str, pathlib.Path)):
+        a = ast_nodes.LeafMergeNode(a, device)
+    if isinstance(b, (str, pathlib.Path)):
+        b = ast_nodes.LeafMergeNode(b, device)
+
+    return ast_nodes.SymbolicMergeNode(
+        merge_method="rotate",
+        a=a,
+        b=b,
+        alpha=alpha,
+        beta=beta,
         prune=prune,
         threads=threads,
         device=device,

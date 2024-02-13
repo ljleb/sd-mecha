@@ -91,11 +91,7 @@ def load_sd_model(model: AnyModelType, device: str = "cpu") -> TensorDict:
 def prune_sd_model(model: TensorDict) -> TensorDict:
     keys = list(model.keys())
     for k in keys:
-        if (
-            not k.startswith("model.diffusion_model.")
-            and not k.startswith("first_stage_model.")
-            and not k.startswith("cond_stage_model.")
-        ):
+        if not k.startswith(("model.diffusion_model.", "cond_stage_model.")):
             del model[k]
     return model
 
