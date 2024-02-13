@@ -2,12 +2,7 @@ import sd_mecha
 
 
 merge = sd_mecha.weighted_sum(
-    sd_mecha.add_difference(
-        "ghostmix_v20Bakedvae",
-        "dreamshaper_332BakedVaeClipFix",
-        "pure/v1-5-pruned-emaonly.ckpt",
-        alpha=0.5,
-    ),
+    "ghostmix_v20Bakedvae",
     "dreamshaper_332BakedVaeClipFix",
     alpha=0.5,
 )
