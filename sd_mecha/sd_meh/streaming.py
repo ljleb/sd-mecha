@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import os
 import pathlib
 import struct
@@ -80,6 +81,7 @@ class InSafetensorDict:
 class OutSafetensorDict:
     def __init__(self, file_path: pathlib.Path, template_header: dict):
         self.file = file_path.open('wb+')
+        self.lock = multiprocessing.Lock()
         self.header = {}
         self.current_offset = 0
         self.header_size = self._init_buffer(template_header)
@@ -92,13 +94,16 @@ class OutSafetensorDict:
             raise ValueError("key already exists")
 
         tensor_bytes = tensor.cpu().numpy().tobytes()
+        with self.lock:
+            offset = self.current_offset
+            self.current_offset += len(tensor_bytes)
+
         self.file.write(tensor_bytes)
         self.header[key] = {
             "dtype": DTYPE_REVERSE_MAPPING[tensor.dtype],
             "shape": list(tensor.shape),
-            "data_offsets": [self.current_offset, self.current_offset + len(tensor_bytes)]
+            "data_offsets": [offset, offset + len(tensor_bytes)]
         }
-        self.current_offset += len(tensor_bytes)
 
     def __len__(self):
         return len(self.header)

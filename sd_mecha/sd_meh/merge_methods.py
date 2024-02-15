@@ -40,27 +40,15 @@ def subtract(
 
 
 @merge_methods.register()
-def add_perpendicular(
+def perpendicular_component(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
-    alpha: float,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    iters = 1  # 200
-    for i in range(iters):
-        if i == 0:
-            adjusted_alpha = i / iters
-        else:
-            adjusted_alpha = 1 - (1 - (1 + i) * alpha / iters) / (1 - i * alpha / iters)
-
-        norm_a = torch.linalg.norm(a)
-        cos_sim = (a / norm_a * (b / norm_a)).sum()
-        b_perp = b - a * cos_sim
-        new_a = a + adjusted_alpha * b_perp
-        if torch.isnan(new_a).any():
-            return a
-        a = new_a
-
-    return a
+    norm_a = torch.linalg.norm(a)
+    res = b - a * (a / norm_a * (b / norm_a)).sum()
+    if res.isnan().any():
+        return torch.zeros_like(a)
+    return res
 
 
 @merge_methods.register()

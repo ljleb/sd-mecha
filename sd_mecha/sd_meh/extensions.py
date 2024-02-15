@@ -19,9 +19,10 @@ class MergeSpace(enum.Flag):
 class MergeMethod:
     def __init__(self, f: Callable):
         self.__f = f
+        self.__name = f.__name__
 
-    def __call__(self, inputs, hyper_parameters, device, work_device, dtype, work_dtype, cache):
-        kwargs = self._get_kwargs(inputs, hyper_parameters, work_device, work_dtype, cache)
+    def __call__(self, inputs, hyper_parameters, device, dtype, cache):
+        kwargs = self._get_kwargs(inputs, hyper_parameters, device, dtype, cache)
 
         # pix2pix and inpainting models
         # todo: verify whether we want to slice, merge and then concat this key instead of ignore it
@@ -31,27 +32,23 @@ class MergeMethod:
             else:
                 return kwargs["b"]
 
-        if dtype is None:
-            to_args = device,
-        else:
-            to_args = device, dtype
-        return self.__f(**kwargs).to(*to_args)
+        return self.__f(**kwargs)
 
     def _get_kwargs(
         self,
         inputs: Dict[str, torch.Tensor],
         hyper_parameters: Dict[str, float],
-        work_device: str,
-        work_dtype: Optional[torch.dtype],
+        device: str,
+        dtype: Optional[torch.dtype],
         cache: Optional[Dict],
     ) -> Dict:
         if self.requests_model_c() and "c" not in inputs:
             raise ValueError
 
-        if work_dtype is None:
-            to_args = work_device,
+        if dtype is None:
+            to_args = device,
         else:
-            to_args = work_device, work_dtype
+            to_args = device, dtype
 
         merge_method_kwargs = {
             **{
@@ -87,7 +84,7 @@ class MergeMethod:
                 elif merge_space_arg & merge_space_param:
                     resolved_input_spaces[key] = merge_space_arg
                 else:
-                    raise TypeError(f"parameter '{param}' expects {resolved_input_spaces[key]} but got {merge_space_arg}")
+                    raise TypeError(f"parameter '{param}' expects {merge_space_param} but got {merge_space_arg}")
 
         merge_space_param, key = self._extract_liftflag(type_hints.get("return"), None)
         if key in resolved_input_spaces:

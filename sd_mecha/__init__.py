@@ -25,8 +25,6 @@ def weighted_sum(
     alpha: float = 0.5,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-    work_device: Optional[str] = None,
-    work_dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a)
@@ -41,8 +39,6 @@ def weighted_sum(
         rebasin_iters=0,
         device=device,
         dtype=dtype,
-        work_device=work_device,
-        work_dtype=work_dtype,
     )
 
 
@@ -51,8 +47,6 @@ def add_difference(
     alpha: float = 0.5,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-    work_device: Optional[str] = None,
-    work_dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a)
@@ -64,10 +58,8 @@ def add_difference(
     # outputs .to(work_device, work_dtype) because we are still inside the method
     b_diff = subtract(
         b, c,
-        device=work_device if work_device is not None else device,
-        work_device=work_device if work_device is not None else device,
-        dtype=work_dtype if work_dtype is not None else dtype,
-        work_dtype=work_dtype if work_dtype is not None else dtype,
+        device=device,
+        dtype=dtype,
     )
 
     return recipe_nodes.SymbolicRecipeNode(
@@ -77,8 +69,6 @@ def add_difference(
         alpha=alpha,
         device=device,
         dtype=dtype,
-        work_device=work_device,
-        work_dtype=work_dtype,
     )
 
 
@@ -86,8 +76,6 @@ def subtract(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-    work_device: Optional[str] = None,
-    work_dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a)
@@ -100,8 +88,6 @@ def subtract(
         b=b,
         device=device,
         dtype=dtype,
-        work_device=work_device,
-        work_dtype=work_dtype,
     )
 
 
@@ -111,8 +97,6 @@ def tensor_sum(
     offset: float = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-    work_device: Optional[str] = None,
-    work_dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a)
@@ -127,8 +111,6 @@ def tensor_sum(
         beta=offset,
         device=device,
         dtype=dtype,
-        work_device=work_device,
-        work_dtype=work_dtype,
     )
 
 
@@ -137,8 +119,6 @@ def add_perpendicular(
     alpha: float = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-    work_device: Optional[str] = None,
-    work_dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a)
@@ -147,45 +127,33 @@ def add_perpendicular(
     if not isinstance(c, recipe_nodes.RecipeNode):
         c = recipe_nodes.LeafRecipeNode(c)
 
-    # outputs .to(work_device, work_dtype) because we are still inside the method
     a_diff = subtract(
         a, c,
-        device=work_device if work_device is not None else device,
-        work_device=work_device if work_device is not None else device,
-        dtype=work_dtype if work_dtype is not None else dtype,
-        work_dtype=work_dtype if work_dtype is not None else dtype,
+        device=device,
+        dtype=dtype,
     )
 
-    # outputs .to(work_device, work_dtype) because we are still inside the method
     b_diff = subtract(
         b, c,
-        device=work_device if work_device is not None else device,
-        work_device=work_device if work_device is not None else device,
-        dtype=work_dtype if work_dtype is not None else dtype,
-        work_dtype=work_dtype if work_dtype is not None else dtype,
+        device=device,
+        dtype=dtype,
     )
 
-    # outputs .to(work_device, work_dtype) because we are still inside the method
     perp_diff = recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("add_perpendicular"),
+        merge_method=extensions.merge_methods.get("perpendicular_component"),
         a=a_diff,
         b=b_diff,
-        alpha=alpha,
-        device=work_device if work_device is not None else device,
-        work_device=work_device if work_device is not None else device,
-        dtype=work_dtype if work_dtype is not None else dtype,
-        work_dtype=work_dtype if work_dtype is not None else dtype,
+        device=device,
+        dtype=dtype,
     )
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("add"),
-        a=c,
+        a=a,
         b=perp_diff,
         alpha=alpha,
         device=device,
         dtype=dtype,
-        work_device=work_device,
-        work_dtype=work_dtype,
     )
 
 
@@ -195,8 +163,6 @@ def rotate(
     beta: float = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-    work_device: Optional[str] = None,
-    work_dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a)
@@ -211,8 +177,6 @@ def rotate(
         beta=beta,
         device=device,
         dtype=dtype,
-        work_device=work_device,
-        work_dtype=work_dtype,
     )
 
 

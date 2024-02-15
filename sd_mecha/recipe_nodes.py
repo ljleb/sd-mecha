@@ -61,8 +61,6 @@ class SymbolicRecipeNode(RecipeNode):
         rebasin_iters: int = 0,
         device: Optional[str] = None,
         dtype: Optional[torch.dtype] = "cpu",
-        work_device: Optional[str] = None,
-        work_dtype: Optional[torch.dtype] = None,
     ):
         self.__merge_method = merge_method
         self.__a = a
@@ -73,8 +71,6 @@ class SymbolicRecipeNode(RecipeNode):
         self.__rebasin_iters = rebasin_iters
         self.__device = device
         self.__dtype = dtype
-        self.__work_device = work_device
-        self.__work_dtype = work_dtype
         self.__merge_space = self.__merge_method.get_return_merge_space(
             self.__a.merge_space,
             self.__b.merge_space,
@@ -88,7 +84,6 @@ class SymbolicRecipeNode(RecipeNode):
             self._models_dict(*visit_deeper_first([self.__a, self.__b, self.__c], key, scheduler)),
             self.__alpha, self.__beta,
             self.__device, self.__dtype,
-            self.__work_device, self.__work_dtype,
         )
 
     @staticmethod
