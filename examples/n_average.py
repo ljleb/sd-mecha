@@ -12,9 +12,9 @@ models = [
     "CounterfeitV30_v30",
 ]
 
-merge = models[0]
+recipe = models[0]
 for i, model in enumerate(models[1:], start=2):
-    merge = sd_mecha.weighted_sum(model, merge, alpha=(i-1)/i, rebasin_iters=16)
+    recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i, rebasin_iters=16)
 
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
@@ -22,4 +22,4 @@ scheduler = sd_mecha.MergeScheduler(
     work_dtype=torch.float64,
 )
 
-scheduler.merge_and_save(merge, output_path="n_average")
+scheduler.merge_and_save(recipe, output_path="n_average")

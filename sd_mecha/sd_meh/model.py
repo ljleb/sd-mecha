@@ -1,10 +1,7 @@
 import logging
 import pathlib
 from dataclasses import dataclass
-
-import safetensors.torch
-import torch
-from tensordict import TensorDict
+from sd_mecha.sd_meh.streaming import InSafetensorDict
 
 logging.getLogger("sd_meh").addHandler(logging.NullHandler())
 
@@ -12,19 +9,10 @@ logging.getLogger("sd_meh").addHandler(logging.NullHandler())
 @dataclass
 class SDModel:
     model_path: pathlib.Path
-    device: str
 
-    def load_model(self):
-        logging.info(f"Loading: {self.model_path} to {self.device}")
-        if self.model_path.suffix == ".safetensors":
-            ckpt = safetensors.torch.load_file(
-                self.model_path,
-                device=self.device,
-            )
-        else:
-            ckpt = torch.load(self.model_path, map_location=self.device)
-
-        return TensorDict.from_dict(get_state_dict_from_checkpoint(ckpt))
+    def load_model(self) -> InSafetensorDict:
+        logging.info(f"Loading: {self.model_path}")
+        return InSafetensorDict(self.model_path)
 
 
 # TODO: tidy up

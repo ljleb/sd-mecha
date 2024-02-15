@@ -1,17 +1,16 @@
 import logging
 import pathlib
 import torch
-from tensordict import TensorDict
 from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
-from sd_mecha import ast_nodes
+from sd_mecha import recipe_nodes
+from sd_mecha.sd_meh import merge_methods, extensions, streaming
 
-
-MergeNode = ast_nodes.MergeNode | str | pathlib.Path | TensorDict
+RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorDict
 
 
 def merge_and_save(
-    merge_tree: ast_nodes.MergeNode,
+    merge_tree: recipe_nodes.RecipeNode,
     base_dir,
     output_path,
 ):
@@ -20,58 +19,59 @@ def merge_and_save(
 
 
 def weighted_sum(
-    a: MergeNode, b: MergeNode, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
     alpha: float = 0.5,
-    rebasin_iters: Optional[int] = None,
-    threads: Optional[int] = None,
     device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
     work_device: Optional[str] = None,
     work_dtype: Optional[torch.dtype] = None,
-    clip_weights_to_ab: bool = False,
-) -> ast_nodes.MergeNode:
-    if not isinstance(a, ast_nodes.MergeNode):
-        a = ast_nodes.LeafMergeNode(a)
-    if not isinstance(b, ast_nodes.MergeNode):
-        b = ast_nodes.LeafMergeNode(b)
+) -> recipe_nodes.RecipeNode:
+    if not isinstance(a, recipe_nodes.RecipeNode):
+        a = recipe_nodes.LeafRecipeNode(a)
+    if not isinstance(b, recipe_nodes.RecipeNode):
+        b = recipe_nodes.LeafRecipeNode(b)
 
-    return ast_nodes.SymbolicMergeNode(
-        merge_method="weighted_sum",
+    if a.merge_space != b.merge_space:
+        raise ValueError(f"both models must be in the same merge space. Got: {a.merge_space} != {b.merge_space}")
+
+    return recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get("weighted_sum")[0],
         a=a,
         b=b,
         alpha=alpha,
-        rebasin_iters=rebasin_iters,
-        threads=threads,
+        rebasin_iters=0,
         device=device,
+        dtype=dtype,
         work_device=work_device,
         work_dtype=work_dtype,
-        weights_clip=clip_weights_to_ab,
     )
 
 
 def add_difference(
-    a: MergeNode, b: MergeNode, c: MergeNode, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, base: RecipeNodeOrModel, *,
     alpha: float = 0.5,
     threads: Optional[int] = None,
     device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
     work_device: Optional[str] = None,
     work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
-) -> ast_nodes.MergeNode:
-    if not isinstance(a, ast_nodes.MergeNode):
-        a = ast_nodes.LeafMergeNode(a)
-    if not isinstance(b, ast_nodes.MergeNode):
-        b = ast_nodes.LeafMergeNode(b)
-    if not isinstance(c, ast_nodes.MergeNode):
-        c = ast_nodes.LeafMergeNode(c)
+) -> recipe_nodes.RecipeNode:
+    if not isinstance(a, recipe_nodes.RecipeNode):
+        a = recipe_nodes.LeafRecipeNode(a)
+    if not isinstance(b, recipe_nodes.RecipeNode):
+        b = recipe_nodes.LeafRecipeNode(b)
+    if not isinstance(base, recipe_nodes.RecipeNode):
+        base = recipe_nodes.LeafRecipeNode(base)
 
-    return ast_nodes.SymbolicMergeNode(
-        merge_method="add_difference",
+    return recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get("add_difference"),
         a=a,
         b=b,
-        c=c,
         alpha=alpha,
         threads=threads,
         device=device,
+        dtype=dtype,
         work_device=work_device,
         work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
@@ -79,58 +79,61 @@ def add_difference(
 
 
 def tensor_sum(
-    a: MergeNode, b: MergeNode, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
     width: float = 0.5,
     offset: float = 0.0,
     threads: Optional[int] = None,
     device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
     work_device: Optional[str] = None,
     work_dtype: Optional[torch.dtype] = None,
-) -> ast_nodes.MergeNode:
-    if not isinstance(a, ast_nodes.MergeNode):
-        a = ast_nodes.LeafMergeNode(a)
-    if not isinstance(b, ast_nodes.MergeNode):
-        b = ast_nodes.LeafMergeNode(b)
+) -> recipe_nodes.RecipeNode:
+    if not isinstance(a, recipe_nodes.RecipeNode):
+        a = recipe_nodes.LeafRecipeNode(a)
+    if not isinstance(b, recipe_nodes.RecipeNode):
+        b = recipe_nodes.LeafRecipeNode(b)
 
-    return ast_nodes.SymbolicMergeNode(
-        merge_method="tensor_sum",
+    return recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get("tensor_sum"),
         a=a,
         b=b,
         alpha=width,
         beta=offset,
         threads=threads,
         device=device,
+        dtype=dtype,
         work_device=work_device,
         work_dtype=work_dtype,
     )
 
 
 def add_perpendicular(
-    a: MergeNode, b: MergeNode, c: MergeNode, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, base: RecipeNodeOrModel, *,
     alpha: float = 1.0,
     rebasin_iters: Optional[int] = None,
     threads: Optional[int] = None,
     device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
     work_device: Optional[str] = None,
     work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
-) -> ast_nodes.MergeNode:
-    if not isinstance(a, ast_nodes.MergeNode):
-        a = ast_nodes.LeafMergeNode(a)
-    if not isinstance(b, ast_nodes.MergeNode):
-        b = ast_nodes.LeafMergeNode(b)
-    if not isinstance(c, ast_nodes.MergeNode):
-        c = ast_nodes.LeafMergeNode(c)
+) -> recipe_nodes.RecipeNode:
+    if not isinstance(a, recipe_nodes.RecipeNode):
+        a = recipe_nodes.LeafRecipeNode(a)
+    if not isinstance(b, recipe_nodes.RecipeNode):
+        b = recipe_nodes.LeafRecipeNode(b)
+    if not isinstance(base, recipe_nodes.RecipeNode):
+        base = recipe_nodes.LeafRecipeNode(base)
 
-    return ast_nodes.SymbolicMergeNode(
-        merge_method="add_perpendicular",
+    return recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get("add_perpendicular"),
         a=a,
         b=b,
-        c=c,
         alpha=alpha,
         rebasin_iters=rebasin_iters,
         threads=threads,
         device=device,
+        dtype=dtype,
         work_device=work_device,
         work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
@@ -138,48 +141,51 @@ def add_perpendicular(
 
 
 def rotate(
-    a: MergeNode, b: MergeNode, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
     alpha: float = 1.0,
     beta: float = 0.0,
     threads: Optional[int] = None,
     device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
     work_device: Optional[str] = None,
     work_dtype: Optional[torch.dtype] = None,
     clip_weights_to_ab: bool = False,
-) -> ast_nodes.MergeNode:
-    if not isinstance(a, ast_nodes.MergeNode):
-        a = ast_nodes.LeafMergeNode(a)
-    if not isinstance(b, ast_nodes.MergeNode):
-        b = ast_nodes.LeafMergeNode(b)
+) -> recipe_nodes.RecipeNode:
+    if not isinstance(a, recipe_nodes.RecipeNode):
+        a = recipe_nodes.LeafRecipeNode(a)
+    if not isinstance(b, recipe_nodes.RecipeNode):
+        b = recipe_nodes.LeafRecipeNode(b)
 
-    return ast_nodes.SymbolicMergeNode(
-        merge_method="rotate",
+    return recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get("rotate"),
         a=a,
         b=b,
         alpha=alpha,
         beta=beta,
         threads=threads,
         device=device,
+        dtype=dtype,
         work_device=work_device,
         work_dtype=work_dtype,
         weights_clip=clip_weights_to_ab,
     )
 
 
-def clip(model: MergeNode, a: MergeNode, b: MergeNode) -> ast_nodes.MergeNode:
-    if not isinstance(a, ast_nodes.MergeNode):
-        a = ast_nodes.LeafMergeNode(a)
-    if not isinstance(b, ast_nodes.MergeNode):
-        b = ast_nodes.LeafMergeNode(b)
+def clip(model: RecipeNodeOrModel, a: RecipeNodeOrModel, b: RecipeNodeOrModel) -> recipe_nodes.RecipeNode:
+    if not isinstance(a, recipe_nodes.RecipeNode):
+        a = recipe_nodes.LeafRecipeNode(a)
+    if not isinstance(b, recipe_nodes.RecipeNode):
+        b = recipe_nodes.LeafRecipeNode(b)
 
-    return ast_nodes.ClipMergeNode(model, a, b)
+    return recipe_nodes.ClipRecipeNode(model, a, b)
 
 
 def model(
-    state_dict: str | pathlib.Path | TensorDict,
-    device: str = None,
+    state_dict: str | pathlib.Path | streaming.InSafetensorDict,
 ):
-    return ast_nodes.LeafMergeNode(state_dict, device)
+    return recipe_nodes.LeafRecipeNode(
+        state_dict=state_dict,
+    )
 
 
 def set_log_level(level: str = "INFO"):

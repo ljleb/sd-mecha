@@ -6,42 +6,88 @@ import textwrap
 import torch
 from torch import Tensor
 from typing import Tuple
-
-__all__ = [
-    "weighted_sum",
-    "weighted_subtraction",
-    "tensor_sum",
-    "add_difference",
-    "sum_twice",
-    "triple_sum",
-    "euclidean_add_difference",
-    "multiply_difference",
-    "top_k_tensor_sum",
-    "similarity_add_difference",
-    "distribution_crossover",
-    "ties_add_difference",
-    "add_perpendicular",
-    "rotate",
-]
+from sd_mecha.sd_meh.extensions import merge_methods, MergeSpace
 
 
-EPSILON = 1e-10  # Define a small constant EPSILON to prevent division by zero
+EPSILON = 1e-10
 
 
+@merge_methods.register(merge_spaces={MergeSpace.MODEL, MergeSpace.DELTA})
 def weighted_sum(a: Tensor, b: Tensor, alpha: float, **kwargs) -> Tensor:
     return (1 - alpha) * a + alpha * b
 
 
-def weighted_subtraction(
+@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+def add_difference(a: Tensor, b: Tensor, alpha: float, **kwargs) -> Tensor:
+    return a + alpha * b
+
+
+@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+def add_perpendicular(
+    a: Tensor, b: Tensor, alpha: float, **kwargs
+) -> Tensor:
+    cos_sim = (a / torch.linalg.norm(a) * (b / torch.linalg.norm(a))).sum()
+    b_perp = b - a * cos_sim
+    res = a + alpha * b_perp
+    if torch.isnan(res).any():
+        return a
+    return res
+
+
+@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+def multiply_difference(
     a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
 ) -> Tensor:
-    # Adjust beta if both alpha and beta are 1.0 to avoid division by zero
-    if alpha == 1.0 and beta == 1.0:
-        beta -= EPSILON
+    a_pow = torch.pow(torch.abs(a), (1 - alpha))
+    b_pow = torch.pow(torch.abs(b), alpha)
+    difference = torch.copysign(a_pow * b_pow, weighted_sum(a, b, beta))
+    return difference
 
-    return (a - alpha * beta * b) / (1 - alpha * beta)
+
+@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+def similarity_add_difference(
+    a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
+) -> Tensor:
+    threshold = torch.maximum(torch.abs(a), torch.abs(b))
+    similarity = (a * b / threshold**2 + 1) / 2
+    similarity = torch.nan_to_num(similarity * beta, nan=beta)
+
+    ab_diff = add_difference(a, b, alpha)
+    ab_sum = weighted_sum(a, b, alpha / 2)
+    return (1 - similarity) * ab_diff + similarity * ab_sum
 
 
+@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+def ties_add_difference(
+    a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
+) -> Tensor:
+    deltas = []
+    signs = []
+    for m in [a, b]:
+        deltas.append(filter_top_k(m, beta))
+        signs.append(torch.sign(deltas[-1]))
+
+    signs = torch.stack(signs, dim=0)
+    final_sign = torch.sign(torch.sum(signs, dim=0))
+    deltas = torch.stack(deltas, dim=0)
+    delta_filters = deltas * (signs == final_sign).float()
+
+    res = torch.zeros_like(a, device=a.device)
+    for delta_filter in delta_filters:
+        res += delta_filter
+
+    param_count = torch.sum(delta_filters, dim=0)
+    return alpha * torch.nan_to_num(res / param_count)
+
+
+def filter_top_k(a: Tensor, k: float):
+    k = max(int((1 - k) * torch.numel(a)), 1)
+    k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
+    top_k_filter = (torch.abs(a) >= k_value).float()
+    return a * top_k_filter
+
+
+@merge_methods.register(merge_spaces={MergeSpace.MODEL, MergeSpace.DELTA})
 def tensor_sum(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs) -> Tensor:
     if alpha + beta <= 1:
         tt = a.clone()
@@ -56,48 +102,7 @@ def tensor_sum(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs) -> Ten
     return tt
 
 
-def add_difference(a: Tensor, b: Tensor, c: Tensor, alpha: float, **kwargs) -> Tensor:
-    return a + alpha * (b - c)
-
-
-def sum_twice(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
-    return (1 - beta) * ((1 - alpha) * a + alpha * b) + beta * c
-
-
-def triple_sum(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
-    return (1 - alpha - beta) * a + alpha * b + beta * c
-
-
-def euclidean_add_difference(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, **kwargs
-) -> Tensor:
-    a_diff = a.float() - c.float()
-    b_diff = b.float() - c.float()
-    a_diff = torch.nan_to_num(a_diff / torch.linalg.norm(a_diff))
-    b_diff = torch.nan_to_num(b_diff / torch.linalg.norm(b_diff))
-
-    distance = (1 - alpha) * a_diff**2 + alpha * b_diff**2
-    distance = torch.sqrt(distance)
-    sum_diff = weighted_sum(a.float(), b.float(), alpha) - c.float()
-    distance = torch.copysign(distance, sum_diff)
-
-    target_norm = torch.linalg.norm(sum_diff)
-    return c + distance / torch.linalg.norm(distance) * target_norm
-
-
-def multiply_difference(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
-    diff_a = torch.pow(torch.abs(a.float() - c), (1 - alpha))
-    diff_b = torch.pow(torch.abs(b.float() - c), alpha)
-    difference = torch.copysign(diff_a * diff_b, weighted_sum(a, b, beta) - c)
-    return c + difference.to(c.dtype)
-
-
+@merge_methods.register(merge_spaces={MergeSpace.MODEL})
 def top_k_tensor_sum(
     a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
 ) -> Tensor:
@@ -149,23 +154,12 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
     return round(start), round(end), inverted
 
 
-def similarity_add_difference(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
-    threshold = torch.maximum(torch.abs(a), torch.abs(b))
-    similarity = ((a * b / threshold**2) + 1) / 2
-    similarity = torch.nan_to_num(similarity * beta, nan=beta)
-
-    ab_diff = a + alpha * (b - c)
-    ab_sum = (1 - alpha / 2) * a + (alpha / 2) * b
-    return (1 - similarity) * ab_diff + similarity * ab_sum
-
-
+@merge_methods.register()
 def distribution_crossover(
     a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
 ):
     if a.shape == ():
-        return alpha * a + (1 - alpha) * b
+        return weighted_sum(a, b, alpha)
 
     c_indices = torch.argsort(torch.flatten(c))
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
@@ -188,47 +182,8 @@ def distribution_crossover(
     return x_values.reshape_as(a)
 
 
-def ties_add_difference(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
-    deltas = []
-    signs = []
-    for m in [a, b]:
-        deltas.append(filter_top_k(m - c, beta))
-        signs.append(torch.sign(deltas[-1]))
-
-    signs = torch.stack(signs, dim=0)
-    final_sign = torch.sign(torch.sum(signs, dim=0))
-    delta_filters = (signs == final_sign).float()
-
-    res = torch.zeros_like(c, device=c.device)
-    for delta_filter, delta in zip(delta_filters, deltas):
-        res += delta_filter * delta
-
-    param_count = torch.sum(delta_filters, dim=0)
-    return c + alpha * torch.nan_to_num(res / param_count)
-
-
-def filter_top_k(a: Tensor, k: float):
-    k = max(int((1 - k) * torch.numel(a)), 1)
-    k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
-    top_k_filter = (torch.abs(a) >= k_value).float()
-    return a * top_k_filter
-
-
-def add_perpendicular(
-    a: Tensor, b: Tensor, alpha: float, c: Tensor = None, **kwargs
-) -> Tensor:
-    a_diff = a.float() - c.float()
-    b_diff = b.float() - c.float()
-    a_ortho = a_diff * (a_diff / torch.linalg.norm(a_diff) * (b_diff / torch.linalg.norm(a_diff))).sum()
-    b_perp = b_diff - a_ortho
-    res = a + alpha * b_perp
-    if torch.isnan(res).any():
-        return a
-    return res.to(a.dtype)
-
-
+# @merge_methods.register()
+@merge_methods.register(merge_spaces=MergeSpace.DELTA)
 def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
     if alpha == 0 and beta == 0:
         return a
@@ -272,9 +227,9 @@ def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
             raise ValueError(
                 textwrap.dedent(
                     f"""determinant error: {torch.det(rotation)}.
-                This can happen when merging on the CPU with the "rotate" method.
-                Consider merging on a cuda device, or try setting alpha to 1 for the problematic blocks.
-                See this related discussion for more info: https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"""
+                        This can happen when merging on the CPU with the "rotate" method.
+                        Consider merging on a cuda device, or try setting alpha to 1 for the problematic blocks.
+                        See this related discussion for more info: https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"""
                 )
             )
 

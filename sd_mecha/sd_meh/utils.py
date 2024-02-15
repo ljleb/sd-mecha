@@ -1,9 +1,24 @@
+import enum
 import inspect
 import logging
 
 from sd_mecha.sd_meh import merge_methods
-from sd_mecha.sd_meh.merge import NUM_TOTAL_BLOCKS
 from sd_mecha.sd_meh.presets import BLOCK_WEIGHTS_PRESETS
+
+
+MAX_TOKENS = 77
+NUM_INPUT_BLOCKS = 12
+NUM_MID_BLOCK = 1
+NUM_OUTPUT_BLOCKS = 12
+NUM_TOTAL_BLOCKS = NUM_INPUT_BLOCKS + NUM_MID_BLOCK + NUM_OUTPUT_BLOCKS
+
+KEY_POSITION_IDS = "cond_stage_model.transformer.text_model.embeddings.position_ids"
+NAI_KEYS = {
+    "cond_stage_model.transformer.embeddings.": "cond_stage_model.transformer.text_model.embeddings.",
+    "cond_stage_model.transformer.encoder.": "cond_stage_model.transformer.text_model.encoder.",
+    "cond_stage_model.transformer.final_layer_norm.": "cond_stage_model.transformer.text_model.final_layer_norm.",
+}
+
 
 MERGE_METHODS = dict(inspect.getmembers(merge_methods, inspect.isfunction))
 BETA_METHODS = [
@@ -59,7 +74,7 @@ def interpolate_presets(
 
 
 def weights_and_bases(
-    merge_mode,
+    merge_method,
     weights_alpha,
     base_alpha,
     block_weights_preset_alpha,
@@ -95,7 +110,7 @@ def weights_and_bases(
             presets_alpha_lambda,
         )
 
-    if merge_mode in BETA_METHODS:
+    if merge_method.requests_beta():
         weights_beta, bases_beta = assemble_weights_and_bases(
             block_weights_preset_beta,
             weights_beta,
