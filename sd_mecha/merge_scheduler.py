@@ -28,7 +28,7 @@ class MergeScheduler:
         self.__default_dtype = default_dtype
         self.__cache = cache
 
-    def load_state_dict(self, state_dict: str | pathlib.Path | InSafetensorDict) -> InSafetensorDict:
+    def load_state_dict(self, state_dict: str | pathlib.Path | InSafetensorDict, device: Optional[str]) -> InSafetensorDict:
         if isinstance(state_dict, InSafetensorDict):
             return state_dict
         if not isinstance(state_dict, pathlib.Path):
@@ -38,7 +38,7 @@ class MergeScheduler:
         if not state_dict.suffix:
             state_dict = state_dict.with_suffix(".safetensors")
 
-        return InSafetensorDict(state_dict)
+        return InSafetensorDict(state_dict, device if device is not None else self.__default_device)
 
     def symbolic_merge(self, key, merge_method, inputs, alpha, beta, device, dtype):
         if self.__cache is not None and key not in self.__cache:
@@ -51,11 +51,6 @@ class MergeScheduler:
             dtype if dtype is not None else self.__default_dtype,
             self.__cache[key] if self.__cache is not None else None,
         )
-
-    def clip_weights(self, model, a, b):
-        maximums = torch.maximum(a, b)
-        minimums = torch.minimum(a, b)
-        return torch.minimum(torch.maximum(model, minimums), maximums)
 
     def merge_and_save(
         self, recipe, *,
@@ -76,20 +71,23 @@ class MergeScheduler:
         output = OutSafetensorDict(output_path, arbitrary_input_dict.header)
         progress = tqdm(total=len(arbitrary_input_dict.keys()), desc="Merging recipe")
 
-        def _do_save_and_merge(key: str):
+        def _do_merge_and_save(key: str):
             progress.set_postfix({"key": key})
             output[key] = recipe.visit(key, self)
+            progress.update()
+
+        def _forward_and_save(key: str):
+            progress.set_postfix({"key": key})
+            output[key] = arbitrary_input_dict[key]
             progress.update()
 
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
             for key in arbitrary_input_dict.keys():
                 if is_passthrough_key(key, arbitrary_input_dict.header[key]["shape"]):
-                    progress.set_postfix({"key": key})
-                    output[key] = arbitrary_input_dict[key]
-                    progress.update()
+                    futures.append(executor.submit(_forward_and_save, key))
                 elif is_merge_key(key):
-                    futures.append(executor.submit(_do_save_and_merge, key))
+                    futures.append(executor.submit(_do_merge_and_save, key))
                 else:
                     progress.update()
 

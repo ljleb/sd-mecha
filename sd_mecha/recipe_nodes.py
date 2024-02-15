@@ -29,19 +29,22 @@ class RecipeNode(abc.ABC):
 
 class LeafRecipeNode(RecipeNode):
     def __init__(
-        self, state_dict: str | pathlib.Path | TensorDict,
+        self,
+        state_dict: str | pathlib.Path | TensorDict,
+        device: Optional[str] = None,
     ):
         self.__state_dict = state_dict
+        self.__device = device
 
     def visit(self, key: str, scheduler) -> torch.Tensor:
-        self.__state_dict = scheduler.load_state_dict(self.__state_dict)
+        self.__state_dict = scheduler.load_state_dict(self.__state_dict, self.__device)
         return self.__state_dict[key]
 
     def depth(self) -> int:
         return 1
 
     def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
-        self.__state_dict = scheduler.load_state_dict(self.__state_dict)
+        self.__state_dict = scheduler.load_state_dict(self.__state_dict, self.__device)
         return [self.__state_dict]
 
     @property
@@ -114,39 +117,6 @@ class SymbolicRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
-
-
-class ClipRecipeNode(RecipeNode):
-    def __init__(self, model, a, b):
-        self.__model = model
-        self.__a = a
-        self.__b = b
-
-    def visit(self, key: str, scheduler):
-        return scheduler.clip_weights(*visit_deeper_first([self.__model, self.__a, self.__b], key, scheduler))
-
-    def depth(self) -> int:
-        return max(
-            model.depth()
-            for model in (self.__model, self.__a, self.__b)
-            if model is not None
-        ) + 1
-
-
-class CombineRecipeNode(RecipeNode):
-    def __init__(self, a: RecipeNode, b: RecipeNode):
-        self.__a = a
-        self.__b = b
-
-    def visit(self, key: str, scheduler):
-        dicts = visit_deeper_first([self.__a, self.__b], key, scheduler)
-        for k, v in dicts[0].items():
-            dicts[1][k] = v
-
-        return dicts[1]
-
-    def depth(self) -> int:
-        return max(model.depth() for model in (self.__a, self.__b)) + 1
 
 
 def visit_deeper_first(nodes: List[RecipeNode], key: str, scheduler) -> list:

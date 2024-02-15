@@ -27,9 +27,9 @@ def weighted_sum(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("weighted_sum"),
@@ -45,24 +45,24 @@ def weighted_sum(
 def add_difference(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
     alpha: float = 0.5,
+    clip_to_ab: bool = True,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
     if not isinstance(c, recipe_nodes.RecipeNode):
-        c = recipe_nodes.LeafRecipeNode(c)
+        c = recipe_nodes.LeafRecipeNode(c, device)
 
-    # outputs .to(work_device, work_dtype) because we are still inside the method
     b_diff = subtract(
         b, c,
         device=device,
         dtype=dtype,
     )
 
-    return recipe_nodes.SymbolicRecipeNode(
+    res = recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("add"),
         a=a,
         b=b_diff,
@@ -71,6 +71,15 @@ def add_difference(
         dtype=dtype,
     )
 
+    if clip_to_ab:
+        res = clip(
+            res, a, b,
+            device=device,
+            dtype=dtype,
+        )
+
+    return res
+
 
 def subtract(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
@@ -78,9 +87,9 @@ def subtract(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("subtract"),
@@ -92,19 +101,36 @@ def subtract(
 
 
 def tensor_sum(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel], *,
     width: float = 0.5,
     offset: float = 0.0,
+    top_k: bool = False,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
+    if c is not None:
+        if not isinstance(c, recipe_nodes.RecipeNode):
+            c = recipe_nodes.LeafRecipeNode(c, device)
 
-    return recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("tensor_sum"),
+        a = subtract(
+            a, c,
+            device=device,
+            dtype=dtype,
+        )
+
+        b = subtract(
+            b, c,
+            device=device,
+            dtype=dtype,
+        )
+
+    method_name = "top_k_tensor_sum" if top_k else "tensor_sum"
+    res = recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get(method_name),
         a=a,
         b=b,
         alpha=width,
@@ -112,6 +138,19 @@ def tensor_sum(
         device=device,
         dtype=dtype,
     )
+
+    if c is not None:
+        res = recipe_nodes.SymbolicRecipeNode(
+            merge_method=extensions.merge_methods.get("add"),
+            a=c,
+            b=res,
+            alpha=width,
+            beta=offset,
+            device=device,
+            dtype=dtype,
+        )
+
+    return res
 
 
 def add_perpendicular(
@@ -121,11 +160,11 @@ def add_perpendicular(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
     if not isinstance(c, recipe_nodes.RecipeNode):
-        c = recipe_nodes.LeafRecipeNode(c)
+        c = recipe_nodes.LeafRecipeNode(c, device)
 
     a_diff = subtract(
         a, c,
@@ -158,18 +197,33 @@ def add_perpendicular(
 
 
 def rotate(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
     alpha: float = 1.0,
     beta: float = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
+    if c is not None:
+        if not isinstance(c, recipe_nodes.RecipeNode):
+            c = recipe_nodes.LeafRecipeNode(c, device)
 
-    return recipe_nodes.SymbolicRecipeNode(
+        a = subtract(
+            a, c,
+            device=device,
+            dtype=dtype,
+        )
+
+        b = subtract(
+            b, c,
+            device=device,
+            dtype=dtype,
+        )
+
+    res = recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("rotate"),
         a=a,
         b=b,
@@ -179,14 +233,39 @@ def rotate(
         dtype=dtype,
     )
 
+    if c is not None:
+        res = recipe_nodes.SymbolicRecipeNode(
+            merge_method=extensions.merge_methods.get("add"),
+            a=c,
+            b=res,
+            alpha=1.0,
+            device=device,
+            dtype=dtype,
+        )
 
-def clip(model: RecipeNodeOrModel, a: RecipeNodeOrModel, b: RecipeNodeOrModel) -> recipe_nodes.RecipeNode:
+    return res
+
+
+def clip(
+    model: RecipeNodeOrModel, a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
+    device: Optional[str] = None,
+    dtype: Optional[str] = None,
+) -> recipe_nodes.RecipeNode:
+    if not isinstance(model, recipe_nodes.RecipeNode):
+        model = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a)
+        a = recipe_nodes.LeafRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b)
+        b = recipe_nodes.LeafRecipeNode(b, device)
 
-    return recipe_nodes.ClipRecipeNode(model, a, b)
+    return recipe_nodes.SymbolicRecipeNode(
+        merge_method=extensions.merge_methods.get("clip"),
+        a=model,
+        b=a,
+        c=b,
+        device=device,
+        dtype=dtype,
+    )
 
 
 def model(

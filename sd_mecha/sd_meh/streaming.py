@@ -22,8 +22,9 @@ DTYPE_REVERSE_MAPPING = {v: k for k, v in DTYPE_MAPPING.items()}
 
 
 class InSafetensorDict:
-    def __init__(self, file_path: pathlib.Path):
+    def __init__(self, file_path: pathlib.Path, device: str):
         assert file_path.suffix == ".safetensors"
+        self.device = device
         self.file = open(file_path, 'rb')
         self.header_size, self.header = self._read_header()
 
@@ -75,7 +76,7 @@ class InSafetensorDict:
         data = self.file.read(total_bytes)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return torch.frombuffer(data, dtype=dtype).reshape(shape)
+            return torch.frombuffer(data, dtype=dtype).reshape(shape).to(self.device)
 
 
 class OutSafetensorDict:

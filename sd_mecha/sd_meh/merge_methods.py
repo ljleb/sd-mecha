@@ -8,30 +8,28 @@ from sd_mecha.sd_meh.extensions import merge_methods, MergeSpace, LiftFlag
 
 
 EPSILON = 1e-10
+SharedMergeSpace = TypeVar("SharedMergeSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
 
 
-SharedSpace = TypeVar("SharedSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
-
-
-@merge_methods.register()
+@merge_methods.register
 def weighted_sum(
-    a: Tensor | SharedSpace,
-    b: Tensor | SharedSpace,
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
     alpha: float,
-) -> Tensor | SharedSpace:
+) -> Tensor | SharedMergeSpace:
     return (1 - alpha) * a + alpha * b
 
 
-@merge_methods.register()
+@merge_methods.register
 def add(
-    a: Tensor | SharedSpace,
+    a: Tensor | SharedMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     alpha: float,
-) -> Tensor | SharedSpace:
+) -> Tensor | SharedMergeSpace:
     return a + alpha * b
 
 
-@merge_methods.register()
+@merge_methods.register
 def subtract(
     a: Tensor | LiftFlag[MergeSpace.MODEL],
     b: Tensor | LiftFlag[MergeSpace.MODEL],
@@ -39,7 +37,7 @@ def subtract(
     return a - b
 
 
-@merge_methods.register()
+@merge_methods.register
 def perpendicular_component(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -51,7 +49,7 @@ def perpendicular_component(
     return res
 
 
-@merge_methods.register()
+@merge_methods.register
 def multiply_difference(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -64,7 +62,7 @@ def multiply_difference(
     return difference
 
 
-@merge_methods.register()
+@merge_methods.register
 def similarity_add_difference(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -80,7 +78,7 @@ def similarity_add_difference(
     return (1 - similarity) * ab_diff + similarity * ab_sum
 
 
-@merge_methods.register()
+@merge_methods.register
 def ties_add_difference(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -113,13 +111,13 @@ def filter_top_k(a: Tensor, k: float):
     return a * top_k_filter
 
 
-@merge_methods.register()
+@merge_methods.register
 def tensor_sum(
-    a: Tensor | SharedSpace,
-    b: Tensor | SharedSpace,
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
     alpha: float,
     beta: float,
-) -> Tensor | SharedSpace:
+) -> Tensor | SharedMergeSpace:
     if alpha + beta <= 1:
         tt = a.clone()
         talphas = int(a.shape[0] * beta)
@@ -133,13 +131,24 @@ def tensor_sum(
     return tt
 
 
-@merge_methods.register()
+@merge_methods.register
+def clip(
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    c: Tensor | SharedMergeSpace,
+) -> Tensor | SharedMergeSpace:
+    maximums = torch.maximum(b, c)
+    minimums = torch.minimum(b, c)
+    return torch.minimum(torch.maximum(a, minimums), maximums)
+
+
+@merge_methods.register
 def top_k_tensor_sum(
-    a: Tensor | SharedSpace,
-    b: Tensor | SharedSpace,
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
     alpha: float,
     beta: float,
-) -> Tensor | SharedSpace:
+) -> Tensor | SharedMergeSpace:
     a_flat = torch.flatten(a)
     a_dist = torch.msort(a_flat)
     b_indices = torch.argsort(torch.flatten(b), stable=True)
@@ -188,7 +197,7 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
     return round(start), round(end), inverted
 
 
-@merge_methods.register()
+@merge_methods.register
 def distribution_crossover(
     a: Tensor | LiftFlag[MergeSpace.MODEL],
     b: Tensor | LiftFlag[MergeSpace.MODEL],
@@ -220,14 +229,14 @@ def distribution_crossover(
     return x_values.reshape_as(a)
 
 
-@merge_methods.register()
+@merge_methods.register
 def rotate(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
     alpha: float,
     beta: float,
     cache: Optional[Dict[str, Tensor]],
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | SharedMergeSpace:
     if alpha == 0 and beta == 0:
         return a
 
