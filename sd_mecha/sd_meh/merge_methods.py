@@ -1,66 +1,104 @@
 import functools
 import math
 import operator
-import textwrap
-
 import torch
 from torch import Tensor
-from typing import Tuple
-from sd_mecha.sd_meh.extensions import merge_methods, MergeSpace
+from typing import Tuple, TypeVar, Dict, Optional
+from sd_mecha.sd_meh.extensions import merge_methods, MergeSpace, LiftFlag
 
 
 EPSILON = 1e-10
 
 
-@merge_methods.register(merge_spaces={MergeSpace.MODEL, MergeSpace.DELTA})
-def weighted_sum(a: Tensor, b: Tensor, alpha: float, **kwargs) -> Tensor:
+SharedSpace = TypeVar("SharedSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
+
+
+@merge_methods.register()
+def weighted_sum(
+    a: Tensor | SharedSpace,
+    b: Tensor | SharedSpace,
+    alpha: float,
+) -> Tensor | SharedSpace:
     return (1 - alpha) * a + alpha * b
 
 
-@merge_methods.register(merge_spaces=MergeSpace.DELTA)
-def add_difference(a: Tensor, b: Tensor, alpha: float, **kwargs) -> Tensor:
+@merge_methods.register()
+def add(
+    a: Tensor | SharedSpace,
+    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    alpha: float,
+) -> Tensor | SharedSpace:
     return a + alpha * b
 
 
-@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+@merge_methods.register()
+def subtract(
+    a: Tensor | LiftFlag[MergeSpace.MODEL],
+    b: Tensor | LiftFlag[MergeSpace.MODEL],
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    return a - b
+
+
+@merge_methods.register()
 def add_perpendicular(
-    a: Tensor, b: Tensor, alpha: float, **kwargs
-) -> Tensor:
-    cos_sim = (a / torch.linalg.norm(a) * (b / torch.linalg.norm(a))).sum()
-    b_perp = b - a * cos_sim
-    res = a + alpha * b_perp
-    if torch.isnan(res).any():
-        return a
-    return res
+    a: Tensor | LiftFlag[MergeSpace.DELTA],
+    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    alpha: float,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    iters = 1  # 200
+    for i in range(iters):
+        if i == 0:
+            adjusted_alpha = i / iters
+        else:
+            adjusted_alpha = 1 - (1 - (1 + i) * alpha / iters) / (1 - i * alpha / iters)
+
+        norm_a = torch.linalg.norm(a)
+        cos_sim = (a / norm_a * (b / norm_a)).sum()
+        b_perp = b - a * cos_sim
+        new_a = a + adjusted_alpha * b_perp
+        if torch.isnan(new_a).any():
+            return a
+        a = new_a
+
+    return a
 
 
-@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+@merge_methods.register()
 def multiply_difference(
-    a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
+    a: Tensor | LiftFlag[MergeSpace.DELTA],
+    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    alpha: float,
+    beta: float,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     a_pow = torch.pow(torch.abs(a), (1 - alpha))
     b_pow = torch.pow(torch.abs(b), alpha)
     difference = torch.copysign(a_pow * b_pow, weighted_sum(a, b, beta))
     return difference
 
 
-@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+@merge_methods.register()
 def similarity_add_difference(
-    a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
+    a: Tensor | LiftFlag[MergeSpace.DELTA],
+    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    alpha: float,
+    beta: float,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     threshold = torch.maximum(torch.abs(a), torch.abs(b))
     similarity = (a * b / threshold**2 + 1) / 2
     similarity = torch.nan_to_num(similarity * beta, nan=beta)
 
-    ab_diff = add_difference(a, b, alpha)
+    ab_diff = add(a, b, alpha)
     ab_sum = weighted_sum(a, b, alpha / 2)
     return (1 - similarity) * ab_diff + similarity * ab_sum
 
 
-@merge_methods.register(merge_spaces=MergeSpace.DELTA)
+@merge_methods.register()
 def ties_add_difference(
-    a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
+    a: Tensor | LiftFlag[MergeSpace.DELTA],
+    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    alpha: float,
+    beta: float,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     deltas = []
     signs = []
     for m in [a, b]:
@@ -87,8 +125,13 @@ def filter_top_k(a: Tensor, k: float):
     return a * top_k_filter
 
 
-@merge_methods.register(merge_spaces={MergeSpace.MODEL, MergeSpace.DELTA})
-def tensor_sum(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs) -> Tensor:
+@merge_methods.register()
+def tensor_sum(
+    a: Tensor | SharedSpace,
+    b: Tensor | SharedSpace,
+    alpha: float,
+    beta: float,
+) -> Tensor | SharedSpace:
     if alpha + beta <= 1:
         tt = a.clone()
         talphas = int(a.shape[0] * beta)
@@ -102,10 +145,13 @@ def tensor_sum(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs) -> Ten
     return tt
 
 
-@merge_methods.register(merge_spaces={MergeSpace.MODEL})
+@merge_methods.register()
 def top_k_tensor_sum(
-    a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs
-) -> Tensor:
+    a: Tensor | SharedSpace,
+    b: Tensor | SharedSpace,
+    alpha: float,
+    beta: float,
+) -> Tensor | SharedSpace:
     a_flat = torch.flatten(a)
     a_dist = torch.msort(a_flat)
     b_indices = torch.argsort(torch.flatten(b), stable=True)
@@ -156,8 +202,12 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
 
 @merge_methods.register()
 def distribution_crossover(
-    a: Tensor, b: Tensor, c: Tensor, alpha: float, beta: float, **kwargs
-):
+    a: Tensor | LiftFlag[MergeSpace.MODEL],
+    b: Tensor | LiftFlag[MergeSpace.MODEL],
+    c: Tensor | LiftFlag[MergeSpace.MODEL],
+    alpha: float,
+    beta: float,
+) -> Tensor | LiftFlag[MergeSpace.MODEL]:
     if a.shape == ():
         return weighted_sum(a, b, alpha)
 
@@ -182,9 +232,14 @@ def distribution_crossover(
     return x_values.reshape_as(a)
 
 
-# @merge_methods.register()
-@merge_methods.register(merge_spaces=MergeSpace.DELTA)
-def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
+@merge_methods.register()
+def rotate(
+    a: Tensor | LiftFlag[MergeSpace.DELTA],
+    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    alpha: float,
+    beta: float,
+    cache: Optional[Dict[str, Tensor]],
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     if alpha == 0 and beta == 0:
         return a
 
@@ -211,8 +266,8 @@ def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
 
     alpha_is_float = alpha != round(alpha)
 
-    if kwargs["cache"] is not None and "rotation" in kwargs["cache"]:
-        rotation = transform = kwargs["cache"]["rotation"].to(a.device)
+    if cache is not None and "rotation" in cache:
+        rotation = transform = cache["rotation"].to(a.device)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a_neurons.T @ b_neurons, driver=svd_driver)
@@ -225,19 +280,19 @@ def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
         rotation = transform = u @ v_t
         if not torch.isfinite(u).all():
             raise ValueError(
-                textwrap.dedent(
-                    f"""determinant error: {torch.det(rotation)}.
-                        This can happen when merging on the CPU with the "rotate" method.
-                        Consider merging on a cuda device, or try setting alpha to 1 for the problematic blocks.
-                        See this related discussion for more info: https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"""
-                )
+                f"determinant error: {torch.det(rotation)}. "
+                'This can happen when merging on the CPU with the "rotate" method. '
+                "Consider merging on a cuda device, "
+                "or try setting alpha to 1 for the problematic blocks. "
+                "See this related discussion for more info: "
+                "https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"
             )
 
-        if kwargs["cache"] is not None:
-            kwargs["cache"]["rotation"] = rotation.cpu()
+        if cache is not None:
+            cache["rotation"] = rotation.cpu()
 
     if alpha_is_float:
-        transform = fractional_matrix_power(transform, alpha, kwargs["cache"])
+        transform = fractional_matrix_power(transform, alpha, cache)
     elif alpha == 0:
         transform = torch.eye(
             len(transform),
@@ -256,7 +311,7 @@ def rotate(a: Tensor, b: Tensor, alpha: float, beta: float, **kwargs):
     return a_neurons.reshape_as(a).to(a.dtype)
 
 
-def fractional_matrix_power(matrix: Tensor, power: float, cache: dict):
+def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tensor]):
     if cache is not None and "eigenvalues" in cache:
         eigenvalues = cache["eigenvalues"].to(matrix.device)
         eigenvectors = cache["eigenvectors"].to(matrix.device)

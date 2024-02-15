@@ -14,12 +14,8 @@ models = [
 
 recipe = models[0]
 for i, model in enumerate(models[1:], start=2):
-    recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i, rebasin_iters=16)
+    dtype = torch.float16 if i - 2 < 2 else torch.float32 if i - 2 < 8 else torch.float64
+    recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i, dtype=dtype)
 
-scheduler = sd_mecha.MergeScheduler(
-    base_dir=r"E:\sd\models\Stable-diffusion",
-    work_device="cuda:0",
-    work_dtype=torch.float64,
-)
-
+scheduler = sd_mecha.MergeScheduler(base_dir=r"E:\sd\models\Stable-diffusion")
 scheduler.merge_and_save(recipe, output_path="n_average")

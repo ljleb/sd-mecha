@@ -2212,7 +2212,6 @@ def weight_matching(
     number = 0
 
     for _ in range(max_iter):
-        progress = False
         special_param = "P_bg324"
 
         linear_sum, number, perm, progress = inner_matching(
@@ -2222,14 +2221,12 @@ def weight_matching(
             params_a,
             params_b,
             dtype,
-            progress,
+            False,
             number,
             linear_sum,
             perm,
             device,
         )
-        if not progress:
-            break
 
     average = linear_sum / number if number > 0 else 0
     return perm, average

@@ -1,11 +1,11 @@
 import abc
 import pathlib
-
-from tensordict import TensorDict
 import torch
+from tensordict import TensorDict
 from typing import Optional, List
 from sd_mecha.sd_meh.extensions import MergeSpace
 from sd_mecha.sd_meh.streaming import InSafetensorDict
+from sd_mecha.sd_meh.extensions import MergeMethod
 
 
 class RecipeNode(abc.ABC):
@@ -18,7 +18,7 @@ class RecipeNode(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_arbitrary_input_model(self, scheduler) -> InSafetensorDict:
+    def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
         pass
 
     @property
@@ -40,9 +40,9 @@ class LeafRecipeNode(RecipeNode):
     def depth(self) -> int:
         return 1
 
-    def get_arbitrary_input_model(self, scheduler) -> InSafetensorDict:
+    def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
         self.__state_dict = scheduler.load_state_dict(self.__state_dict)
-        return self.__state_dict
+        return [self.__state_dict]
 
     @property
     def merge_space(self) -> MergeSpace:
@@ -52,11 +52,11 @@ class LeafRecipeNode(RecipeNode):
 class SymbolicRecipeNode(RecipeNode):
     def __init__(
         self,
-        merge_method,
+        merge_method: MergeMethod,
         a: RecipeNode,
         b: RecipeNode,
-        alpha: float,
         c: RecipeNode = None,
+        alpha: Optional[float] = None,
         beta: Optional[float] = None,
         rebasin_iters: int = 0,
         device: Optional[str] = None,
@@ -75,6 +75,11 @@ class SymbolicRecipeNode(RecipeNode):
         self.__dtype = dtype
         self.__work_device = work_device
         self.__work_dtype = work_dtype
+        self.__merge_space = self.__merge_method.get_return_merge_space(
+            self.__a.merge_space,
+            self.__b.merge_space,
+            self.__c.merge_space if self.__c is not None else None,
+        )
 
     def visit(self, key: str, scheduler):
         return scheduler.symbolic_merge(
@@ -103,13 +108,17 @@ class SymbolicRecipeNode(RecipeNode):
             if model is not None
         ) + 1
 
-    def get_arbitrary_input_model(self, scheduler) -> InSafetensorDict:
-        return self.__a.get_arbitrary_input_model(scheduler)
+    def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
+        return [
+            input_dict
+            for node in (self.__a, self.__b, self.__c)
+            if node is not None
+            for input_dict in node.get_input_dicts(scheduler)
+        ]
 
     @property
     def merge_space(self) -> MergeSpace:
-        assert self.__a.merge_space == self.__b.merge_space == self.__c.merge_space
-        return MergeSpace.MODEL
+        return self.__merge_space
 
 
 class ClipRecipeNode(RecipeNode):

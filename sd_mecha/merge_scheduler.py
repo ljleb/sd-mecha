@@ -74,31 +74,33 @@ class MergeScheduler:
             output_path = output_path.with_suffix(".safetensors")
         logging.info(f"Saving to {output_path}")
 
-        arbitrary_input_model = recipe.get_arbitrary_input_model(self)
-        output = OutSafetensorDict(output_path, arbitrary_input_model.header)
-        for key in arbitrary_input_model.keys():
-            if is_passthrough_key(key, arbitrary_input_model.header[key]["shape"]):
-                output[key] = arbitrary_input_model[key]
+        input_dicts = recipe.get_input_dicts(self)
+        arbitrary_input_dict = input_dicts[0]
+
+        output = OutSafetensorDict(output_path, arbitrary_input_dict.header)
+        for key in arbitrary_input_dict.keys():
+            if is_passthrough_key(key, arbitrary_input_dict.header[key]["shape"]):
+                output[key] = arbitrary_input_dict[key]
             elif is_merge_key(key):
                 output[key] = recipe.visit(key, self)
         output.finalize()
 
 
 def is_passthrough_key(key: str, shape: list):
-    is_ema = "ema." in key
     is_vae = key.startswith("first_stage_model.")
-    return not is_ema and (is_vae or shape == [1000])
+    return is_vae or shape == [1000]
 
 
 def is_merge_key(key: str):
-    is_ema = "ema." in key
     is_unet = key.startswith("model.diffusion_model.")
     is_text_encoder = key.startswith("cond_stage_model.")
-    return not is_ema and (is_unet or is_text_encoder)
+    return is_unet or is_text_encoder
 
 
 def get_hyper_parameters(key: str, merge_method, alpha, beta) -> Dict[str, float]:
-    return {
-        "alpha": alpha,
-        **({"beta": beta} if merge_method.requests_beta() else {}),
-    }
+    hyper_parameters = {}
+    if merge_method.requests_alpha():
+        hyper_parameters["alpha"] = alpha
+    if merge_method.requests_beta():
+        hyper_parameters["beta"] = beta
+    return hyper_parameters

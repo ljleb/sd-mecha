@@ -2,11 +2,10 @@ import sd_mecha
 sd_mecha.set_log_level()
 
 
-# plan a simple weighted sum
-recipe = sd_mecha.weighted_sum(
+recipe = sd_mecha.add_perpendicular(
     "ghostmix_v20Bakedvae",
     "dreamshaper_332BakedVaeClipFix",
-    alpha=0.5,
+    "pure/v1-5-pruned",
 )
 
 # scheduler contains default parameters

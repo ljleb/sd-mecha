@@ -2,9 +2,8 @@ import json
 import os
 import pathlib
 import struct
-import warnings
-
 import torch
+import warnings
 
 
 DTYPE_MAPPING = {
@@ -32,7 +31,7 @@ class InSafetensorDict:
 
     def __getitem__(self, key):
         if key not in self.header:
-            raise KeyError(f"Tensor '{key}' not found.")
+            raise KeyError(key)
         return self._load_tensor(key)
 
     def __iter__(self):
