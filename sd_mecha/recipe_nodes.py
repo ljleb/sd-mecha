@@ -61,9 +61,8 @@ class SymbolicRecipeNode(RecipeNode):
         c: RecipeNode = None,
         alpha: Optional[float] = None,
         beta: Optional[float] = None,
-        rebasin_iters: int = 0,
         device: Optional[str] = None,
-        dtype: Optional[torch.dtype] = "cpu",
+        dtype: Optional[torch.dtype] = None,
     ):
         self.__merge_method = merge_method
         self.__a = a
@@ -71,7 +70,6 @@ class SymbolicRecipeNode(RecipeNode):
         self.__c = c
         self.__alpha = alpha
         self.__beta = beta
-        self.__rebasin_iters = rebasin_iters
         self.__device = device
         self.__dtype = dtype
         self.__merge_space = self.__merge_method.get_return_merge_space(

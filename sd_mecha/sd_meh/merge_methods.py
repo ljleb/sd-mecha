@@ -21,6 +21,27 @@ def weighted_sum(
 
 
 @merge_methods.register
+def slerp(
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    alpha: float,
+) -> Tensor | SharedMergeSpace:
+    a_normalized = a / a.norm()
+    b_normalized = b / b.norm()
+
+    ab_dot = torch.sum(a_normalized * b_normalized)
+
+    if 1 - torch.abs(ab_dot) < EPSILON:
+        return weighted_sum(a, b, alpha)
+
+    omega = torch.arccos(ab_dot)
+    a_contrib = a * torch.sin((1-alpha)*omega)
+    b_contrib = b * torch.sin(alpha*omega)
+    res = (a_contrib + b_contrib) / torch.sin(omega)
+    return res * weighted_sum(a.norm(), b.norm(), alpha)
+
+
+@merge_methods.register
 def add(
     a: Tensor | SharedMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -39,9 +60,9 @@ def subtract(
 
 @merge_methods.register
 def perpendicular_component(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+) -> Tensor | SharedMergeSpace:
     norm_a = torch.linalg.norm(a)
     res = b - a * (a / norm_a * (b / norm_a)).sum()
     if res.isnan().any():
@@ -199,12 +220,12 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
 
 @merge_methods.register
 def distribution_crossover(
-    a: Tensor | LiftFlag[MergeSpace.MODEL],
-    b: Tensor | LiftFlag[MergeSpace.MODEL],
-    c: Tensor | LiftFlag[MergeSpace.MODEL],
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    c: Tensor | SharedMergeSpace,
     alpha: float,
     beta: float,
-) -> Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> Tensor | SharedMergeSpace:
     if a.shape == ():
         return weighted_sum(a, b, alpha)
 
@@ -212,21 +233,81 @@ def distribution_crossover(
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
     b_dist = torch.gather(torch.flatten(b), 0, c_indices)
 
-    a_dft = torch.fft.rfft(a_dist.float())
-    b_dft = torch.fft.rfft(b_dist.float())
+    a_dft = torch.fft.rfft(a_dist)
+    b_dft = torch.fft.rfft(b_dist)
 
-    dft_filter = torch.arange(0, torch.numel(a_dft), device=a_dft.device).float()
-    dft_filter /= torch.numel(a_dft)
-    if beta > EPSILON:
-        dft_filter = (dft_filter - alpha) / math.tan(beta * math.pi / 2) + alpha
-        dft_filter = torch.clamp(dft_filter, 0.0, 1.0)
-    else:
-        dft_filter = (dft_filter >= alpha).float()
+    dft_filter = create_filter((a_dft.numel(),), alpha, beta, device=a.device)
 
     x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
     x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
     x_values = torch.gather(x_dist, 0, torch.argsort(c_indices))
     return x_values.reshape_as(a)
+
+
+@merge_methods.register
+def crossover(
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    alpha: float,
+    beta: float,
+) -> Tensor | SharedMergeSpace:
+    if alpha == 0 and beta == 0:
+        return a
+
+    if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
+        return weighted_sum(a, b, beta)
+
+    if a.shape[0] > 40000 or len(a.shape) == 4 and sum(a.shape[2:]) > 2:
+        shape = a.shape[1:]
+    else:
+        shape = a.shape
+
+    a_dft = torch.fft.rfftn(a, s=shape)
+    b_dft = torch.fft.rfftn(b, s=shape)
+
+    dft_filter = create_filter(a_dft.shape, alpha, beta, device=a.device)
+
+    x_dft = (1 - dft_filter)*a_dft + dft_filter*b_dft
+    return torch.fft.irfftn(x_dft, s=shape)
+
+
+def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float, steps=100, precision=EPSILON, device=None):
+    gradients = [
+        torch.linspace(0, 1, s, device=device)**2
+        for s in shape
+    ]
+
+    if len(shape) > 1:
+        grids = torch.meshgrid(*gradients, indexing='ij')
+        mesh = torch.sqrt(torch.sum(torch.stack(grids), dim=0)) / math.sqrt(len(shape))
+    else:
+        mesh = gradients[0]
+
+    k = 8
+    # alpha = 1 - ((k+1)**(1 - alpha) - 1) / k
+
+    phi_alpha = alpha
+    dft_filter = mesh
+    for step in range(steps):
+        if beta < EPSILON:
+            dft_filter = (mesh > 1 - phi_alpha).float()
+        else:
+            cot_b = 1 / math.tan(math.pi * beta / 2)
+            dft_filter = torch.clamp(mesh*cot_b + phi_alpha*cot_b + phi_alpha - cot_b, 0, 1)
+        filter_mean = dft_filter.mean()
+        loss = alpha - filter_mean
+        if abs(loss) < precision:
+            break
+        phi_alpha += loss
+
+    # phi_alpha = alpha
+    # if beta < EPSILON:
+    #     dft_filter = (mesh >= 1 - phi_alpha).float()
+    # else:
+    #     cot_b = 1 / math.tan(math.pi * beta / 2)
+    #     dft_filter = torch.clamp(mesh*cot_b + phi_alpha*cot_b + phi_alpha - cot_b, 0, 1)
+
+    return dft_filter
 
 
 @merge_methods.register
@@ -249,8 +330,8 @@ def rotate(
     else:
         shape_2d = (-1, a.shape[-1])
 
-    a_neurons = a.reshape(*shape_2d).double()
-    b_neurons = b.reshape(*shape_2d).double()
+    a_neurons = a.reshape(*shape_2d)
+    b_neurons = b.reshape(*shape_2d)
 
     a_centroid = a_neurons.mean(0)
     b_centroid = b_neurons.mean(0)
@@ -305,7 +386,7 @@ def rotate(
 
     a_neurons @= transform
     a_neurons += new_centroid
-    return a_neurons.reshape_as(a).to(a.dtype)
+    return a_neurons.reshape_as(a)
 
 
 def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tensor]):
@@ -324,3 +405,25 @@ def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tenso
     eigenvalues.pow_(power)
     result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
     return result.real.to(dtype=matrix.dtype)
+
+
+def train_difference(
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    c: Tensor | SharedMergeSpace,
+):
+    ab_diff = a - b
+    bc_dist = torch.abs(b - c)
+    ba_dist = torch.abs(b - a)
+
+    sum_distances = bc_dist + ba_dist
+
+    scale = torch.where(
+        sum_distances != 0,
+        ba_dist / sum_distances,
+        torch.tensor(0.0, dtype=a.dtype, device=a.device)
+    )
+    sign_scale = torch.sign(b - c)
+    scale = sign_scale * torch.abs(scale)
+    new_diff = scale * torch.abs(ab_diff)
+    return new_diff * 1.8
