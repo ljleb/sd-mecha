@@ -11,8 +11,6 @@ recipe = sd_mecha.add_perpendicular(
 # scheduler contains default parameters
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
-    default_device="cuda",
-    threads=24,
 )
 
 # perform the entire merge plan and save to output path

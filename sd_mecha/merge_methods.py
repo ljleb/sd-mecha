@@ -16,7 +16,7 @@ def weighted_sum(
     a: Tensor | SharedMergeSpace,
     b: Tensor | SharedMergeSpace,
     *,
-    alpha: float,
+    alpha: float = 0.5,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
     return (1 - alpha) * a + alpha * b
@@ -27,7 +27,7 @@ def slerp(
     a: Tensor | SharedMergeSpace,
     b: Tensor | SharedMergeSpace,
     *,
-    alpha: float,
+    alpha: float = 0.5,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
     a_normalized = a / a.norm()
@@ -50,7 +50,7 @@ def add_difference(
     a: Tensor | SharedMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: float,
+    alpha: float = 0.5,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
     return a + alpha * b
