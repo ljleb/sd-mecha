@@ -82,13 +82,18 @@ def get_weight(parameter: ModelParameter, key: str) -> float:
         return parameter
     elif isinstance(parameter, dict):
         weights = []
+        default = 0.0
         for key_identifier, weight in parameter.items():
             partial_key = SD15_HYPER_PARAMETERS[key_identifier]
             if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
                 weights.append(weight)
+            elif key_identifier.endswith("_default"):
+                default = weight
         if weights:
             return sum(weights) / len(weights)
-    return 0.0
+        return default
+    else:
+        raise TypeError(f"'parameter' must be float or dict, not {type(parameter)}")
 
 
 def validate_model_parameter(parameter: ModelParameter) -> ModelParameter:
@@ -134,7 +139,6 @@ def unet15_blocks(
     return {
         f"txt_block_{k}": v if v is not None else default
         for k, v in locals().items()
-        if k != "default"
     }
 
 
@@ -171,7 +175,6 @@ def unet15_classes(
     return {
         f"unet_class_{k}": v if v is not None else default
         for k, v in locals().items()
-        if k != "default"
     }
 
 
@@ -195,7 +198,6 @@ def txt15_blocks(
     return {
         f"txt_block_{k}": v if v is not None else default
         for k, v in locals().items()
-        if k != "default"
     }
 
 
@@ -216,5 +218,4 @@ def txt15_classes(
     return {
         f"txt_class_{k}": v if v is not None else default
         for k, v in locals().items()
-        if k != "default"
     }
