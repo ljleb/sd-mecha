@@ -70,6 +70,8 @@ class MergeScheduler:
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 1,
     ):
+        if save_dtype is None:
+            save_dtype = self.__default_dtype
         if not isinstance(output_path, pathlib.Path):
             output_path = pathlib.Path(output_path)
         if not output_path.is_absolute():
