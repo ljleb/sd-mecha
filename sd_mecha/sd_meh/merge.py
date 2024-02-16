@@ -3,7 +3,6 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Dict, Optional, Tuple, Callable
 
 import safetensors.torch
@@ -12,7 +11,6 @@ from tensordict import TensorDict
 from sd_mecha.sd_meh.streaming import InSafetensorDict
 from tqdm import tqdm
 
-from sd_mecha.sd_meh.model import SDModel
 from sd_mecha.sd_meh.rebasin import (
     apply_permutation,
     sdunet_permutation_spec,
@@ -57,15 +55,6 @@ InMemoryDict = InSafetensorDict | TensorDict
 InputDict = os.PathLike | str | InMemoryDict
 
 
-def load_sd_model(model: InputDict) -> InMemoryDict:
-    if isinstance(model, InMemoryDict):
-        return model
-    elif isinstance(model, str):
-        model = Path(model)
-
-    return SDModel(model).load_model()
-
-
 def restore_sd_model(original_model: TensorDict, merged_model: TensorDict) -> TensorDict:
     for k in original_model:
         if k not in merged_model:
@@ -86,42 +75,25 @@ def merge_models(
     dtype: torch.dtype,
     work_dtype: torch.dtype,
     weights_clip: bool,
-    rebasin_iterations: int,
     device: str,
     work_device: str,
     threads: int,
     cache: Optional[dict],
 ) -> TensorDict:
     logging.info(f"start merging with method {merge_method.__name__} on device {work_device} and dtype {work_dtype}")
-    if rebasin_iterations:
-        merged = rebasin_merge(
-            thetas,
-            weights,
-            bases,
-            merge_method,
-            dtype=dtype,
-            work_dtype=work_dtype,
-            weights_clip=weights_clip,
-            iterations=rebasin_iterations,
-            device=device,
-            work_device=work_device,
-            threads=threads,
-            cache=cache,
-        )
-    else:
-        merged = simple_merge(
-            thetas,
-            weights,
-            bases,
-            merge_method,
-            dtype=dtype,
-            work_dtype=work_dtype,
-            weights_clip=weights_clip,
-            device=device,
-            work_device=work_device,
-            threads=threads,
-            cache=cache,
-        )
+    merged = simple_merge(
+        thetas,
+        weights,
+        bases,
+        merge_method,
+        dtype=dtype,
+        work_dtype=work_dtype,
+        weights_clip=weights_clip,
+        device=device,
+        work_device=work_device,
+        threads=threads,
+        cache=cache,
+    )
 
     return merged
 
@@ -174,101 +146,6 @@ def simple_merge(
     log_vram("after stage 2")
 
     return fix_model(thetas["a"])
-
-
-def rebasin_merge(
-    thetas: Dict[str, TensorDict],
-    weights: dict,
-    bases: dict,
-    merge_method: Callable,
-    dtype: torch.dtype,
-    work_dtype: torch.dtype,
-    weights_clip: bool,
-    iterations: int,
-    device: str,
-    work_device: str,
-    threads: int,
-    cache: Optional[dict],
-):
-    if work_device is None:
-        work_device = device
-
-    model_a = thetas["a"].clone()
-    perm_spec = sdunet_permutation_spec()
-
-    logging.info("Init rebasin iterations")
-    for it in range(iterations):
-        logging.info(f"Rebasin iteration {it}")
-        log_vram(f"{it} iteration start")
-        new_weights, new_bases = step_weights_and_bases(
-            weights,
-            bases,
-            it,
-            iterations,
-        )
-        log_vram("weights & bases, before simple merge")
-
-        # normal block merge we already know and love
-        thetas["a"] = simple_merge(
-            thetas,
-            new_weights,
-            new_bases,
-            merge_method,
-            dtype,
-            work_dtype,
-            False,
-            device,
-            work_device,
-            threads,
-            cache,
-        )
-
-        log_vram("simple merge done")
-
-        # find permutations
-        perm_1, y = weight_matching(
-            perm_spec,
-            model_a,
-            thetas["a"],
-            max_iter=it,
-            init_perm=None,
-            dtype=work_dtype,
-            device=work_device,
-        )
-
-        log_vram("weight matching #1 done")
-
-        thetas["a"].update(apply_permutation(perm_spec, perm_1, thetas["a"], work_device))
-
-        log_vram("apply perm 1 done")
-
-        perm_2, z = weight_matching(
-            perm_spec,
-            thetas["b"],
-            thetas["a"],
-            max_iter=it,
-            init_perm=None,
-            dtype=work_dtype,
-            device=work_device,
-        )
-
-        log_vram("weight matching #2 done")
-
-        new_alpha = torch.nn.functional.normalize(
-            torch.sigmoid(torch.Tensor([y, z])), p=1, dim=0
-        ).tolist()[0]
-        thetas["a"].update(update_model_a(
-            perm_spec, perm_2, thetas["a"], new_alpha, work_device
-        ))
-
-        log_vram("model a updated")
-
-    if weights_clip:
-        clip_thetas = thetas.copy()
-        clip_thetas["a"] = model_a
-        thetas["a"] = clip_weights(thetas, thetas["a"])
-
-    return thetas["a"]
 
 
 def simple_merge_key(progress, key, thetas, *args, **kwargs):

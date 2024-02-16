@@ -36,7 +36,6 @@ def weighted_sum(
         a=a,
         b=b,
         alpha=alpha,
-        rebasin_iters=0,
         device=device,
         dtype=dtype,
     )
@@ -63,7 +62,7 @@ def add_difference(
     )
 
     res = recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("add"),
+        merge_method=extensions.merge_methods.get("add_difference"),
         a=a,
         b=b_diff,
         alpha=alpha,
@@ -141,7 +140,7 @@ def tensor_sum(
 
     if c is not None:
         res = recipe_nodes.SymbolicRecipeNode(
-            merge_method=extensions.merge_methods.get("add"),
+            merge_method=extensions.merge_methods.get("add_difference"),
             a=c,
             b=res,
             alpha=width,
@@ -187,7 +186,7 @@ def add_perpendicular(
     )
 
     return recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("add"),
+        merge_method=extensions.merge_methods.get("add_difference"),
         a=a,
         b=perp_diff,
         alpha=alpha,
@@ -235,7 +234,7 @@ def rotate(
 
     if c is not None:
         res = recipe_nodes.SymbolicRecipeNode(
-            merge_method=extensions.merge_methods.get("add"),
+            merge_method=extensions.merge_methods.get("add_difference"),
             a=c,
             b=res,
             alpha=1.0,

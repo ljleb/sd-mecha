@@ -42,7 +42,7 @@ def slerp(
 
 
 @merge_methods.register
-def add(
+def add_difference(
     a: Tensor | SharedMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     alpha: float,
@@ -335,9 +335,7 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float
     else:
         mesh = gradients[0]
 
-    k = 8
-    # alpha = 1 - ((k+1)**(1 - alpha) - 1) / k
-
+    # train the cut to pick the right ratio of parameters
     phi_alpha = alpha
     dft_filter = mesh
     for step in range(steps):
@@ -351,13 +349,6 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float
         if abs(loss) < precision:
             break
         phi_alpha += loss
-
-    # phi_alpha = alpha
-    # if beta < EPSILON:
-    #     dft_filter = (mesh >= 1 - phi_alpha).float()
-    # else:
-    #     cot_b = 1 / math.tan(math.pi * beta / 2)
-    #     dft_filter = torch.clamp(mesh*cot_b + phi_alpha*cot_b + phi_alpha - cot_b, 0, 1)
 
     return dft_filter
 
