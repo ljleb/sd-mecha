@@ -15,7 +15,7 @@ class MergeScheduler:
         base_dir: Optional[pathlib.Path | str] = None,
         threads: int = 1,
         default_device: str = "cpu",
-        default_dtype: Optional[torch.dtype] = torch.float16,
+        default_dtype: Optional[torch.dtype] = torch.float32,
         cache: Optional[dict] = None
     ):
         self.__base_dir = base_dir if base_dir is not None else base_dir
@@ -67,6 +67,7 @@ class MergeScheduler:
     def merge_and_save(
         self, recipe, *,
         output_path: Optional[pathlib.Path | str] = None,
+        save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 1,
     ):
         if not isinstance(output_path, pathlib.Path):
@@ -100,7 +101,7 @@ class MergeScheduler:
                 merged = recipe.visit(key, self)
             except KeyError:
                 merged = _get_any_tensor(key)
-            output[key] = merged
+            output[key] = merged.to(save_dtype)
             progress.update()
 
         def _forward_and_save(key: str):

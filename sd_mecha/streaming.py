@@ -112,9 +112,9 @@ class InLoraSafetensorsDict:
         return self.safetensors_dict.header
 
     def _convert_lora_to_weight(self, lora_key):
-        up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].float()
-        down_weight = self.safetensors_dict[f"{lora_key}.lora_down.weight"].float()
-        alpha = self.safetensors_dict[f"{lora_key}.alpha"].float()
+        up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].to(torch.float32)
+        down_weight = self.safetensors_dict[f"{lora_key}.lora_down.weight"].to(torch.float32)
+        alpha = self.safetensors_dict[f"{lora_key}.alpha"].to(torch.float32)
         dim = down_weight.size()[0]
         scale = alpha / dim
 
