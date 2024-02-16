@@ -8,7 +8,7 @@ from sd_mecha.extensions import MergeSpace
 from sd_mecha.weight import ModelParameter, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 
 
-RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorsDict
+RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path
 
 
 def merge_and_save(
@@ -26,10 +26,8 @@ def weighted_sum(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
+    a = to_node(a)
+    b = to_node(b)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("weighted_sum"),
@@ -44,18 +42,16 @@ def weighted_sum(
 def add_difference(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
     alpha: ModelParameter = 0.5,
-    clip_to_ab: bool = True,
+    clip_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
-    if c is not None:
-        if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.ModelRecipeNode(c, device)
+    a = to_node(a)
+    b = to_node(b)
+    original_b = b
 
+    if c is not None:
+        c = to_node(c)
         b = subtract(
             b, c,
             device=device,
@@ -71,7 +67,16 @@ def add_difference(
         dtype=dtype,
     )
 
-    if clip_to_ab and a.merge_space == b.merge_space:
+    if clip_to_ab is None:
+        ab_same_space = a.merge_space == b.merge_space
+        abo_same_space = a.merge_space == original_b.merge_space
+        clip_to_ab = ab_same_space or abo_same_space
+        if abo_same_space:
+            b = original_b
+
+    if clip_to_ab:
+        if a.merge_space != b.merge_space:
+            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clip the merge")
         res = clip(
             res, a, b,
             device=device,
@@ -87,9 +92,9 @@ def subtract(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("subtract"),
@@ -109,12 +114,12 @@ def tensor_sum(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b)
     if c is not None:
         if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.ModelRecipeNode(c, device)
+            c = recipe_nodes.ModelRecipeNode(c)
 
         a = subtract(
             a, c,
@@ -160,11 +165,11 @@ def add_perpendicular(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b)
     if not isinstance(c, recipe_nodes.RecipeNode):
-        c = recipe_nodes.ModelRecipeNode(c, device)
+        c = recipe_nodes.ModelRecipeNode(c)
 
     a_diff = subtract(
         a, c,
@@ -204,12 +209,12 @@ def rotate(
     dtype: Optional[torch.dtype] = torch.float64,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b)
     if c is not None:
         if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.ModelRecipeNode(c, device)
+            c = recipe_nodes.ModelRecipeNode(c)
 
         a = subtract(
             a, c,
@@ -252,11 +257,11 @@ def clip(
     dtype: Optional[str] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(model, recipe_nodes.RecipeNode):
-        model = recipe_nodes.ModelRecipeNode(a, device)
+        model = recipe_nodes.ModelRecipeNode(a)
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("clip"),
@@ -269,7 +274,7 @@ def clip(
 
 
 def model(
-    state_dict: str | pathlib.Path | streaming.InSafetensorsDict,
+    state_dict: str | pathlib.Path,
 ):
     return recipe_nodes.ModelRecipeNode(
         state_dict=state_dict,
@@ -277,11 +282,17 @@ def model(
 
 
 def lora(
-    state_dict: str | pathlib.Path | streaming.InLoraSafetensorsDict,
+    state_dict: str | pathlib.Path,
 ):
     return recipe_nodes.LoraRecipeNode(
         state_dict=state_dict,
     )
+
+
+def to_node(a: RecipeNodeOrModel) -> recipe_nodes.RecipeNode:
+    if isinstance(a, (str, pathlib.Path)):
+        return recipe_nodes.ModelRecipeNode(a)
+    return a
 
 
 def set_log_level(level: str = "INFO"):

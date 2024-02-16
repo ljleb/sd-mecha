@@ -1,13 +1,11 @@
 import logging
 import pathlib
-import traceback
-import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
 from tqdm import tqdm
 
-from sd_mecha.streaming import OutSafetensorsDict, InSafetensorsDict, InLoraSafetensorsDict
+from sd_mecha.streaming import OutSafetensorsDict, InModelSafetensorsDict, InLoraSafetensorsDict
 from typing import Optional, Dict
 
 
@@ -30,8 +28,8 @@ class MergeScheduler:
         self.__default_dtype = default_dtype
         self.__cache = cache
 
-    def load_model(self, state_dict: str | pathlib.Path | InSafetensorsDict, device: Optional[str]) -> InSafetensorsDict:
-        if isinstance(state_dict, InSafetensorsDict):
+    def load_model(self, state_dict: str | pathlib.Path | InModelSafetensorsDict) -> InModelSafetensorsDict:
+        if isinstance(state_dict, InModelSafetensorsDict):
             return state_dict
         if not isinstance(state_dict, pathlib.Path):
             state_dict = pathlib.Path(state_dict)
@@ -40,9 +38,9 @@ class MergeScheduler:
         if not state_dict.suffix:
             state_dict = state_dict.with_suffix(".safetensors")
 
-        return InSafetensorsDict(state_dict, device if device is not None else self.__default_device)
+        return InModelSafetensorsDict(state_dict)
 
-    def load_lora(self, state_dict: str | pathlib.Path | InLoraSafetensorsDict, device: Optional[str]) -> InLoraSafetensorsDict:
+    def load_lora(self, state_dict: str | pathlib.Path | InLoraSafetensorsDict) -> InLoraSafetensorsDict:
         if isinstance(state_dict, InLoraSafetensorsDict):
             return state_dict
         if not isinstance(state_dict, pathlib.Path):
@@ -52,7 +50,7 @@ class MergeScheduler:
         if not state_dict.suffix:
             state_dict = state_dict.with_suffix(".safetensors")
 
-        return InLoraSafetensorsDict(state_dict, device if device is not None else self.__default_device)
+        return InLoraSafetensorsDict(state_dict)
 
     def symbolic_merge(self, key, merge_method, inputs, alpha, beta, device, dtype):
         if self.__cache is not None and key not in self.__cache:

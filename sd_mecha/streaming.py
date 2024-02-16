@@ -7,24 +7,9 @@ import torch
 import warnings
 
 
-DTYPE_MAPPING = {
-    'F16': torch.float16,
-    'F32': torch.float32,
-    'F64': torch.float64,
-    'I8': torch.int8,
-    'I16': torch.int16,
-    'I32': torch.int32,
-    'I64': torch.int64,
-}
-
-
-DTYPE_REVERSE_MAPPING = {v: k for k, v in DTYPE_MAPPING.items()}
-
-
-class InSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, device: str):
+class InModelSafetensorsDict:
+    def __init__(self, file_path: pathlib.Path):
         assert file_path.suffix == ".safetensors"
-        self.device = device
         self.file = open(file_path, 'rb')
         self.header_size, self.header = self._read_header()
 
@@ -76,12 +61,12 @@ class InSafetensorsDict:
         data = self.file.read(total_bytes)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return torch.frombuffer(data, dtype=dtype).reshape(shape).to(self.device)
+            return torch.frombuffer(data, dtype=dtype).reshape(shape)
 
 
 class InLoraSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, device: str):
-        self.safetensors_dict = InSafetensorsDict(file_path, device)
+    def __init__(self, file_path: pathlib.Path):
+        self.safetensors_dict = InModelSafetensorsDict(file_path)
         with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
             self.key_map = json.load(f)
 
@@ -129,14 +114,16 @@ class InLoraSafetensorsDict:
     def _convert_lora_to_weight(self, lora_key):
         up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].float()
         down_weight = self.safetensors_dict[f"{lora_key}.lora_down.weight"].float()
-        multiplier = self.safetensors_dict[f"{lora_key}.alpha"].float()
+        alpha = self.safetensors_dict[f"{lora_key}.alpha"].float()
+        dim = down_weight.size()[0]
+        scale = alpha / dim
 
         if len(down_weight.size()) == 2:  # linear
-            return (up_weight @ down_weight) * multiplier
+            return (up_weight @ down_weight) * scale
         elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
-            return (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3) * multiplier
+            return (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3) * scale
         else:  # conv2d 3x3
-            return torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3) * multiplier
+            return torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3) * scale
 
 
 class OutSafetensorsDict:
@@ -196,3 +183,17 @@ class OutSafetensorsDict:
         if overhead < 0:
             raise ValueError("safetensors header does not fit into memory")
         self.file.write(b' ' * overhead)
+
+
+DTYPE_MAPPING = {
+    'F16': torch.float16,
+    'F32': torch.float32,
+    'F64': torch.float64,
+    'I8': torch.int8,
+    'I16': torch.int16,
+    'I32': torch.int32,
+    'I64': torch.int64,
+}
+
+
+DTYPE_REVERSE_MAPPING = {v: k for k, v in DTYPE_MAPPING.items()}

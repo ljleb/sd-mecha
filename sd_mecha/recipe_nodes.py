@@ -1,9 +1,10 @@
 import abc
 import pathlib
+import safetensors
 import torch
 from typing import Optional, List, Mapping
 from sd_mecha.extensions import MergeSpace
-from sd_mecha.streaming import InSafetensorsDict, InLoraSafetensorsDict
+from sd_mecha.streaming import InModelSafetensorsDict, InLoraSafetensorsDict
 from sd_mecha.extensions import MergeMethod
 from sd_mecha.weight import get_weight, validate_model_parameter
 
@@ -30,21 +31,19 @@ class RecipeNode(abc.ABC):
 class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
-        state_dict: str | pathlib.Path | InSafetensorsDict,
-        device: Optional[str] = None,
+        state_dict: str | pathlib.Path | InModelSafetensorsDict,
     ):
         self.__state_dict = state_dict
-        self.__device = device
 
     def visit(self, key: str, scheduler) -> torch.Tensor:
-        self.__state_dict = scheduler.load_model(self.__state_dict, self.__device)
+        self.__state_dict = scheduler.load_model(self.__state_dict)
         return self.__state_dict[key]
 
     def depth(self) -> int:
         return 1
 
     def get_input_dicts(self, scheduler) -> List[Mapping[str, torch.Tensor]]:
-        self.__state_dict = scheduler.load_model(self.__state_dict, self.__device)
+        self.__state_dict = scheduler.load_model(self.__state_dict)
         return [self.__state_dict]
 
     @property
@@ -56,20 +55,18 @@ class LoraRecipeNode(RecipeNode):
     def __init__(
         self,
         state_dict: str | pathlib.Path | InLoraSafetensorsDict,
-        device: Optional[str] = None,
     ):
         self.__state_dict = state_dict
-        self.__device = device
 
     def visit(self, key: str, scheduler) -> torch.Tensor:
-        self.__state_dict = scheduler.load_lora(self.__state_dict, self.__device)
+        self.__state_dict = scheduler.load_lora(self.__state_dict)
         return self.__state_dict[key]
 
     def depth(self) -> int:
         return 1
 
     def get_input_dicts(self, scheduler) -> List[Mapping[str, torch.Tensor]]:
-        self.__state_dict = scheduler.load_lora(self.__state_dict, self.__device)
+        self.__state_dict = scheduler.load_lora(self.__state_dict)
         return [self.__state_dict]
 
     @property
