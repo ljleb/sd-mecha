@@ -2,15 +2,15 @@ import sd_mecha
 sd_mecha.set_log_level()
 
 
-text_encoder_recipe = sd_mecha.weighted_sum(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-)
-
-unet_recipe = sd_mecha.add_perpendicular(
+text_encoder_recipe = sd_mecha.add_perpendicular(
     "ghostmix_v20Bakedvae",
     "dreamshaper_332BakedVaeClipFix",
     "pure/v1-5-pruned"
+)
+
+unet_recipe = sd_mecha.weighted_sum(
+    "ghostmix_v20Bakedvae",
+    "dreamshaper_332BakedVaeClipFix",
 )
 
 recipe = sd_mecha.weighted_sum(

@@ -81,11 +81,13 @@ def get_weight(parameter: ModelParameter, key: str) -> float:
     if isinstance(parameter, float):
         return parameter
     elif isinstance(parameter, dict):
+        weights = []
         for key_identifier, weight in parameter.items():
             partial_key = SD15_HYPER_PARAMETERS[key_identifier]
             if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
-                return weight
-
+                weights.append(weight)
+        if weights:
+            return sum(weights) / len(weights)
     return 0.0
 
 

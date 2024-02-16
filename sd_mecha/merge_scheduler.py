@@ -46,7 +46,7 @@ class MergeScheduler:
 
         return merge_method(
             inputs,
-            get_hyper_parameters(key, merge_method, alpha, beta),
+            get_hyper_parameters(merge_method, alpha, beta),
             device if device is not None else self.__default_device,
             dtype if dtype is not None else self.__default_dtype,
             self.__cache[key] if self.__cache is not None else None,
@@ -84,7 +84,7 @@ class MergeScheduler:
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
             for key in arbitrary_input_dict.keys():
-                if is_passthrough_key(key, arbitrary_input_dict.header[key]["shape"]):
+                if is_passthrough_key(key, arbitrary_input_dict.header[key]):
                     futures.append(executor.submit(_forward_and_save, key))
                 elif is_merge_key(key):
                     futures.append(executor.submit(_merge_and_save, key))
@@ -97,11 +97,12 @@ class MergeScheduler:
         output.finalize()
 
 
-def is_passthrough_key(key: str, shape: list):
+def is_passthrough_key(key: str, header: dict):
+    is_metadata = key == "__metadata__"
     is_vae = key.startswith("first_stage_model.")
     is_time_embed = key.startswith("model.diffusion_model.time_embed.")
     is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
-    return is_vae or is_time_embed or is_position_ids or shape == [1000]
+    return is_metadata or is_vae or is_time_embed or is_position_ids or header["shape"] == [1000]
 
 
 def is_merge_key(key: str):
@@ -110,7 +111,7 @@ def is_merge_key(key: str):
     return is_unet or is_text_encoder
 
 
-def get_hyper_parameters(key: str, merge_method, alpha, beta) -> Dict[str, float]:
+def get_hyper_parameters(merge_method, alpha, beta) -> Dict[str, float]:
     hyper_parameters = {}
     if merge_method.requests_alpha():
         hyper_parameters["alpha"] = alpha
