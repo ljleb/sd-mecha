@@ -71,8 +71,8 @@ class MergeScheduler:
         output = OutSafetensorDict(output_path, arbitrary_input_dict.header)
         progress = tqdm(total=len(arbitrary_input_dict.keys()), desc="Merging recipe")
 
-        def _do_merge_and_save(key: str):
-            progress.set_postfix({"key": key})
+        def _merge_and_save(key: str):
+            progress.set_postfix({"key": key, "shape": arbitrary_input_dict.header[key]["shape"]})
             output[key] = recipe.visit(key, self)
             progress.update()
 
@@ -87,7 +87,7 @@ class MergeScheduler:
                 if is_passthrough_key(key, arbitrary_input_dict.header[key]["shape"]):
                     futures.append(executor.submit(_forward_and_save, key))
                 elif is_merge_key(key):
-                    futures.append(executor.submit(_do_merge_and_save, key))
+                    futures.append(executor.submit(_merge_and_save, key))
                 else:
                     progress.update()
 
@@ -99,8 +99,9 @@ class MergeScheduler:
 
 def is_passthrough_key(key: str, shape: list):
     is_vae = key.startswith("first_stage_model.")
+    is_time_embed = key.startswith("model.diffusion_model.time_embed.")
     is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
-    return is_vae or is_position_ids or shape == [1000]
+    return is_vae or is_time_embed or is_position_ids or shape == [1000]
 
 
 def is_merge_key(key: str):

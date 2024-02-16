@@ -1,4 +1,5 @@
-from typing import Dict, Tuple, Optional
+import warnings
+from typing import Dict, Optional
 import fuzzywuzzy.process
 
 
@@ -14,6 +15,7 @@ SD15_HYPER_PARAMETERS = {
             for i in range(12)
         } | {
             "mid00": "middle_block.",
+            "out": "out.",
         }).items()
     } | {
         f"class_{k}": v
@@ -53,6 +55,7 @@ SD15_HYPER_PARAMETERS = {
             for i in range(12)
         } | {
             "embed": "embeddings.",
+            "final": "final_layer_norm.",
         }).items()
     } | {
         f"class_{k}": v
@@ -71,25 +74,29 @@ SD15_HYPER_PARAMETERS = {
         }).items()
     }).items()
 }
-ComponentParameter = float | Dict[str, float]
-ModelParameter = ComponentParameter | Tuple[ComponentParameter, ComponentParameter]
+ModelParameter = float | Dict[str, float]
 
 
-def validate_model_parameter(parameter: ModelParameter, nested: bool = False) -> ModelParameter:
+def get_weight(parameter: ModelParameter, key: str) -> float:
+    if isinstance(parameter, float):
+        return parameter
+    elif isinstance(parameter, dict):
+        for key_identifier, weight in parameter.items():
+            partial_key = SD15_HYPER_PARAMETERS[key_identifier]
+            if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
+                return weight
+
+    return 0.0
+
+
+def validate_model_parameter(parameter: ModelParameter) -> ModelParameter:
     if isinstance(parameter, dict):
         for key in parameter.keys():
             if key not in SD15_HYPER_PARAMETERS:
                 suggestion = fuzzywuzzy.process.extractOne(key, SD15_HYPER_PARAMETERS)[0]
-                raise ValueError(f"Unsupported dictionary key '{key}'. Did you mean '{suggestion}'?")
-    elif isinstance(parameter, tuple):
-        if nested:
-            raise ValueError("Nested tuples are not supported for hyperparameters.")
-        if len(parameter) != 2:
-            raise ValueError("Tuples must contain exactly two elements: a text encoder hyperparameter and a UNet hyperparameter.")
-        for v in parameter:
-            validate_model_parameter(v, nested=True)
+                raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
     elif not isinstance(parameter, float):
-        raise TypeError("Hyperparameter must be a float, dictionary, or tuple.")
+        raise TypeError("Hyperparameter must be a float or a dictionary.")
     return parameter
 
 
@@ -121,6 +128,7 @@ def unet15_blocks(
     out11: Optional[float] = None,
     default: float = 0.0,
 ):
+    out = out11
     return {
         f"unet_block_{k}": v if v is not None else default
         for k, v in locals().items()
@@ -166,7 +174,6 @@ def unet15_classes(
 
 
 def txt15_blocks(
-    embed: Optional[float] = None,
     in00: Optional[float] = None,
     in01: Optional[float] = None,
     in02: Optional[float] = None,
@@ -181,6 +188,8 @@ def txt15_blocks(
     in11: Optional[float] = None,
     default: float = 0.0,
 ):
+    embed = in00
+    final = in11
     return {
         f"txt_block_{k}": v if v is not None else default
         for k, v in locals().items()

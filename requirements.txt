@@ -4,3 +4,4 @@ safetensors
 tqdm
 scipy
 fuzzywuzzy
+python-Levenshtein

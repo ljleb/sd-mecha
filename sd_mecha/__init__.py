@@ -5,7 +5,7 @@ from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha import recipe_nodes, merge_methods, extensions, streaming
 from sd_mecha.extensions import MergeSpace
-from sd_mecha.weight import ModelParameter
+from sd_mecha.weight import ModelParameter, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 
 
 RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorDict

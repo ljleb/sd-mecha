@@ -6,6 +6,7 @@ from typing import Optional, List
 from sd_mecha.extensions import MergeSpace
 from sd_mecha.streaming import InSafetensorDict
 from sd_mecha.extensions import MergeMethod
+from sd_mecha.weight import get_weight, validate_model_parameter
 
 
 class RecipeNode(abc.ABC):
@@ -68,8 +69,8 @@ class SymbolicRecipeNode(RecipeNode):
         self.__a = a
         self.__b = b
         self.__c = c
-        self.__alpha = alpha
-        self.__beta = beta
+        self.__alpha = validate_model_parameter(alpha) if alpha is not None else None
+        self.__beta = validate_model_parameter(beta) if beta is not None else None
         self.__device = device
         self.__dtype = dtype
         self.__merge_space = self.__merge_method.get_return_merge_space(
@@ -83,7 +84,8 @@ class SymbolicRecipeNode(RecipeNode):
             key,
             self.__merge_method,
             self._models_dict(*visit_deeper_first([self.__a, self.__b, self.__c], key, scheduler)),
-            self.__alpha, self.__beta,
+            get_weight(self.__alpha, key) if self.__alpha is not None else None,
+            get_weight(self.__beta, key) if self.__beta is not None else None,
             self.__device, self.__dtype,
         )
 
