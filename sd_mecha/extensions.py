@@ -1,7 +1,14 @@
-import enum
 import inspect
+import pathlib
+import textwrap
+
 import torch
+from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, SymbolicRecipeNode
+from sd_mecha.weight import ModelParameter
 from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args
+
+RecipeNodeOrModel = RecipeNode | str | pathlib.Path
+
 
 T = TypeVar("T")
 
@@ -11,18 +18,27 @@ class LiftFlag(Generic[T]):
         raise TypeError
 
 
-class MergeSpace(enum.Flag):
-    MODEL = enum.auto()
-    DELTA = enum.auto()
-
-
 class MergeMethod:
     def __init__(self, f: Callable):
         self.__f = f
         self.__name = f.__name__
+        self.__validate_f()
+
+    def __validate_f(self):
+        spec = inspect.getfullargspec(self.__f)
+        positional_extra = set(spec.args) - {"a", "b", "c"}
+        if positional_extra:
+            raise TypeError(f"Unsupported positional parameters: {positional_extra}")
+
+        kwonlyargs_extra = set(spec.kwonlyargs) - {"alpha", "beta", "cache"}
+        if kwonlyargs_extra:
+            raise TypeError(f"Unsupported keyword only parameters: {kwonlyargs_extra}")
+
+        if spec.varkw is None:
+            raise TypeError(f"**kwargs must be specified")
 
     def __call__(self, inputs, hyper_parameters, device, dtype, cache):
-        kwargs = self._get_kwargs(inputs, hyper_parameters, device, dtype, cache)
+        kwargs = self.__get_kwargs(inputs, hyper_parameters, device, dtype, cache)
 
         # pix2pix and inpainting models
         # todo: verify whether we want to slice, merge and then concat this key instead of ignore it
@@ -34,7 +50,7 @@ class MergeMethod:
 
         return self.__f(**kwargs)
 
-    def _get_kwargs(
+    def __get_kwargs(
         self,
         inputs: Dict[str, torch.Tensor],
         hyper_parameters: Dict[str, float],
@@ -75,7 +91,7 @@ class MergeMethod:
 
             annotation = type_hints.get(param)
             if annotation:
-                merge_space_param, key = self._extract_liftflag(annotation, param)
+                merge_space_param, key = self.__extract_lift_flag(annotation, param)
 
                 if key in resolved_input_spaces:
                     # occurrence of already seen type var
@@ -86,13 +102,13 @@ class MergeMethod:
                 else:
                     raise TypeError(f"parameter '{param}' expects {merge_space_param} but got {merge_space_arg}")
 
-        merge_space_param, key = self._extract_liftflag(type_hints.get("return"), None)
+        merge_space_param, key = self.__extract_lift_flag(type_hints.get("return"), None)
         if key in resolved_input_spaces:
             return resolved_input_spaces[key]
         else:
             return merge_space_param
 
-    def _extract_liftflag(self, annotation, param) -> Tuple[MergeSpace, object]:
+    def __extract_lift_flag(self, annotation, param) -> Tuple[MergeSpace, object]:
         if get_origin(annotation) is Union:
             for arg in get_args(annotation):
                 if get_origin(arg) is LiftFlag:
@@ -101,44 +117,73 @@ class MergeMethod:
                     return get_args(arg.__bound__)[0], arg
 
     def requests_alpha(self):
-        return "alpha" in inspect.getfullargspec(self.__f)[0]
+        return "alpha" in inspect.getfullargspec(self.__f)[4]
 
     def requests_beta(self):
-        return "beta" in inspect.getfullargspec(self.__f)[0]
+        return "beta" in inspect.getfullargspec(self.__f)[4]
 
     def requests_model_c(self):
         return "c" in inspect.getfullargspec(self.__f)[0]
 
     def requests_cache(self):
-        return "cache" in inspect.getfullargspec(self.__f)[0]
+        return "cache" in inspect.getfullargspec(self.__f)[4]
 
 
-class MergeMethodRepository:
-    def __init__(self):
-        self.__methods = {}
-
-    def register(
-        self,
-        f: Optional[Callable] = None, *,
-        name: Optional[str] = None,
-    ) -> Callable:
-        if f is None:
-            return lambda f: self.__register_impl(f, name=name)
-        return self.__register_impl(f, name=name)
-
-    def __register_impl(
-        self,
-        f: Callable, *,
-        name: Optional[str],
-    ):
-        if name is None:
-            name = f.__name__
-
-        self.__methods[name] = MergeMethod(f)
-        return f
-
-    def get(self, name: str) -> Tuple[MergeMethod, MergeSpace]:
-        return self.__methods[name]
+def convert_to_recipe(
+    f: Optional[Callable] = None,
+):
+    if f is None:
+        return lambda f: __convert_to_recipe_impl(f)
+    return __convert_to_recipe_impl(f)
 
 
-merge_methods = MergeMethodRepository()
+def __convert_to_recipe_impl(
+    f: Callable,
+):
+    merge_method = MergeMethod(f)
+
+    c_param = f"c: {SymbolicRecipeNode.__name__}, " if merge_method.requests_model_c() else ""
+    alpha_param = f"alpha: {ModelParameter.__name__} = 0.0, " if merge_method.requests_alpha() else ""
+    beta_param = f"beta: {ModelParameter.__name__} = 0.0, " if merge_method.requests_beta() else ""
+    cache_param = "cache: Optional[Dict[str, torch.Tensor]] = None, " if merge_method.requests_cache() else ""
+
+    c_arg = f"c={path_to_node.__name__}(c)," if merge_method.requests_model_c() else ""
+    alpha_arg = f"alpha=alpha," if merge_method.requests_alpha() else ""
+    beta_arg = f"beta=beta," if merge_method.requests_beta() else ""
+    cache_arg = f"cache=cache," if merge_method.requests_cache() else ""
+
+    fn_locals = {}
+    fn_globals = globals() | {
+        "merge_method": merge_method,
+        "dtype": torch.dtype,
+    }
+    exec(textwrap.dedent(f"""
+        def {f.__name__}(
+            a: {SymbolicRecipeNode.__name__}, b: {SymbolicRecipeNode.__name__}, {c_param}*,
+            {alpha_param}
+            {beta_param}
+            {cache_param}
+            device: {Optional.__name__}[{str.__name__}] = None,
+            dtype: {Optional.__name__}[{torch.dtype.__name__}] = None,
+        ):
+            return {SymbolicRecipeNode.__name__}(
+                merge_method=merge_method,
+                a={path_to_node.__name__}(a),
+                b={path_to_node.__name__}(b),
+                {c_arg}
+                {alpha_arg}
+                {beta_arg}
+                {cache_arg}
+                device=device,
+                dtype=dtype,
+            )
+    """), fn_globals, fn_locals)
+    res = fn_locals[f.__name__]
+    res.__wrapped__ = f
+    return res
+
+
+def path_to_node(a: RecipeNodeOrModel) -> RecipeNode:
+    if isinstance(a, (str, pathlib.Path)):
+        return ModelRecipeNode(a)
+    return a

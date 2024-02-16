@@ -3,12 +3,9 @@ import pathlib
 import torch
 from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
-from sd_mecha import recipe_nodes, merge_methods, extensions, streaming
-from sd_mecha.extensions import MergeSpace
+from sd_mecha import recipe_nodes, merge_methods, streaming
+from sd_mecha.extensions import RecipeNodeOrModel, path_to_node
 from sd_mecha.weight import ModelParameter, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
-
-
-RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path
 
 
 def merge_and_save(
@@ -20,23 +17,8 @@ def merge_and_save(
     scheduler.merge_and_save(merge_tree, output_path=output_path)
 
 
-def weighted_sum(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
-    alpha: ModelParameter = 0.5,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
-) -> recipe_nodes.RecipeNode:
-    a = to_node(a)
-    b = to_node(b)
-
-    return recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("weighted_sum"),
-        a=a,
-        b=b,
-        alpha=alpha,
-        device=device,
-        dtype=dtype,
-    )
+weighted_sum = merge_methods.weighted_sum
+slerp = merge_methods.slerp
 
 
 def add_difference(
@@ -46,20 +28,19 @@ def add_difference(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = to_node(a)
-    b = to_node(b)
+    a = extensions.path_to_node(a)
+    b = extensions.path_to_node(b)
     original_b = b
 
     if c is not None:
-        c = to_node(c)
+        c = extensions.path_to_node(c)
         b = subtract(
             b, c,
             device=device,
             dtype=dtype,
         )
 
-    res = recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("add_difference"),
+    res = merge_methods.add_difference(
         a=a,
         b=b,
         alpha=alpha,
@@ -86,23 +67,53 @@ def add_difference(
     return res
 
 
-def subtract(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
+subtract = merge_methods.subtract
+perpendicular_component = merge_methods.perpendicular_component
+
+
+def add_perpendicular(
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
+    alpha: ModelParameter = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b)
+    a = path_to_node(a)
+    b = path_to_node(b)
+    c = path_to_node(c)
 
-    return recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("subtract"),
-        a=a,
-        b=b,
+    a_diff = subtract(
+        a, c,
         device=device,
         dtype=dtype,
     )
+    b_diff = subtract(
+        b, c,
+        device=device,
+        dtype=dtype,
+    )
+
+    perp_diff = merge_methods.perpendicular_component(
+        a=a_diff,
+        b=b_diff,
+        device=device,
+        dtype=dtype,
+    )
+
+    return merge_methods.add_difference(
+        a=a,
+        b=perp_diff,
+        alpha=alpha,
+        device=device,
+        dtype=dtype,
+    )
+
+
+multiply_difference = merge_methods.multiply_difference
+copy_difference = train_difference = merge_methods.copy_difference
+similarity_add_difference = merge_methods.similarity_add_difference
+normalized_similarity_sum = cosine_add_a = merge_methods.normalized_similarity_sum
+similarity_sum = cosine_add_b = merge_methods.similarity_sum
+ties_add_difference = merge_methods.ties_add_difference
 
 
 def tensor_sum(
@@ -113,29 +124,24 @@ def tensor_sum(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b)
+    a = path_to_node(a)
+    b = path_to_node(b)
+
     if c is not None:
-        if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.ModelRecipeNode(c)
+        c = path_to_node(c)
 
         a = subtract(
             a, c,
             device=device,
             dtype=dtype,
         )
-
         b = subtract(
             b, c,
             device=device,
             dtype=dtype,
         )
 
-    method_name = "top_k_tensor_sum" if top_k else "tensor_sum"
-    res = recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get(method_name),
+    res = getattr(merge_methods, "top_k_tensor_sum" if top_k else "tensor_sum")(
         a=a,
         b=b,
         alpha=width,
@@ -145,102 +151,7 @@ def tensor_sum(
     )
 
     if c is not None:
-        res = recipe_nodes.SymbolicRecipeNode(
-            merge_method=extensions.merge_methods.get("add_difference"),
-            a=c,
-            b=res,
-            alpha=width,
-            beta=offset,
-            device=device,
-            dtype=dtype,
-        )
-
-    return res
-
-
-def add_perpendicular(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
-    alpha: ModelParameter = 1.0,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
-) -> recipe_nodes.RecipeNode:
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b)
-    if not isinstance(c, recipe_nodes.RecipeNode):
-        c = recipe_nodes.ModelRecipeNode(c)
-
-    a_diff = subtract(
-        a, c,
-        device=device,
-        dtype=dtype,
-    )
-
-    b_diff = subtract(
-        b, c,
-        device=device,
-        dtype=dtype,
-    )
-
-    perp_diff = recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("perpendicular_component"),
-        a=a_diff,
-        b=b_diff,
-        device=device,
-        dtype=dtype,
-    )
-
-    return recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("add_difference"),
-        a=a,
-        b=perp_diff,
-        alpha=alpha,
-        device=device,
-        dtype=dtype,
-    )
-
-
-def rotate(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
-    alpha: ModelParameter = 1.0,
-    beta: ModelParameter = 0.0,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = torch.float64,
-) -> recipe_nodes.RecipeNode:
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b)
-    if c is not None:
-        if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.ModelRecipeNode(c)
-
-        a = subtract(
-            a, c,
-            device=device,
-            dtype=dtype,
-        )
-
-        b = subtract(
-            b, c,
-            device=device,
-            dtype=dtype,
-        )
-
-    res = recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("rotate"),
-        a=a,
-        b=b,
-        alpha=alpha,
-        beta=beta,
-        device=device,
-        dtype=dtype,
-    )
-
-    if c is not None:
-        res = recipe_nodes.SymbolicRecipeNode(
-            merge_method=extensions.merge_methods.get("add_difference"),
+        res = merge_methods.add_difference(
             a=c,
             b=res,
             alpha=1.0,
@@ -251,26 +162,56 @@ def rotate(
     return res
 
 
-def clip(
-    model: RecipeNodeOrModel, a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
-    device: Optional[str] = None,
-    dtype: Optional[str] = None,
-) -> recipe_nodes.RecipeNode:
-    if not isinstance(model, recipe_nodes.RecipeNode):
-        model = recipe_nodes.ModelRecipeNode(a)
-    if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.ModelRecipeNode(a)
-    if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.ModelRecipeNode(b)
+distribution_crossover = merge_methods.distribution_crossover
+crossover = merge_methods.crossover
 
-    return recipe_nodes.SymbolicRecipeNode(
-        merge_method=extensions.merge_methods.get("clip"),
-        a=model,
-        b=a,
-        c=b,
+
+def rotate(
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
+    alpha: ModelParameter = 1.0,
+    beta: ModelParameter = 0.0,
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = torch.float64,
+) -> recipe_nodes.RecipeNode:
+    a = path_to_node(a)
+    b = path_to_node(b)
+
+    if c is not None:
+        c = path_to_node(c)
+
+        a = subtract(
+            a, c,
+            device=device,
+            dtype=dtype,
+        )
+        b = subtract(
+            b, c,
+            device=device,
+            dtype=dtype,
+        )
+
+    res = merge_methods.rotate(
+        a=a,
+        b=b,
+        alpha=alpha,
+        beta=beta,
         device=device,
         dtype=dtype,
     )
+
+    if c is not None:
+        res = merge_methods.add_difference(
+            a=c,
+            b=res,
+            alpha=1.0,
+            device=device,
+            dtype=dtype,
+        )
+
+    return res
+
+
+clip = merge_methods.clip
 
 
 def model(
@@ -287,12 +228,6 @@ def lora(
     return recipe_nodes.LoraRecipeNode(
         state_dict=state_dict,
     )
-
-
-def to_node(a: RecipeNodeOrModel) -> recipe_nodes.RecipeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        return recipe_nodes.ModelRecipeNode(a)
-    return a
 
 
 def set_log_level(level: str = "INFO"):

@@ -1,12 +1,15 @@
 import abc
+import enum
 import pathlib
-import safetensors
 import torch
 from typing import Optional, List, Mapping
-from sd_mecha.extensions import MergeSpace
 from sd_mecha.streaming import InModelSafetensorsDict, InLoraSafetensorsDict
-from sd_mecha.extensions import MergeMethod
 from sd_mecha.weight import get_weight, validate_model_parameter
+
+
+class MergeSpace(enum.Flag):
+    MODEL = enum.auto()
+    DELTA = enum.auto()
 
 
 class RecipeNode(abc.ABC):
@@ -77,7 +80,7 @@ class LoraRecipeNode(RecipeNode):
 class SymbolicRecipeNode(RecipeNode):
     def __init__(
         self,
-        merge_method: MergeMethod,
+        merge_method,
         a: RecipeNode,
         b: RecipeNode,
         c: RecipeNode = None,
