@@ -102,28 +102,40 @@ def validate_model_parameter(parameter: ModelParameter) -> ModelParameter:
     return parameter
 
 
-def unet15_blocks(*args, default: float = 0.0, **kwargs):
-    key_identifiers = [
-        k
-        for k in SD15_HYPER_PARAMETERS.keys()
-        if k.startswith("unet_block_")
-    ]
-    max_positional_args = len(key_identifiers) - 1
-    res = {}
-    if len(args) == 1:
-        if kwargs:
-            raise TypeError(f"{unet15_blocks.__name__}() takes 0 keyword arguments with 1 positional argument but {len(kwargs)} were given")
-        res.update({
-            k: args[0]
-            for k in key_identifiers
-        })
-    elif args and len(args) != max_positional_args:
-        raise TypeError(f"{unet15_blocks.__name__}() either takes 0, 1 or {max_positional_args} positional arguments but {len(args)} were given")
-    else:
-        res.update(dict(zip(key_identifiers, args + (default,) * (len(key_identifiers) - len(args)))))
-        res.update(kwargs)
-        res["unet_block_out"] = res["unet_block_out11"]
-    return res
+def unet15_blocks(
+    in00: Optional[float] = None,
+    in01: Optional[float] = None,
+    in02: Optional[float] = None,
+    in03: Optional[float] = None,
+    in04: Optional[float] = None,
+    in05: Optional[float] = None,
+    in06: Optional[float] = None,
+    in07: Optional[float] = None,
+    in08: Optional[float] = None,
+    in09: Optional[float] = None,
+    in10: Optional[float] = None,
+    in11: Optional[float] = None,
+    mid00: Optional[float] = None,
+    out00: Optional[float] = None,
+    out01: Optional[float] = None,
+    out02: Optional[float] = None,
+    out03: Optional[float] = None,
+    out04: Optional[float] = None,
+    out05: Optional[float] = None,
+    out06: Optional[float] = None,
+    out07: Optional[float] = None,
+    out08: Optional[float] = None,
+    out09: Optional[float] = None,
+    out10: Optional[float] = None,
+    out11: Optional[float] = None,
+    default: float = 0.0,
+) -> dict:
+    out = out11
+    return {
+        f"txt_block_{k}": v if v is not None else default
+        for k, v in locals().items()
+        if k != "default"
+    }
 
 
 def unet15_classes(
