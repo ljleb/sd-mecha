@@ -1,10 +1,9 @@
 import abc
 import pathlib
 import torch
-from tensordict import TensorDict
-from typing import Optional, List
+from typing import Optional, List, Mapping
 from sd_mecha.extensions import MergeSpace
-from sd_mecha.streaming import InSafetensorDict
+from sd_mecha.streaming import InSafetensorsDict, InLoraSafetensorsDict
 from sd_mecha.extensions import MergeMethod
 from sd_mecha.weight import get_weight, validate_model_parameter
 
@@ -19,7 +18,7 @@ class RecipeNode(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
+    def get_input_dicts(self, scheduler) -> List[Mapping[str, torch.Tensor]]:
         pass
 
     @property
@@ -28,29 +27,54 @@ class RecipeNode(abc.ABC):
         pass
 
 
-class LeafRecipeNode(RecipeNode):
+class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
-        state_dict: str | pathlib.Path | TensorDict,
+        state_dict: str | pathlib.Path | InSafetensorsDict,
         device: Optional[str] = None,
     ):
         self.__state_dict = state_dict
         self.__device = device
 
     def visit(self, key: str, scheduler) -> torch.Tensor:
-        self.__state_dict = scheduler.load_state_dict(self.__state_dict, self.__device)
+        self.__state_dict = scheduler.load_model(self.__state_dict, self.__device)
         return self.__state_dict[key]
 
     def depth(self) -> int:
         return 1
 
-    def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
-        self.__state_dict = scheduler.load_state_dict(self.__state_dict, self.__device)
+    def get_input_dicts(self, scheduler) -> List[Mapping[str, torch.Tensor]]:
+        self.__state_dict = scheduler.load_model(self.__state_dict, self.__device)
         return [self.__state_dict]
 
     @property
     def merge_space(self) -> MergeSpace:
         return MergeSpace.MODEL
+
+
+class LoraRecipeNode(RecipeNode):
+    def __init__(
+        self,
+        state_dict: str | pathlib.Path | InLoraSafetensorsDict,
+        device: Optional[str] = None,
+    ):
+        self.__state_dict = state_dict
+        self.__device = device
+
+    def visit(self, key: str, scheduler) -> torch.Tensor:
+        self.__state_dict = scheduler.load_lora(self.__state_dict, self.__device)
+        return self.__state_dict[key]
+
+    def depth(self) -> int:
+        return 1
+
+    def get_input_dicts(self, scheduler) -> List[Mapping[str, torch.Tensor]]:
+        self.__state_dict = scheduler.load_lora(self.__state_dict, self.__device)
+        return [self.__state_dict]
+
+    @property
+    def merge_space(self) -> MergeSpace:
+        return MergeSpace.DELTA
 
 
 class SymbolicRecipeNode(RecipeNode):
@@ -106,7 +130,7 @@ class SymbolicRecipeNode(RecipeNode):
             if model is not None
         ) + 1
 
-    def get_input_dicts(self, scheduler) -> List[InSafetensorDict]:
+    def get_input_dicts(self, scheduler) -> List[Mapping[str, torch.Tensor]]:
         return [
             input_dict
             for node in (self.__a, self.__b, self.__c)

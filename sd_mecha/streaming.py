@@ -21,7 +21,7 @@ DTYPE_MAPPING = {
 DTYPE_REVERSE_MAPPING = {v: k for k, v in DTYPE_MAPPING.items()}
 
 
-class InSafetensorDict:
+class InSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, device: str):
         assert file_path.suffix == ".safetensors"
         self.device = device
@@ -37,7 +37,7 @@ class InSafetensorDict:
         return self._load_tensor(key)
 
     def __iter__(self):
-        return iter(self.header.keys())
+        return iter(self.keys())
 
     def __len__(self):
         return len(self.header)
@@ -79,7 +79,67 @@ class InSafetensorDict:
             return torch.frombuffer(data, dtype=dtype).reshape(shape).to(self.device)
 
 
-class OutSafetensorDict:
+class InLoraSafetensorsDict:
+    def __init__(self, file_path: pathlib.Path, device: str):
+        self.safetensors_dict = InSafetensorsDict(file_path, device)
+        with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
+            self.key_map = json.load(f)
+
+    def __del__(self):
+        self.close()
+
+    def __getitem__(self, key):
+        if key.startswith("lora_"):
+            raise KeyError("Direct access to 'lora_' keys is not allowed. Use target keys instead.")
+
+        lora_key = self.key_map.get(key)
+        if lora_key is None:
+            raise KeyError(f"No lora key mapping found for target key: {key}")
+
+        return self._convert_lora_to_weight(lora_key)
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def __len__(self):
+        return len(set(self.key_map.keys()))
+
+    def close(self):
+        self.safetensors_dict.close()
+
+    def keys(self):
+        return (
+            self.key_map[key[:-len(".lora_up.weight")]]
+            for key in self.safetensors_dict.keys()
+            if ".lora_up.weight" in key
+        )
+
+    def values(self):
+        for key in self.keys():
+            yield self[key]
+
+    def items(self):
+        for key in self.keys():
+            yield key, self[key]
+
+    @property
+    def header(self):
+        return self.safetensors_dict.header
+
+    def _convert_lora_to_weight(self, lora_key):
+        up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].float()
+        down_weight = self.safetensors_dict[f"{lora_key}.lora_down.weight"].float()
+        multiplier = self.safetensors_dict[f"{lora_key}.alpha"].float()
+
+        if len(down_weight.size()) == 2:  # linear
+            return (up_weight @ down_weight) * multiplier
+        elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
+            return (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3) * multiplier
+        else:  # conv2d 3x3
+            return torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3) * multiplier
+
+
+class OutSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, template_header: dict):
         self.file = file_path.open('wb+')
         self.lock = multiprocessing.Lock()

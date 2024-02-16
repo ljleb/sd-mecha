@@ -8,7 +8,7 @@ from sd_mecha.extensions import MergeSpace
 from sd_mecha.weight import ModelParameter, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 
 
-RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorDict
+RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorsDict
 
 
 def merge_and_save(
@@ -27,9 +27,9 @@ def weighted_sum(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("weighted_sum"),
@@ -42,35 +42,36 @@ def weighted_sum(
 
 
 def add_difference(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
+    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
     alpha: ModelParameter = 0.5,
     clip_to_ab: bool = True,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
-    if not isinstance(c, recipe_nodes.RecipeNode):
-        c = recipe_nodes.LeafRecipeNode(c, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
+    if c is not None:
+        if not isinstance(c, recipe_nodes.RecipeNode):
+            c = recipe_nodes.ModelRecipeNode(c, device)
 
-    b_diff = subtract(
-        b, c,
-        device=device,
-        dtype=dtype,
-    )
+        b = subtract(
+            b, c,
+            device=device,
+            dtype=dtype,
+        )
 
     res = recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("add_difference"),
         a=a,
-        b=b_diff,
+        b=b,
         alpha=alpha,
         device=device,
         dtype=dtype,
     )
 
-    if clip_to_ab:
+    if clip_to_ab and a.merge_space == b.merge_space:
         res = clip(
             res, a, b,
             device=device,
@@ -86,9 +87,9 @@ def subtract(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("subtract"),
@@ -108,12 +109,12 @@ def tensor_sum(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
     if c is not None:
         if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.LeafRecipeNode(c, device)
+            c = recipe_nodes.ModelRecipeNode(c, device)
 
         a = subtract(
             a, c,
@@ -159,11 +160,11 @@ def add_perpendicular(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
     if not isinstance(c, recipe_nodes.RecipeNode):
-        c = recipe_nodes.LeafRecipeNode(c, device)
+        c = recipe_nodes.ModelRecipeNode(c, device)
 
     a_diff = subtract(
         a, c,
@@ -203,12 +204,12 @@ def rotate(
     dtype: Optional[torch.dtype] = torch.float64,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
     if c is not None:
         if not isinstance(c, recipe_nodes.RecipeNode):
-            c = recipe_nodes.LeafRecipeNode(c, device)
+            c = recipe_nodes.ModelRecipeNode(c, device)
 
         a = subtract(
             a, c,
@@ -251,11 +252,11 @@ def clip(
     dtype: Optional[str] = None,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(model, recipe_nodes.RecipeNode):
-        model = recipe_nodes.LeafRecipeNode(a, device)
+        model = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(a, recipe_nodes.RecipeNode):
-        a = recipe_nodes.LeafRecipeNode(a, device)
+        a = recipe_nodes.ModelRecipeNode(a, device)
     if not isinstance(b, recipe_nodes.RecipeNode):
-        b = recipe_nodes.LeafRecipeNode(b, device)
+        b = recipe_nodes.ModelRecipeNode(b, device)
 
     return recipe_nodes.SymbolicRecipeNode(
         merge_method=extensions.merge_methods.get("clip"),
@@ -268,9 +269,17 @@ def clip(
 
 
 def model(
-    state_dict: str | pathlib.Path | streaming.InSafetensorDict,
+    state_dict: str | pathlib.Path | streaming.InSafetensorsDict,
 ):
-    return recipe_nodes.LeafRecipeNode(
+    return recipe_nodes.ModelRecipeNode(
+        state_dict=state_dict,
+    )
+
+
+def lora(
+    state_dict: str | pathlib.Path | streaming.InLoraSafetensorsDict,
+):
+    return recipe_nodes.LoraRecipeNode(
         state_dict=state_dict,
     )
 

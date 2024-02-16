@@ -1,11 +1,13 @@
 import logging
 import pathlib
+import traceback
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 import torch
 from tqdm import tqdm
 
-from sd_mecha.streaming import OutSafetensorDict, InSafetensorDict
+from sd_mecha.streaming import OutSafetensorsDict, InSafetensorsDict, InLoraSafetensorsDict
 from typing import Optional, Dict
 
 
@@ -28,8 +30,8 @@ class MergeScheduler:
         self.__default_dtype = default_dtype
         self.__cache = cache
 
-    def load_state_dict(self, state_dict: str | pathlib.Path | InSafetensorDict, device: Optional[str]) -> InSafetensorDict:
-        if isinstance(state_dict, InSafetensorDict):
+    def load_model(self, state_dict: str | pathlib.Path | InSafetensorsDict, device: Optional[str]) -> InSafetensorsDict:
+        if isinstance(state_dict, InSafetensorsDict):
             return state_dict
         if not isinstance(state_dict, pathlib.Path):
             state_dict = pathlib.Path(state_dict)
@@ -38,7 +40,19 @@ class MergeScheduler:
         if not state_dict.suffix:
             state_dict = state_dict.with_suffix(".safetensors")
 
-        return InSafetensorDict(state_dict, device if device is not None else self.__default_device)
+        return InSafetensorsDict(state_dict, device if device is not None else self.__default_device)
+
+    def load_lora(self, state_dict: str | pathlib.Path | InLoraSafetensorsDict, device: Optional[str]) -> InLoraSafetensorsDict:
+        if isinstance(state_dict, InLoraSafetensorsDict):
+            return state_dict
+        if not isinstance(state_dict, pathlib.Path):
+            state_dict = pathlib.Path(state_dict)
+        if not state_dict.is_absolute():
+            state_dict = self.__base_dir / state_dict
+        if not state_dict.suffix:
+            state_dict = state_dict.with_suffix(".safetensors")
+
+        return InLoraSafetensorsDict(state_dict, device if device is not None else self.__default_device)
 
     def symbolic_merge(self, key, merge_method, inputs, alpha, beta, device, dtype):
         if self.__cache is not None and key not in self.__cache:
@@ -66,25 +80,39 @@ class MergeScheduler:
         logging.info(f"Saving to {output_path}")
 
         input_dicts = recipe.get_input_dicts(self)
-        arbitrary_input_dict = input_dicts[0]
+        merged_header = {
+            k: {k: v for k, v in h.items() if k != "data_offsets"}
+            for input_dict in input_dicts
+            for k, h in input_dict.header.items()
+        }
 
-        output = OutSafetensorDict(output_path, arbitrary_input_dict.header)
-        progress = tqdm(total=len(arbitrary_input_dict.keys()), desc="Merging recipe")
+        def _get_any_tensor(key: str):
+            for input_dict in input_dicts:
+                try:
+                    return input_dict[key]
+                except KeyError:
+                    continue
+
+        output = OutSafetensorsDict(output_path, merged_header)
+        progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
-            progress.set_postfix({"key": key, "shape": arbitrary_input_dict.header[key]["shape"]})
-            output[key] = recipe.visit(key, self)
+            progress.set_postfix({"key": key, "shape": merged_header[key]["shape"]})
+            try:
+                merged = recipe.visit(key, self)
+            except KeyError:
+                merged = _get_any_tensor(key)
+            output[key] = merged
             progress.update()
 
         def _forward_and_save(key: str):
             progress.set_postfix({"key": key})
-            output[key] = arbitrary_input_dict[key]
             progress.update()
 
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
-            for key in arbitrary_input_dict.keys():
-                if is_passthrough_key(key, arbitrary_input_dict.header[key]):
+            for key in merged_header.keys():
+                if is_passthrough_key(key, merged_header[key]):
                     futures.append(executor.submit(_forward_and_save, key))
                 elif is_merge_key(key):
                     futures.append(executor.submit(_merge_and_save, key))

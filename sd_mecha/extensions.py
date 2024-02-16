@@ -80,7 +80,7 @@ class MergeMethod:
                 if key in resolved_input_spaces:
                     # occurrence of already seen type var
                     if merge_space_arg != resolved_input_spaces[key]:
-                        raise TypeError(f"parameter '{param}' expects {resolved_input_spaces[key]} but got {merge_space_arg}")
+                        raise TypeError(f"parameter '{param}' of method {self.__name} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
                 elif merge_space_arg & merge_space_param:
                     resolved_input_spaces[key] = merge_space_arg
                 else:
