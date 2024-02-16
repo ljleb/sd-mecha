@@ -1,14 +1,14 @@
 import logging
 import pathlib
 import torch
-from typing import Optional, Union, List, Dict
+from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha import recipe_nodes, merge_methods, extensions, streaming
 from sd_mecha.extensions import MergeSpace
+from sd_mecha.weight import ModelParameter
 
 
 RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorDict
-ModelParameter = Union[float, List[float], Dict[str, float]]
 
 
 def merge_and_save(
