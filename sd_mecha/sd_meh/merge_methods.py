@@ -84,6 +84,28 @@ def multiply_difference(
 
 
 @merge_methods.register
+def copy_difference(  # aka train_difference
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    c: Tensor | SharedMergeSpace,
+):
+    ab_diff = a - b
+    bc_dist = torch.abs(b - c)
+    ba_dist = torch.abs(b - a)
+
+    sum_distances = bc_dist + ba_dist
+    scale = torch.where(
+        sum_distances != 0,
+        ba_dist / sum_distances,
+        torch.tensor(0.0, dtype=a.dtype, device=a.device)
+    )
+    sign_scale = torch.sign(b - c)
+    scale = sign_scale * torch.abs(scale)
+    new_diff = scale * torch.abs(ab_diff)
+    return new_diff * 1.8
+
+
+@merge_methods.register
 def similarity_add_difference(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -97,6 +119,36 @@ def similarity_add_difference(
     ab_diff = add(a, b, alpha)
     ab_sum = weighted_sum(a, b, alpha / 2)
     return (1 - similarity) * ab_diff + similarity * ab_sum
+
+
+@merge_methods.register
+def similarity_sum(  # aka add_cosine_a
+    a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    b: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    alpha: float,
+) -> torch.Tensor | LiftFlag[MergeSpace.MODEL]:
+    a_norm = torch.nn.functional.normalize(a, dim=0)
+    b_norm = torch.nn.functional.normalize(b, dim=0)
+    similarity = torch.nn.functional.cosine_similarity(a_norm, b_norm, dim=0)
+    return add_cosine_generic(a, b, alpha, similarity)
+
+
+@merge_methods.register
+def unrestricted_similarity_sum(  # aka add_cosine_b
+    a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    b: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    alpha: float,
+) -> torch.Tensor | LiftFlag[MergeSpace.MODEL]:
+    similarity = torch.nn.functional.cosine_similarity(a, b, dim=0)
+    dot_product = torch.sum(a * b)
+    magnitude_similarity = dot_product / (torch.norm(a) * torch.norm(b))
+    combined_similarity = (similarity + magnitude_similarity) / 2.0
+    return add_cosine_generic(a, b, alpha, combined_similarity)
+
+
+def add_cosine_generic(a: torch.Tensor, b: torch.Tensor, alpha: float, similarity: torch.Tensor) -> torch.Tensor:
+    k = 1 - torch.clamp(similarity - alpha, 0, 1)
+    return weighted_sum(a, b, k)
 
 
 @merge_methods.register
@@ -405,25 +457,3 @@ def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tenso
     eigenvalues.pow_(power)
     result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
     return result.real.to(dtype=matrix.dtype)
-
-
-def train_difference(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
-):
-    ab_diff = a - b
-    bc_dist = torch.abs(b - c)
-    ba_dist = torch.abs(b - a)
-
-    sum_distances = bc_dist + ba_dist
-
-    scale = torch.where(
-        sum_distances != 0,
-        ba_dist / sum_distances,
-        torch.tensor(0.0, dtype=a.dtype, device=a.device)
-    )
-    sign_scale = torch.sign(b - c)
-    scale = sign_scale * torch.abs(scale)
-    new_diff = scale * torch.abs(ab_diff)
-    return new_diff * 1.8
