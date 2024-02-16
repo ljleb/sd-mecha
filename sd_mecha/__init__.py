@@ -1,20 +1,20 @@
 import logging
 import pathlib
 import torch
-from typing import Optional
+from typing import Optional, Union, List, Dict
 from sd_mecha.merge_scheduler import MergeScheduler
-from sd_mecha import recipe_nodes
-from sd_mecha.sd_meh import merge_methods, extensions, streaming
-from sd_mecha.sd_meh.extensions import MergeSpace
+from sd_mecha import recipe_nodes, merge_methods, extensions, streaming
+from sd_mecha.extensions import MergeSpace
 
 
 RecipeNodeOrModel = recipe_nodes.RecipeNode | str | pathlib.Path | streaming.InSafetensorDict
+ModelParameter = Union[float, List[float], Dict[str, float]]
 
 
 def merge_and_save(
     merge_tree: recipe_nodes.RecipeNode,
-    base_dir,
-    output_path,
+    base_dir: pathlib.Path,
+    output_path: pathlib.Path,
 ):
     scheduler = MergeScheduler(base_dir=base_dir)
     scheduler.merge_and_save(merge_tree, output_path=output_path)
@@ -22,7 +22,7 @@ def merge_and_save(
 
 def weighted_sum(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, *,
-    alpha: float = 0.5,
+    alpha: ModelParameter = 0.5,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -43,7 +43,7 @@ def weighted_sum(
 
 def add_difference(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
-    alpha: float = 0.5,
+    alpha: ModelParameter = 0.5,
     clip_to_ab: bool = True,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -101,8 +101,8 @@ def subtract(
 
 def tensor_sum(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel], *,
-    width: float = 0.5,
-    offset: float = 0.0,
+    width: ModelParameter = 0.5,
+    offset: ModelParameter = 0.0,
     top_k: bool = False,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -154,7 +154,7 @@ def tensor_sum(
 
 def add_perpendicular(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
-    alpha: float = 1.0,
+    alpha: ModelParameter = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -197,10 +197,10 @@ def add_perpendicular(
 
 def rotate(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
-    alpha: float = 1.0,
-    beta: float = 0.0,
+    alpha: ModelParameter = 1.0,
+    beta: ModelParameter = 0.0,
     device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
+    dtype: Optional[torch.dtype] = torch.float64,
 ) -> recipe_nodes.RecipeNode:
     if not isinstance(a, recipe_nodes.RecipeNode):
         a = recipe_nodes.LeafRecipeNode(a, device)

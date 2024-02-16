@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import torch
 from tqdm import tqdm
 
-from sd_mecha.sd_meh.streaming import OutSafetensorDict, InSafetensorDict
+from sd_mecha.streaming import OutSafetensorDict, InSafetensorDict
 from typing import Optional, Dict
 
 

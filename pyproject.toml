@@ -19,6 +19,7 @@ dependencies = [
     "safetensors",
     "tqdm",
     "scipy",
+    "fuzzywuzzy",
 ]
 
 [project.urls]

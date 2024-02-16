@@ -4,7 +4,7 @@ import operator
 import torch
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
-from sd_mecha.sd_meh.extensions import merge_methods, MergeSpace, LiftFlag
+from sd_mecha.extensions import merge_methods, MergeSpace, LiftFlag
 
 
 EPSILON = 1e-10

@@ -3,9 +3,9 @@ import pathlib
 import torch
 from tensordict import TensorDict
 from typing import Optional, List
-from sd_mecha.sd_meh.extensions import MergeSpace
-from sd_mecha.sd_meh.streaming import InSafetensorDict
-from sd_mecha.sd_meh.extensions import MergeMethod
+from sd_mecha.extensions import MergeSpace
+from sd_mecha.streaming import InSafetensorDict
+from sd_mecha.extensions import MergeMethod
 
 
 class RecipeNode(abc.ABC):
