@@ -34,7 +34,7 @@ def custom_sum(
 
     # to use an existing `@convert_to_recipe` merge method inside another one (i.e. this one),
     #  we use the `__wrapped__` attribute that returns the original unwrapped function
-    weighted_sum = sd_mecha.weighted_sum.__wrapped__(a, b, alpha)
+    weighted_sum = sd_mecha.weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     # in this example we add noise to the sum
     return (1 - beta) * weighted_sum + beta * torch.randn_like(weighted_sum)
