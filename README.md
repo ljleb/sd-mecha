@@ -27,6 +27,17 @@ scheduler.merge_and_save(recipe, output_path="basic_merge")
 
 See the [examples](/examples) directory for other examples.
 
+## Features
+
+- Memory efficient model merging -- merge a very large number of models at the same time
+- Mecha recipes as a storable and executable format
+- Custom merge method programming interface for experiments
+
+Coming soon:
+
+- Recipe variables for general recipe templates
+- Compose recipe templates to create mega recipes
+
 ## Install
 
 ```commandline
@@ -38,6 +49,20 @@ sd-mecha depends additionally on:
 - `torch>=2.0.1`
 
 The pypi package does not ship with `torch` so that you can install the appropriate version for your system.
+
+## Usage
+
+### Merge recipes with the CLI
+
+```shell
+pip -m sd_mecha merge <recipe.mecha> -o path/to/output.safetensors [options]
+```
+
+For more information:
+
+```shell
+pip -m sd_mecha merge --help
+```
 
 ## Motivation
 
