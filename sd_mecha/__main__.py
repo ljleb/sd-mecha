@@ -1,7 +1,5 @@
-import functools
-import inspect
-
 import click
+import functools
 import pathlib
 import torch
 import traceback
@@ -42,35 +40,6 @@ def print_exception(verbose: bool, e: Exception):
         click.echo(str(e), err=True)
 
 
-def perform_merge(
-    recipe_path: pathlib.Path,
-    base_directory: pathlib.Path,
-    output: pathlib.Path,
-    threads: int,
-    device: str,
-    dtype: str,
-    save_dtype: str
-):
-    """Core logic for merging models."""
-    if output is None:
-        output = base_directory / "merge.safetensors"
-
-    with open(recipe_path, "r") as f:
-        recipe = deserialize(f.readlines())
-
-    scheduler = MergeScheduler(
-        base_dir=base_directory,
-        default_device=device,
-        default_dtype=DTYPE_MAPPING[dtype],
-    )
-    scheduler.merge_and_save(
-        recipe,
-        output_path=output,
-        save_dtype=DTYPE_MAPPING[save_dtype],
-        threads=threads
-    )
-
-
 @click.group()
 def main():
     """Main entry point for CLI."""
@@ -87,9 +56,33 @@ def main():
 @click.option("--save-dtype", "-t", type=click.Choice(list(DTYPE_MAPPING.keys())), default="fp16", help="Save precision.")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output to show stack trace on error.")
 @except_fallback
-def merge(recipe, base_directory, output, threads, device, dtype, save_dtype, **_kwargs):
-    """CLI command for merging models."""
-    perform_merge(recipe, base_directory, output, threads, device, dtype, save_dtype)
+def merge(
+    recipe: pathlib.Path,
+    base_directory: pathlib.Path,
+    output: pathlib.Path,
+    threads: int,
+    device: str,
+    dtype: str,
+    save_dtype: str,
+    verbose: bool,
+):
+    if output is None:
+        output = base_directory / "merge.safetensors"
+
+    with open(recipe, "r") as f:
+        recipe = deserialize(f.readlines())
+
+    scheduler = MergeScheduler(
+        base_dir=base_directory,
+        default_device=device,
+        default_dtype=DTYPE_MAPPING[dtype],
+    )
+    scheduler.merge_and_save(
+        recipe,
+        output_path=output,
+        save_dtype=DTYPE_MAPPING[save_dtype],
+        threads=threads
+    )
 
 
 main.add_command(merge)
