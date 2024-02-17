@@ -64,7 +64,7 @@ For more information:
 python -m sd_mecha merge --help
 ```
 
-It is also possible to merge recipes from python code using the library. See also the [examples](/examples).
+It is also possible to merge recipes from python code using the library. See the [examples](/examples).
 
 ## Motivation
 
