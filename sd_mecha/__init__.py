@@ -192,7 +192,7 @@ def copy_region(
             dtype=dtype,
         )
 
-    copy_method = [merge_methods.copy_top_k, merge_methods.copy_region][int(top_k)]
+    copy_method = [merge_methods.copy_region, merge_methods.copy_top_k][int(top_k)]
     res = copy_method(
         a=a,
         b=b,
