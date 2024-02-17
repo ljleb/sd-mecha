@@ -27,7 +27,7 @@ SD15_HYPERS = {
         } | {
             f"trans_attn{i}_{p}": f".transformer_blocks.0.attn{i}.to_{p}."
             for i in range(1, 3)
-            for p in {"q", "k", "v", "out"}
+            for p in ("q", "k", "v", "out")
         } | {
             f"trans_norm{i}": f".transformer_blocks.0.norm{i}."
             for i in range(1, 4)
