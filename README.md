@@ -55,13 +55,13 @@ The pypi package does not ship with `torch` so that you can install the appropri
 ### Merge recipes with the CLI
 
 ```shell
-pip -m sd_mecha merge <recipe.mecha> -o path/to/output.safetensors [options]
+python -m sd_mecha merge <recipe.mecha> -o path/to/output.safetensors [options]
 ```
 
 For more information:
 
 ```shell
-pip -m sd_mecha merge --help
+python -m sd_mecha merge --help
 ```
 
 It is also possible to merge recipes from python code using the library. See also the [examples](/examples).
