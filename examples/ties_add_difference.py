@@ -2,18 +2,15 @@ import sd_mecha
 sd_mecha.set_log_level()
 
 
-models = tuple(
-    sd_mecha.path_to_node(model)
-    for model in (
-        "ghostmix_v20Bakedvae",
-        "dreamshaper_332BakedVaeClipFix",
-        "realisticVisionV20_v20",
-        "illustrationArtstyleMM_27",
-        "lyriel_v16",
-        "Midnight Maple",
-        "mixproyuki77mi_v10",
-    )
-)
+models = [
+    "ghostmix_v20Bakedvae",
+    "dreamshaper_332BakedVaeClipFix",
+    "realisticVisionV20_v20",
+    "illustrationArtstyleMM_27",
+    "lyriel_v16",
+    "Midnight Maple",
+    "mixproyuki77mi_v10",
+]
 
 
 recipe = sd_mecha.add_difference_ties("pure/v1-5-pruned", *models, alpha=0.5)
