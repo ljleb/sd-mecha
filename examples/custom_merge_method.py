@@ -56,9 +56,9 @@ recipe = custom_sum(
     dtype=torch.float64,  # same for dtype
 )
 
-scheduler = sd_mecha.RecipeMerger(
+merger = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 
 # perform the entire merge plan and save to output path
-scheduler.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output_path="basic_merge")

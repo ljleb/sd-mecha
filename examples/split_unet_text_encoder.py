@@ -22,8 +22,8 @@ recipe = sd_mecha.weighted_sum(
     ),
 )
 
-scheduler = sd_mecha.RecipeMerger(
+merger = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 
-scheduler.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output_path="basic_merge")

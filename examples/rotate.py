@@ -7,9 +7,9 @@ recipe = sd_mecha.rotate(
     "dreamshaper_332BakedVaeClipFix",
 )
 
-scheduler = sd_mecha.RecipeMerger(
+merger = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
     default_device="cuda",
 )
 
-scheduler.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output_path="basic_merge")

@@ -16,13 +16,13 @@ recipe = sd_mecha.weighted_sum(
     alpha=0.33,
 )
 
-# scheduler contains default parameters
-scheduler = sd_mecha.MergeScheduler(
+# merger contains default parameters
+merger = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 
 # perform the entire merge plan and save to output path
-scheduler.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output_path="basic_merge")
 ```
 
 See the [examples](/examples) directory for other examples.
