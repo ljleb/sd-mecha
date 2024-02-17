@@ -11,16 +11,15 @@ class MergeScheduler:
     def __init__(
         self, *,
         base_dir: Optional[pathlib.Path | str] = None,
-        threads: int = 1,
         default_device: str = "cpu",
         default_dtype: Optional[torch.dtype] = torch.float32,
     ):
         self.__base_dir = base_dir if base_dir is not None else base_dir
         if isinstance(self.__base_dir, str):
             self.__base_dir = pathlib.Path(self.__base_dir)
-        self.__base_dir = self.__base_dir.absolute()
+        if self.__base_dir is not None:
+            self.__base_dir = self.__base_dir.absolute()
 
-        self.__threads = threads
         self.__default_device = default_device
         self.__default_dtype = default_dtype
 

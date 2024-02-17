@@ -1,3 +1,4 @@
+import functools
 import inspect
 import pathlib
 import textwrap
@@ -101,6 +102,9 @@ class MergeMethod:
     def get_model_varargs_name(self) -> Optional[str]:
         return inspect.getfullargspec(self.__f).varargs
 
+    def get_name(self) -> str:
+        return self.__name
+
 
 def convert_to_recipe(
     f: Optional[Callable] = None,
@@ -162,9 +166,14 @@ def __convert_to_recipe_impl(
     """), fn_globals, fn_locals)
     res = fn_locals[f.__name__]
     res.__wrapped__ = f
+    methods_registry[f.__name__] = res
     return res
 
 
+methods_registry = {}
+
+
+@functools.lru_cache(32)
 def path_to_node(a: RecipeNodeOrModel) -> RecipeNode:
     if isinstance(a, (str, pathlib.Path)):
         return ModelRecipeNode(a)

@@ -18,6 +18,10 @@ class RecipeNode(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def serialize(self, instructions: List[str]) -> int:
+        pass
+
+    @abc.abstractmethod
     def depth(self) -> int:
         pass
 
@@ -42,6 +46,15 @@ class ModelRecipeNode(RecipeNode):
         self.__state_dict = scheduler.load_model(self.__state_dict)
         return self.__state_dict[key]
 
+    def serialize(self, instructions: List[str]) -> int:
+        line = f'model "{self.__state_dict}"'
+        try:
+            return instructions.index(line)
+        except ValueError:
+            res = len(instructions)
+            instructions.append(line)
+            return res
+
     def depth(self) -> int:
         return 1
 
@@ -64,6 +77,15 @@ class LoraRecipeNode(RecipeNode):
     def visit(self, key: str, scheduler) -> torch.Tensor:
         self.__state_dict = scheduler.load_lora(self.__state_dict)
         return self.__state_dict[key]
+
+    def serialize(self, instructions: List[str]) -> int:
+        line = f'model "{self.__state_dict}"'
+        try:
+            return instructions.index(line)
+        except ValueError:
+            res = len(instructions)
+            instructions.append(line)
+            return res
 
     def depth(self) -> int:
         return 1
@@ -103,6 +125,33 @@ class SymbolicRecipeNode(RecipeNode):
             {k: get_weight(v, key) for k, v in self.__hypers.items()},
             self.__device, self.__dtype,
         )
+
+    def serialize(self, instructions: List[str]) -> int:
+        models = []
+        for model in self.__models:
+            models.append(f"&{model.serialize(instructions)}")
+
+        hypers = []
+        for hyper_k, hyper_v in self.__hypers.items():
+            if isinstance(hyper_v, dict):
+                line = "dict " + " ".join(f"{k}={v}" for k, v in hyper_v.items())
+                try:
+                    hyper_v = instructions.index(line)
+                except ValueError:
+                    hyper_v = f"&{len(instructions)}"
+                    instructions.append(line)
+            hypers.append(f"{hyper_k}={hyper_v}")
+
+        models = " ".join(models)
+        hypers = " ".join(hypers)
+
+        line = f'call "{self.__merge_method.get_name()}" {models} {hypers}'
+        try:
+            return instructions.index(line)
+        except ValueError:
+            res = len(instructions)
+            instructions.append(line)
+            return res
 
     def depth(self) -> int:
         return max(

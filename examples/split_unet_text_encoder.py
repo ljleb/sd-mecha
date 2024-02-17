@@ -1,4 +1,5 @@
 import sd_mecha
+from sd_mecha.recipe_serializer import serialize
 sd_mecha.set_log_level()
 
 
@@ -26,4 +27,5 @@ scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 
+print(serialize(recipe))
 scheduler.merge_and_save(recipe, output_path="basic_merge")
