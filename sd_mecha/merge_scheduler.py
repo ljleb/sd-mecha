@@ -1,12 +1,10 @@
 import logging
 import pathlib
-from concurrent.futures import ThreadPoolExecutor
-
 import torch
+from concurrent.futures import ThreadPoolExecutor
+from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, OutSafetensorsDict
 from tqdm import tqdm
-
-from sd_mecha.streaming import OutSafetensorsDict, InModelSafetensorsDict, InLoraSafetensorsDict
-from typing import Optional, Dict
+from typing import Optional
 
 
 class MergeScheduler:
@@ -52,16 +50,15 @@ class MergeScheduler:
 
         return InLoraSafetensorsDict(state_dict)
 
-    def symbolic_merge(self, key, merge_method, inputs, alpha, beta, device, dtype):
+    def symbolic_merge(self, key, merge_method, models, hypers, device, dtype):
         if self.__cache is not None and key not in self.__cache:
             self.__cache[key] = {}
 
         return merge_method(
-            inputs,
-            get_hyper_parameters(merge_method, alpha, beta),
+            models,
+            hypers,
             device if device is not None else self.__default_device,
             dtype if dtype is not None else self.__default_dtype,
-            self.__cache[key] if self.__cache is not None else None,
         )
 
     def merge_and_save(
@@ -138,12 +135,3 @@ def is_merge_key(key: str):
     is_unet = key.startswith("model.diffusion_model.")
     is_text_encoder = key.startswith("cond_stage_model.")
     return is_unet or is_text_encoder
-
-
-def get_hyper_parameters(merge_method, alpha, beta) -> Dict[str, float]:
-    hyper_parameters = {}
-    if merge_method.requests_alpha():
-        hyper_parameters["alpha"] = alpha
-    if merge_method.requests_beta():
-        hyper_parameters["beta"] = beta
-    return hyper_parameters

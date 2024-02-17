@@ -4,8 +4,9 @@ import textwrap
 
 import torch
 from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, SymbolicRecipeNode
-from sd_mecha.weight import ModelParameter
-from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args
+from sd_mecha.weight import Hyper
+from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, \
+    Set
 
 RecipeNodeOrModel = RecipeNode | str | pathlib.Path
 
@@ -26,69 +27,40 @@ class MergeMethod:
 
     def __validate_f(self):
         spec = inspect.getfullargspec(self.__f)
-        positional_extra = set(spec.args) - {"a", "b", "c"}
-        if positional_extra:
-            raise TypeError(f"Unsupported positional parameters: {positional_extra}")
-
-        kwonlyargs_extra = set(spec.kwonlyargs) - {"alpha", "beta", "cache"}
-        if kwonlyargs_extra:
-            raise TypeError(f"Unsupported keyword only parameters: {kwonlyargs_extra}")
+        if spec.defaults:
+            raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({spec.defaults})")
 
         if spec.varkw is None:
             raise TypeError(f"**kwargs must be specified")
 
-    def __call__(self, inputs, hyper_parameters, device, dtype, cache):
-        kwargs = self.__get_kwargs(inputs, hyper_parameters, device, dtype, cache)
+    def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], device, dtype):
+        args, kwargs = self.__get_args_kwargs(inputs, hypers, device, dtype)
+        return self.__f(*args, **kwargs)
 
-        # pix2pix and inpainting models
-        # todo: verify whether we want to slice, merge and then concat this key instead of ignore it
-        if (a_size := kwargs["a"].size()) != (b_size := kwargs["b"].size()):
-            if a_size[1] > b_size[1]:
-                return kwargs["a"]
-            else:
-                return kwargs["b"]
-
-        return self.__f(**kwargs)
-
-    def __get_kwargs(
+    def __get_args_kwargs(
         self,
-        inputs: Dict[str, torch.Tensor],
-        hyper_parameters: Dict[str, float],
+        inputs: Tuple[torch.Tensor, ...],
+        hypers: Dict[str, float],
         device: str,
         dtype: Optional[torch.dtype],
-        cache: Optional[Dict],
-    ) -> Dict:
-        if self.requests_model_c() and "c" not in inputs:
-            raise ValueError
-
+    ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
         if dtype is None:
             to_args = device,
         else:
             to_args = device, dtype
 
-        merge_method_kwargs = {
-            **{
-                k: v.to(*to_args)
-                for k, v in inputs.items()
-            },
-            **hyper_parameters,
-        }
-        if self.requests_cache():
-            merge_method_kwargs["cache"] = cache
+        merge_method_args = tuple(
+            v.to(*to_args)
+            for v in inputs
+        )
+        return merge_method_args, hypers
 
-        return merge_method_kwargs
-
-    def get_return_merge_space(self, a: MergeSpace, b: MergeSpace, c: Optional[MergeSpace] = None) -> MergeSpace:
+    def get_return_merge_space(self, merge_spaces_args: List[MergeSpace]) -> MergeSpace:
         type_hints = get_type_hints(self.__f)
+        model_names = self.get_model_names()
 
         resolved_input_spaces = {}
-
-        for param, merge_space_arg in zip(('a', 'b', 'c'), (a, b, c)):
-            if merge_space_arg is None:
-                if self.requests_model_c():
-                    raise ValueError("Missing argument c")
-                continue
-
+        for param, merge_space_arg in zip(model_names, merge_spaces_args):
             annotation = type_hints.get(param)
             if annotation:
                 merge_space_param, key = self.__extract_lift_flag(annotation, param)
@@ -116,17 +88,14 @@ class MergeMethod:
                 elif isinstance(arg, TypeVar):
                     return get_args(arg.__bound__)[0], arg
 
-    def requests_alpha(self):
-        return "alpha" in inspect.getfullargspec(self.__f)[4]
+    def get_model_names(self) -> List[str]:
+        return inspect.getfullargspec(self.__f).args
 
-    def requests_beta(self):
-        return "beta" in inspect.getfullargspec(self.__f)[4]
+    def get_hyper_names(self) -> Set[str]:
+        return set(inspect.getfullargspec(self.__f).kwonlyargs)
 
-    def requests_model_c(self):
-        return "c" in inspect.getfullargspec(self.__f)[0]
-
-    def requests_cache(self):
-        return "cache" in inspect.getfullargspec(self.__f)[4]
+    def get_default_hypers(self) -> Dict[str, Hyper]:
+        return inspect.getfullargspec(self.__f).kwonlydefaults or {}
 
 
 def convert_to_recipe(
@@ -141,39 +110,48 @@ def __convert_to_recipe_impl(
     f: Callable,
 ):
     merge_method = MergeMethod(f)
+    default_hypers = merge_method.get_default_hypers()
 
-    c_param = f"c: {SymbolicRecipeNode.__name__}, " if merge_method.requests_model_c() else ""
-    alpha_param = f"alpha: {ModelParameter.__name__} = 0.0, " if merge_method.requests_alpha() else ""
-    beta_param = f"beta: {ModelParameter.__name__} = 0.0, " if merge_method.requests_beta() else ""
-    cache_param = "cache: Optional[Dict[str, torch.Tensor]] = None, " if merge_method.requests_cache() else ""
+    model_params = "".join(
+        f"{model_name}: {SymbolicRecipeNode.__name__}, "
+        for model_name in merge_method.get_model_names()
+    )
+    hyper_params = "".join(
+        f"{hyper_name}: {Hyper.__name__} = default_hypers[\"{hyper_name}\"], "
+        if hyper_name in default_hypers else
+        f"{hyper_name}: {Hyper.__name__}, "
+        for hyper_name in merge_method.get_hyper_names()
+    )
 
-    c_arg = f"c={path_to_node.__name__}(c)," if merge_method.requests_model_c() else ""
-    alpha_arg = f"alpha=alpha," if merge_method.requests_alpha() else ""
-    beta_arg = f"beta=beta," if merge_method.requests_beta() else ""
-    cache_arg = f"cache=cache," if merge_method.requests_cache() else ""
+    model_args = "".join(
+        f"{path_to_node.__name__}({model_name}), "
+        for model_name in merge_method.get_model_names()
+    )
+    hyper_args = "".join(
+        f"{hyper_name}={hyper_name}, "
+        for hyper_name in merge_method.get_hyper_names()
+    )
 
     fn_locals = {}
     fn_globals = globals() | {
         "merge_method": merge_method,
-        "dtype": torch.dtype,
+        "default_hypers": default_hypers,
+        "dtype": torch.dtype,  # `torch.dtype.__name__`
     }
     exec(textwrap.dedent(f"""
         def {f.__name__}(
-            a: {SymbolicRecipeNode.__name__}, b: {SymbolicRecipeNode.__name__}, {c_param}*,
-            {alpha_param}
-            {beta_param}
-            {cache_param}
+            {model_params}
+            *args: {SymbolicRecipeNode.__name__},
+            {hyper_params}
             device: {Optional.__name__}[{str.__name__}] = None,
             dtype: {Optional.__name__}[{torch.dtype.__name__}] = None,
+            **kwargs,
         ):
             return {SymbolicRecipeNode.__name__}(
-                merge_method=merge_method,
-                a={path_to_node.__name__}(a),
-                b={path_to_node.__name__}(b),
-                {c_arg}
-                {alpha_arg}
-                {beta_arg}
-                {cache_arg}
+                merge_method,
+                {model_args}
+                *args,
+                {hyper_args}
                 device=device,
                 dtype=dtype,
             )

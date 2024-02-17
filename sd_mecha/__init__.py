@@ -3,9 +3,9 @@ import pathlib
 import torch
 from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
-from sd_mecha import recipe_nodes, merge_methods, streaming
+from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrModel, path_to_node
-from sd_mecha.weight import ModelParameter, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
+from sd_mecha.weight import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 
 
 def merge_and_save(
@@ -23,7 +23,7 @@ slerp = merge_methods.slerp
 
 def add_difference(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
-    alpha: ModelParameter = 0.5,
+    alpha: Hyper = 0.5,
     clip_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -73,7 +73,7 @@ perpendicular_component = merge_methods.perpendicular_component
 
 def add_perpendicular(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
-    alpha: ModelParameter = 1.0,
+    alpha: Hyper = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -116,10 +116,10 @@ similarity_sum = cosine_add_b = merge_methods.similarity_sum
 ties_add_difference = merge_methods.ties_add_difference
 
 
-def tensor_sum(
+def copy_region(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel], *,
-    width: ModelParameter = 0.5,
-    offset: ModelParameter = 0.0,
+    width: Hyper = 0.5,
+    offset: Hyper = 0.0,
     top_k: bool = False,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -162,14 +162,15 @@ def tensor_sum(
     return res
 
 
+tensor_sum = copy_region
 distribution_crossover = merge_methods.distribution_crossover
 crossover = merge_methods.crossover
 
 
 def rotate(
     a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
-    alpha: ModelParameter = 1.0,
-    beta: ModelParameter = 0.0,
+    alpha: Hyper = 1.0,
+    beta: Hyper = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = torch.float64,
 ) -> recipe_nodes.RecipeNode:

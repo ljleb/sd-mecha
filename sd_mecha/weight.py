@@ -74,16 +74,16 @@ SD15_HYPER_PARAMETERS = {
         }).items()
     }).items()
 }
-ModelParameter = float | Dict[str, float]
+Hyper = float | Dict[str, float]
 
 
-def get_weight(parameter: ModelParameter, key: str) -> float:
-    if isinstance(parameter, float):
-        return parameter
-    elif isinstance(parameter, dict):
+def get_weight(hyper: Hyper, key: str) -> float:
+    if isinstance(hyper, float):
+        return hyper
+    elif isinstance(hyper, dict):
         weights = []
         default = 0.0
-        for key_identifier, weight in parameter.items():
+        for key_identifier, weight in hyper.items():
             partial_key = SD15_HYPER_PARAMETERS[key_identifier]
             if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
                 weights.append(weight)
@@ -93,18 +93,18 @@ def get_weight(parameter: ModelParameter, key: str) -> float:
             return sum(weights) / len(weights)
         return default
     else:
-        raise TypeError(f"'parameter' must be float or dict, not {type(parameter)}")
+        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
 
 
-def validate_model_parameter(parameter: ModelParameter) -> ModelParameter:
-    if isinstance(parameter, dict):
-        for key in parameter.keys():
-            if key not in SD15_HYPER_PARAMETERS:
-                suggestion = fuzzywuzzy.process.extractOne(key, SD15_HYPER_PARAMETERS)[0]
+def validate_hyper(hyper: Hyper) -> Hyper:
+    if isinstance(hyper, dict):
+        for key in hyper.keys():
+            if key not in SD15_HYPER_PARAMETERS and not key.endswith("_default"):
+                suggestion = fuzzywuzzy.process.extractOne(key, SD15_HYPER_PARAMETERS.keys())[0]
                 raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
-    elif not isinstance(parameter, float):
-        raise TypeError("Hyperparameter must be a float or a dictionary.")
-    return parameter
+    elif not isinstance(hyper, float):
+        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
+    return hyper
 
 
 def unet15_blocks(

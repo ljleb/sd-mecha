@@ -84,36 +84,13 @@ def multiply_difference(
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     alpha: float,
-    beta: float,
+    sign_alpha: float,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     a_pow = torch.pow(torch.abs(a), (1 - alpha))
     b_pow = torch.pow(torch.abs(b), alpha)
-    difference = torch.copysign(a_pow * b_pow, weighted_sum.__wrapped__(a, b, beta))
+    difference = torch.copysign(a_pow * b_pow, weighted_sum.__wrapped__(a, b, sign_alpha))
     return difference
-
-
-@convert_to_recipe
-def copy_difference(  # aka train_difference
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
-    **kwargs,
-):
-    ab_diff = a - b
-    bc_dist = torch.abs(b - c)
-    ba_dist = torch.abs(b - a)
-
-    sum_distances = bc_dist + ba_dist
-    scale = torch.where(
-        sum_distances != 0,
-        ba_dist / sum_distances,
-        torch.tensor(0.0, dtype=a.dtype, device=a.device)
-    )
-    sign_scale = torch.sign(b - c)
-    scale = sign_scale * torch.abs(scale)
-    new_diff = scale * torch.abs(ab_diff)
-    return new_diff * 1.8
 
 
 @convert_to_recipe
@@ -122,12 +99,12 @@ def similarity_add_difference(
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     alpha: float,
-    beta: float,
+    similarity_scale: float = 1.0,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     threshold = torch.maximum(torch.abs(a), torch.abs(b))
     similarity = (a * b / threshold**2 + 1) / 2
-    similarity = torch.nan_to_num(similarity * beta, nan=beta)
+    similarity = torch.nan_to_num(similarity * similarity_scale, nan=similarity_scale)
 
     ab_diff = add_difference.__wrapped__(a, b, alpha)
     ab_sum = weighted_sum.__wrapped__(a, b, alpha / 2)
@@ -136,12 +113,12 @@ def similarity_add_difference(
 
 @convert_to_recipe
 def normalized_similarity_sum(  # aka add_cosine_a
-    a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
-    b: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    a: Tensor | LiftFlag[MergeSpace.MODEL],
+    b: Tensor | LiftFlag[MergeSpace.MODEL],
     *,
     alpha: float,
     **kwargs,
-) -> torch.Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> Tensor | LiftFlag[MergeSpace.MODEL]:
     a_norm = torch.nn.functional.normalize(a, dim=0)
     b_norm = torch.nn.functional.normalize(b, dim=0)
     similarity = torch.nn.functional.cosine_similarity(a_norm, b_norm, dim=0)
@@ -150,12 +127,12 @@ def normalized_similarity_sum(  # aka add_cosine_a
 
 @convert_to_recipe
 def similarity_sum(  # aka add_cosine_b
-    a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
-    b: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    a: Tensor | LiftFlag[MergeSpace.MODEL],
+    b: Tensor | LiftFlag[MergeSpace.MODEL],
     *,
     alpha: float,
     **kwargs,
-) -> torch.Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> Tensor | LiftFlag[MergeSpace.MODEL]:
     similarity = torch.nn.functional.cosine_similarity(a, b, dim=0)
     dot_product = torch.sum(a * b)
     magnitude_similarity = dot_product / (torch.norm(a) * torch.norm(b))
@@ -163,23 +140,21 @@ def similarity_sum(  # aka add_cosine_b
     return add_cosine_generic(a, b, alpha, combined_similarity)
 
 
-def add_cosine_generic(a: torch.Tensor, b: torch.Tensor, alpha: float, similarity: torch.Tensor) -> torch.Tensor:
+def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -> Tensor:
     k = 1 - torch.clamp(similarity - alpha, 0, 1)
     return weighted_sum.__wrapped__(a, b, k)
 
 
 @convert_to_recipe
 def ties_add_difference(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
-    *,
+    *models: Tensor | LiftFlag[MergeSpace.DELTA],
     alpha: float,
     beta: float,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     deltas = []
     signs = []
-    for m in [a, b]:
+    for m in models:
         deltas.append(filter_top_k(m, beta))
         signs.append(torch.sign(deltas[-1]))
 
@@ -188,7 +163,7 @@ def ties_add_difference(
     deltas = torch.stack(deltas, dim=0)
     delta_filters = deltas * (signs == final_sign).float()
 
-    res = torch.zeros_like(a, device=a.device)
+    res = torch.zeros_like(models[0], device=models[0].device)
     for delta_filter in delta_filters:
         res += delta_filter
 
@@ -204,34 +179,30 @@ def filter_top_k(a: Tensor, k: float):
 
 
 @convert_to_recipe
-def tensor_sum(
+def copy_region(  # aka tensor_sum
     a: Tensor | SharedMergeSpace,
     b: Tensor | SharedMergeSpace,
     *,
-    alpha: float,
-    beta: float,
+    width: float,
+    offset: float,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
-    if alpha + beta <= 1:
-        tt = a.clone()
-        talphas = int(a.shape[0] * beta)
-        talphae = int(a.shape[0] * (alpha + beta))
-        tt[talphas:talphae] = b[talphas:talphae].clone()
+    start_i, end_i, region_is_inverted = ratio_to_region(width, offset, a.size(0))
+    if region_is_inverted:
+        b[start_i:end_i] = a[start_i:end_i]
+        return b
     else:
-        talphas = int(a.shape[0] * (alpha + beta - 1))
-        talphae = int(a.shape[0] * beta)
-        tt = b.clone()
-        tt[talphas:talphae] = a[talphas:talphae].clone()
-    return tt
+        a[start_i:end_i] = b[start_i:end_i]
+        return a
 
 
 @convert_to_recipe
-def top_k_tensor_sum(
+def copy_top_k(  # aka top_k_tensor_sum
     a: Tensor | SharedMergeSpace,
     b: Tensor | SharedMergeSpace,
     *,
-    alpha: float,
-    beta: float,
+    width: float,
+    offset: float,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
     a_flat = torch.flatten(a)
@@ -239,7 +210,7 @@ def top_k_tensor_sum(
     b_indices = torch.argsort(torch.flatten(b), stable=True)
     redist_indices = torch.argsort(b_indices)
 
-    start_i, end_i, region_is_inverted = ratio_to_region(alpha, beta, torch.numel(a))
+    start_i, end_i, region_is_inverted = ratio_to_region(width, offset, torch.numel(a))
     start_top_k = kth_abs_value(a_dist, start_i)
     end_top_k = kth_abs_value(a_dist, end_i)
 
@@ -280,6 +251,29 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
         end = offset * n
 
     return round(start), round(end), inverted
+
+
+@convert_to_recipe
+def copy_difference(  # aka train_difference
+    a: Tensor | SharedMergeSpace,
+    b: Tensor | SharedMergeSpace,
+    c: Tensor | SharedMergeSpace,
+    **kwargs,
+):
+    ab_diff = a - b
+    bc_dist = torch.abs(b - c)
+    ba_dist = torch.abs(b - a)
+
+    sum_distances = bc_dist + ba_dist
+    scale = torch.where(
+        sum_distances != 0,
+        ba_dist / sum_distances,
+        torch.tensor(0.0, dtype=a.dtype, device=a.device)
+    )
+    sign_scale = torch.sign(b - c)
+    scale = sign_scale * torch.abs(scale)
+    new_diff = scale * torch.abs(ab_diff)
+    return new_diff * 1.8
 
 
 @convert_to_recipe
@@ -376,7 +370,7 @@ def rotate(
     *,
     alpha: float,
     beta: float,
-    cache: Optional[Dict[str, Tensor]],
+    cache: Optional[Dict[str, Tensor]] = None,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
     if alpha == 0 and beta == 0:
@@ -471,10 +465,24 @@ def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tenso
 @convert_to_recipe
 def clip(
     a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
+    bounds: Tensor | SharedMergeSpace,
+    *,
+    stiffness: float = 0.0,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
-    maximums = torch.maximum(b, c)
-    minimums = torch.minimum(b, c)
+    maximums = functools.reduce(torch.maximum, bounds)
+    minimums = functools.reduce(torch.minimum, bounds)
+    centers = (maximums + minimums) / 2
+
+    if stiffness:
+        smallest_positive = maximums
+        largest_negative = minimums
+
+        for i, bound in enumerate(bounds):
+            smallest_positive = torch.where((smallest_positive >= bound) & (bound >= centers), bound, smallest_positive)
+            largest_negative = torch.where((largest_negative <= bound) & (bound <= centers), bound, largest_negative)
+
+        maximums = weighted_sum.__wrapped__(maximums, smallest_positive, stiffness)
+        minimums = weighted_sum.__wrapped__(minimums, largest_negative, stiffness)
+
     return torch.minimum(torch.maximum(a, minimums), maximums)
