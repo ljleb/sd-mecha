@@ -81,4 +81,4 @@ sd-mecha doesn't have this problem as it saves keys as soon as it can:
 
 ![image of sd-mecha merge graph](/media/did-you-see-something.PNG)
 
-This allows to merge a very large number of models simultaneously on low-end hardware. (i.e. 8+)
+This allows to merge a very large number of models simultaneously on low-end hardware.
