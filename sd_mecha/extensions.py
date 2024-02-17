@@ -9,7 +9,7 @@ from sd_mecha.weight import Hyper
 from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, Set
 
 
-RecipeNodeOrModel = RecipeNode | str | pathlib.Path
+RecipeNodeOrPath = RecipeNode | str | pathlib.Path
 T = TypeVar("T")
 
 
@@ -173,8 +173,12 @@ def __convert_to_recipe_impl(
 methods_registry = {}
 
 
-@functools.lru_cache(32)
-def path_to_node(a: RecipeNodeOrModel) -> RecipeNode:
+@functools.cache
+def path_to_node(a: RecipeNodeOrPath) -> RecipeNode:
     if isinstance(a, (str, pathlib.Path)):
         return ModelRecipeNode(a)
     return a
+
+
+def clear_model_paths_cache():
+    path_to_node.cache_clear()

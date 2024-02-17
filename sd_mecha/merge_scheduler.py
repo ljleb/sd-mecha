@@ -3,6 +3,7 @@ import pathlib
 import torch
 from concurrent.futures import ThreadPoolExecutor
 from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, OutSafetensorsDict
+from sd_mecha import extensions
 from tqdm import tqdm
 from typing import Optional
 
@@ -61,6 +62,7 @@ class MergeScheduler:
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 1,
     ):
+        extensions.clear_model_paths_cache()
         if save_dtype is None:
             save_dtype = self.__default_dtype
         if not isinstance(output_path, pathlib.Path):
@@ -100,8 +102,7 @@ class MergeScheduler:
 
         def _forward_and_save(key: str):
             progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
-            t = _get_any_tensor(key)
-            output[key] = t.to(save_dtype)
+            output[key] = _get_any_tensor(key).to(save_dtype)
             progress.update()
 
         with ThreadPoolExecutor(max_workers=threads) as executor:

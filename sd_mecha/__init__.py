@@ -4,7 +4,7 @@ import torch
 from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha import recipe_nodes, merge_methods
-from sd_mecha.extensions import RecipeNodeOrModel, path_to_node
+from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
 from sd_mecha.weight import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 from sd_mecha.recipe_serializer import serialize, deserialize
@@ -24,7 +24,7 @@ slerp = merge_methods.slerp
 
 
 def add_difference(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 0.5,
     clip_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
@@ -74,7 +74,7 @@ perpendicular_component = merge_methods.perpendicular_component
 
 
 def add_perpendicular(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: RecipeNodeOrPath, *,
     alpha: Hyper = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -119,8 +119,8 @@ ties_sum = merge_methods.ties_sum
 
 
 def add_difference_ties(
-    base: RecipeNodeOrModel,
-    *models: RecipeNodeOrModel,
+    base: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,
     alpha: float,
     k: float = 0.2,
     device: Optional[str] = None,
@@ -151,7 +151,7 @@ def add_difference_ties(
 
 
 def copy_region(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel], *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath], *,
     width: Hyper = 0.5,
     offset: Hyper = 0.0,
     top_k: bool = False,
@@ -202,7 +202,7 @@ crossover = merge_methods.crossover
 
 
 def rotate(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 1.0,
     beta: Hyper = 0.0,
     device: Optional[str] = None,

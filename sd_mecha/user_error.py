@@ -1,0 +1,2 @@
+class UserError(Exception):
+    pass
