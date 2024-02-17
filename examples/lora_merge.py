@@ -8,7 +8,7 @@ recipe = sd_mecha.add_difference(
     alpha=1.0,
 )
 
-scheduler = sd_mecha.MergeScheduler(
+scheduler = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models",
 )
 

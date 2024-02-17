@@ -1,6 +1,6 @@
 import fuzzywuzzy.process
-from typing import List
-from sd_mecha import extensions
+from typing import List, Optional
+from sd_mecha import extensions, recipe_nodes
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode
 from sd_mecha.user_error import UserError
 
@@ -88,6 +88,42 @@ def deserialize(recipe: List[str]) -> RecipeNode:
 
 
 def serialize(recipe: RecipeNode) -> str:
-    instructions = []
-    recipe.serialize(instructions)
-    return "\n".join(instructions)
+    serializer = SerializerVisitor()
+    recipe.accept(serializer)
+    return "\n".join(serializer.instructions)
+
+
+class SerializerVisitor:
+    def __init__(self, instructions: Optional[List[str]] = None):
+        self.instructions = instructions if instructions is not None else []
+
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
+        line = f'model "{node.state_dict}"'
+        return self.add_instruction(line)
+
+    def visit_lora(self, node: recipe_nodes.ModelRecipeNode) -> int:
+        line = f'lora "{node.state_dict}"'
+        return self.add_instruction(line)
+
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
+        models = [
+            f" &{model.accept(self)}"
+            for model in node.models
+        ]
+
+        hypers = []
+        for hyper_k, hyper_v in node.hypers.items():
+            if isinstance(hyper_v, dict):
+                dict_line = "dict" + "".join(f" {k}={v}" for k, v in hyper_v.items())
+                hyper_v = f"&{self.add_instruction(dict_line)}"
+            hypers.append(f" {hyper_k}={hyper_v}")
+
+        line = f'call "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
+        return self.add_instruction(line)
+
+    def add_instruction(self, instruction: str) -> int:
+        try:
+            return self.instructions.index(instruction)
+        except ValueError:
+            self.instructions.append(instruction)
+            return len(self.instructions) - 1

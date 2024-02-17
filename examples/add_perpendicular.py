@@ -8,10 +8,8 @@ recipe = sd_mecha.add_perpendicular(
     "pure/v1-5-pruned",
 )
 
-# scheduler contains default parameters
-scheduler = sd_mecha.MergeScheduler(
+scheduler = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 
-# perform the entire merge plan and save to output path
 scheduler.merge_and_save(recipe, output_path="basic_merge")

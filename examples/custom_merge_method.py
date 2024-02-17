@@ -53,7 +53,7 @@ recipe = custom_sum(
     dtype=torch.float64,  # and the dtype too
 )
 
-scheduler = sd_mecha.MergeScheduler(
+scheduler = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 

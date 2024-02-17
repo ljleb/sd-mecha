@@ -15,7 +15,7 @@ models = [
 
 recipe = sd_mecha.add_difference_ties("pure/v1-5-pruned", *models, alpha=0.5)
 
-scheduler = sd_mecha.MergeScheduler(
+scheduler = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
     default_device="cpu",
 )

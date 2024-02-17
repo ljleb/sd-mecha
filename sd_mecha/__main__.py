@@ -64,7 +64,7 @@ def merge(
     device: str,
     dtype: str,
     save_dtype: str,
-    verbose: bool,
+    _verbose: bool,
 ):
     if output is None:
         output = base_directory / "merge.safetensors"

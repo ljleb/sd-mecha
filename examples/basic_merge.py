@@ -9,7 +9,7 @@ recipe = sd_mecha.weighted_sum(
 )
 
 # scheduler contains default parameters
-scheduler = sd_mecha.MergeScheduler(
+scheduler = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )
 

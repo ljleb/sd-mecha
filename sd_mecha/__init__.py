@@ -2,11 +2,11 @@ import logging
 import pathlib
 import torch
 from typing import Optional
-from sd_mecha.merge_scheduler import MergeScheduler
+from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.weight import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
+from sd_mecha.hypers import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 from sd_mecha.recipe_serializer import serialize, deserialize
 
 
@@ -15,7 +15,7 @@ def merge_and_save(
     base_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
-    scheduler = MergeScheduler(base_dir=base_dir)
+    scheduler = RecipeMerger(base_dir=base_dir)
     scheduler.merge_and_save(recipe, output_path=output_path)
 
 
