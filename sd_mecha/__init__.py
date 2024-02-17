@@ -7,6 +7,7 @@ from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrModel, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
 from sd_mecha.weight import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
+from sd_mecha.recipe_serializer import serialize, deserialize
 
 
 def merge_and_save(

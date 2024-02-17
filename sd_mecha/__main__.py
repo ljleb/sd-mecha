@@ -1,10 +1,12 @@
-from typing import Optional
+import sys
+import traceback
 
 import click
 import pathlib
 import torch
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha.recipe_serializer import deserialize
+from typing import Optional
 
 
 DTYPE_MAPPING = {
@@ -74,7 +76,11 @@ def merge(
         output = base_directory / "merge.safetensors"
 
     with open(recipe, "r") as f:
-        recipe = deserialize(f.readlines())
+        try:
+            recipe = deserialize(f.readlines())
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            exit(1)
 
     scheduler = MergeScheduler(
         base_dir=base_directory,
