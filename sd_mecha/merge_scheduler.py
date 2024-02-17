@@ -1,118 +1,136 @@
 import logging
 import pathlib
-
-import safetensors.torch
 import torch
-
-from sd_mecha.sd_meh import utils as sd_meh_utils, merge as sd_meh_merge
-from typing import Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, OutSafetensorsDict
+from tqdm import tqdm
+from typing import Optional
 
 
 class MergeScheduler:
     def __init__(
         self, *,
         base_dir: Optional[pathlib.Path | str] = None,
-        dtype: torch.dtype = torch.float16,
         threads: int = 1,
-        device: str = "cpu",
-        work_device: Optional[str] = None,
-        work_dtype: Optional[torch.dtype] = None,
+        default_device: str = "cpu",
+        default_dtype: Optional[torch.dtype] = torch.float32,
     ):
         self.__base_dir = base_dir if base_dir is not None else base_dir
         if isinstance(self.__base_dir, str):
             self.__base_dir = pathlib.Path(self.__base_dir)
         self.__base_dir = self.__base_dir.absolute()
 
-        self.__dtype = dtype
         self.__threads = threads
-        self.__default_device = device
-        self.__default_work_device = work_device
-        self.__default_work_dtype = work_dtype
+        self.__default_device = default_device
+        self.__default_dtype = default_dtype
 
-    def symbolic_merge(self, merge_method, a, b, c, alpha, beta, rebasin_iters, device, work_device, work_dtype, threads, weights_clip):
-        models = models_dict(a, b, c)
-        weights, bases = weights_and_bases(merge_method, alpha, beta)
+    def load_model(self, state_dict: str | pathlib.Path | InModelSafetensorsDict) -> InModelSafetensorsDict:
+        if isinstance(state_dict, InModelSafetensorsDict):
+            return state_dict
+        if not isinstance(state_dict, pathlib.Path):
+            state_dict = pathlib.Path(state_dict)
+        if not state_dict.is_absolute():
+            state_dict = self.__base_dir / state_dict
+        if not state_dict.suffix:
+            state_dict = state_dict.with_suffix(".safetensors")
 
-        return sd_meh_merge.merge_models(
+        return InModelSafetensorsDict(state_dict)
+
+    def load_lora(self, state_dict: str | pathlib.Path | InLoraSafetensorsDict) -> InLoraSafetensorsDict:
+        if isinstance(state_dict, InLoraSafetensorsDict):
+            return state_dict
+        if not isinstance(state_dict, pathlib.Path):
+            state_dict = pathlib.Path(state_dict)
+        if not state_dict.is_absolute():
+            state_dict = self.__base_dir / state_dict
+        if not state_dict.suffix:
+            state_dict = state_dict.with_suffix(".safetensors")
+
+        return InLoraSafetensorsDict(state_dict)
+
+    def symbolic_merge(self, merge_method, models, hypers, device, dtype):
+        return merge_method(
             models,
-            weights,
-            bases,
-            merge_method,
-            self.__dtype,
-            work_dtype if work_dtype is not None else self.__default_work_dtype,
-            weights_clip,
-            bool(rebasin_iters),
-            rebasin_iters if rebasin_iters is not None else 0,
+            hypers,
             device if device is not None else self.__default_device,
-            work_device if work_device is not None else self.__default_work_device,
-            True,
-            threads if threads is not None else self.__threads,
+            dtype if dtype is not None else self.__default_dtype,
         )
 
-    def clip_weights(self, model, a, b):
-        models = models_dict(a.to(), b, None)
-        return sd_meh_merge.clip_weights(models, model)
-
-    def load_state_dict(self, path, device):
-        if not isinstance(path, (str, pathlib.Path)):
-            return path
-        if not isinstance(path, pathlib.Path):
-            path = pathlib.Path(path)
-        if not path.suffix:
-            path = path.with_suffix(".safetensors")
-        if not path.is_absolute():
-            path = self.__base_dir / path
-
-        if device is None:
-            device = self.__default_device
-
-        return sd_meh_merge.load_sd_model(path, device)
-
-    def merge_and_save(self, merge_tree, *, output_path: Optional[pathlib.Path | str] = None):
-        merged = merge_tree.visit(self)
-
+    def merge_and_save(
+        self, recipe, *,
+        output_path: Optional[pathlib.Path | str] = None,
+        save_dtype: Optional[torch.dtype] = torch.float16,
+        threads: int = 1,
+    ):
+        if save_dtype is None:
+            save_dtype = self.__default_dtype
         if not isinstance(output_path, pathlib.Path):
             output_path = pathlib.Path(output_path)
         if not output_path.is_absolute():
             output_path = self.__base_dir / output_path
         if not output_path.suffix:
             output_path = output_path.with_suffix(".safetensors")
-
         logging.info(f"Saving to {output_path}")
-        if output_path.suffix == ".safetensors":
-            safetensors.torch.save_file(
-                merged.to_dict(),
-                f"{output_path}",
-                metadata={"format": "pt"},
-            )
-        else:
-            torch.save(
-                {"state_dict": merged},
-                f"{output_path.with_suffix('.ckpt')}",
-            )
+
+        input_dicts = recipe.get_input_dicts(self)
+        merged_header = {
+            k: {k: v for k, v in h.items() if k != "data_offsets"}
+            for input_dict in input_dicts
+            for k, h in input_dict.header.items()
+            if k != "__metadata__"
+        }
+
+        def _get_any_tensor(key: str):
+            for input_dict in input_dicts:
+                try:
+                    return input_dict[key]
+                except KeyError:
+                    continue
+
+        output = OutSafetensorsDict(output_path, merged_header)
+        progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
+
+        def _merge_and_save(key: str):
+            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
+            try:
+                merged = recipe.visit(key, self)
+            except KeyError:
+                merged = _get_any_tensor(key)
+            output[key] = merged.to(save_dtype)
+            progress.update()
+
+        def _forward_and_save(key: str):
+            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
+            t = _get_any_tensor(key)
+            output[key] = t.to(save_dtype)
+            progress.update()
+
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = []
+            for key in merged_header.keys():
+                if is_passthrough_key(key, merged_header[key]):
+                    futures.append(executor.submit(_forward_and_save, key))
+                elif is_merge_key(key):
+                    futures.append(executor.submit(_merge_and_save, key))
+                else:
+                    progress.total -= 1
+                    progress.refresh()
+
+        for res in futures:
+            res.result()
+
+        output.finalize()
 
 
-def models_dict(a, b, c=None) -> dict:
-    models = {
-        "model_a": a,
-        "model_b": b,
-    }
-    if c is not None:
-        models["model_c"] = c
-    return models
+def is_passthrough_key(key: str, header: dict):
+    is_metadata = key == "__metadata__"
+    is_vae = key.startswith("first_stage_model.")
+    is_time_embed = key.startswith("model.diffusion_model.time_embed.")
+    is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
+    return is_metadata or is_vae or is_time_embed or is_position_ids or header["shape"] == [1000]
 
 
-def weights_and_bases(merge_method, alpha, beta=None) -> Tuple[dict, dict]:
-    return sd_meh_utils.weights_and_bases(
-        merge_method,
-        None,
-        alpha,
-        None,
-        None,
-        beta,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
+def is_merge_key(key: str):
+    is_unet = key.startswith("model.diffusion_model.")
+    is_text_encoder = key.startswith("cond_stage_model.")
+    return is_unet or is_text_encoder

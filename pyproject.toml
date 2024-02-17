@@ -14,10 +14,13 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+    "click",
     "numpy",
     "safetensors",
     "tqdm",
     "scipy",
+    "fuzzywuzzy",
+    "python-Levenshtein",
 ]
 
 [project.urls]
