@@ -5,8 +5,8 @@ sd-mecha is a stable diffusion recipe merger:
 ```python
 import sd_mecha
 
-# plan a simple weighted sum
-merge = sd_mecha.weighted_sum(
+# create a simple weighted sum recipe
+recipe = sd_mecha.weighted_sum(
     sd_mecha.weighted_sum(
         "ghostmix_v20Bakedvae",
         "deliberate_v2",
@@ -19,12 +19,10 @@ merge = sd_mecha.weighted_sum(
 # scheduler contains default parameters
 scheduler = sd_mecha.MergeScheduler(
     base_dir=r"E:\sd\models\Stable-diffusion",
-    device="cuda:0",
-    prune=True,
 )
 
 # perform the entire merge plan and save to output path
-scheduler.merge_and_save(merge, output_path="basic_merge")
+scheduler.merge_and_save(recipe, output_path="basic_merge")
 ```
 
 See the [examples](/examples) directory for other examples.
