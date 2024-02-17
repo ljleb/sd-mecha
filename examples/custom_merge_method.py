@@ -21,7 +21,7 @@ def custom_sum(
     #        **kwargs,
     #    ) -> torch.Tensor | SameSpace
     #    ```
-    # In this code, `a`, `b` must all be in the same space, either in MODEL space or DELTA space.
+    # In this code, `a` and `b` must be in the same space, either in MODEL space or DELTA space.
     # The return merge space is exactly the merge space that satisfies `a` and `b` at the same time.
     # For more examples, see /sd_mecha/merge_methods.py
     a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
