@@ -30,7 +30,7 @@ See the [examples](/examples) directory for other examples.
 ## Features
 
 - Memory efficient model merging -- merge a very large number of models at the same time
-- Mecha recipes as a storable and executable format
+- Mecha recipes as a storable and executable format (.mecha)
 - Custom merge method programming interface for experiments
 
 Coming soon:
@@ -55,7 +55,7 @@ The pypi package does not ship with `torch` so that you can install the appropri
 ### Merge recipes with the CLI
 
 ```shell
-python -m sd_mecha merge <recipe.mecha> -o path/to/output.safetensors [options]
+python -m sd_mecha merge <path/to/recipe.mecha> -o path/to/output.safetensors [options]
 ```
 
 For more information:
