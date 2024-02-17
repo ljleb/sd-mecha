@@ -27,6 +27,18 @@ scheduler.merge_and_save(recipe, output_path="basic_merge")
 
 See the [examples](/examples) directory for other examples.
 
+## Install
+
+```commandline
+pip install sd-mecha torch
+```
+
+sd-mecha depends additionally on:
+
+- `torch>=2.0.1`
+
+The pypi package does not ship with `torch` so that you can install the appropriate version for your system.
+
 ## Motivation
 
 Keeping track of full merge recipes has always been annoying.
@@ -43,15 +55,3 @@ sd-mecha doesn't have this problem as it saves keys as soon as it can:
 ![image of sd-mecha merge graph](/media/did-you-see-something.PNG)
 
 This allows to merge a very large number of models simultaneously on low-end hardware. (i.e. 8+)
-
-## Install
-
-```commandline
-pip install sd-mecha torch
-```
-
-sd-mecha depends additionally on:
-
-- `torch>=2.0.1`
-
-The pypi package does not ship with `torch` so that you can install the appropriate version for your system.
