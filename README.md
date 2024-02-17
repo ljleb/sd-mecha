@@ -35,17 +35,16 @@ Keeping track of full merge recipes has always been annoying.
 I needed something that allows to store merge recipes in a readable format while also being executable.
 I also needed something that allows to fully merge an entire tree of models without having to save intermediate models to disk.
 
-Typically, mergers load the entire list models into memory before initiating the merge process.
-This is very inefficient when the merge focuses on each key individually:
+Typically, mergers load all models in memory before initiating the merge process.
+This can be very inefficient when the merge focuses on each key individually:
 
 ![image of typical merge graph](/media/memory-gone.PNG)
 
-sd-mecha doesn't have this problem as it saves a key as soon as it can:
+sd-mecha doesn't have this problem as it saves keys as soon as it can:
 
 ![image of sd-mecha merge graph](/media/did-you-see-something.PNG)
 
-This allows to simultaneously merge a very large number of models (i.e. 8+) on low-end hardware,
-as only one model key needs to live in memory at a time.
+This allows to merge a very large number of models simultaneously on low-end hardware. (i.e. 8+)
 
 ## Install
 
