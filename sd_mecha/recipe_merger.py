@@ -99,7 +99,12 @@ class RecipeMerger:
 
 
 class KeyMergeVisitor:
-    def __init__(self, key: str, base_dir: pathlib.Path, default_device: str, default_dtype: torch.dtype):
+    def __init__(
+        self, key: str,
+        base_dir: pathlib.Path,
+        default_device: str,
+        default_dtype: torch.dtype,
+    ):
         self.__key = key
         self.__base_dir = base_dir
         self.__default_device = default_device
