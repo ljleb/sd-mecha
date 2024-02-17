@@ -10,6 +10,7 @@ import warnings
 class InModelSafetensorsDict:
     def __init__(self, file_path: pathlib.Path):
         assert file_path.suffix == ".safetensors"
+        self.file_path = file_path
         self.file = open(file_path, 'rb')
         self.header_size, self.header = self._read_header()
 
@@ -115,6 +116,10 @@ class InLoraSafetensorsDict:
     @property
     def header(self):
         return self.safetensors_dict.header
+
+    @property
+    def file_path(self):
+        return self.safetensors_dict.file_path
 
     def _convert_lora_to_weight(self, lora_key):
         up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].to(torch.float32)

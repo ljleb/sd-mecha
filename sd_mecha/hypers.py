@@ -2,7 +2,7 @@ from typing import Dict, Optional
 import fuzzywuzzy.process
 
 
-SD15_HYPER_PARAMETERS = {
+SD15_HYPERS = {
     f"unet_{k}": v
     for k, v in ({
         f"block_{k}": f"model.diffusion_model.{v}"
@@ -27,7 +27,7 @@ SD15_HYPER_PARAMETERS = {
         } | {
             f"trans_attn{i}_{p}": f".transformer_blocks.0.attn{i}.to_{p}."
             for i in range(1, 3)
-            for p in {"q", "k", "v", "out"}
+            for p in ("q", "k", "v", "out")
         } | {
             f"trans_norm{i}": f".transformer_blocks.0.norm{i}."
             for i in range(1, 4)
@@ -77,20 +77,20 @@ SD15_HYPER_PARAMETERS = {
 Hyper = float | Dict[str, float]
 
 
-def get_weight(hyper: Hyper, key: str) -> float:
+def get_hyper(hyper: Hyper, key: str) -> float:
     if isinstance(hyper, float):
         return hyper
     elif isinstance(hyper, dict):
-        weights = []
+        hypers = []
         default = 0.0
         for key_identifier, weight in hyper.items():
-            partial_key = SD15_HYPER_PARAMETERS[key_identifier]
+            partial_key = SD15_HYPERS[key_identifier]
             if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
-                weights.append(weight)
+                hypers.append(weight)
             elif key_identifier.endswith("_default"):
                 default = weight
-        if weights:
-            return sum(weights) / len(weights)
+        if hypers:
+            return sum(hypers) / len(hypers)
         return default
     else:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
@@ -99,8 +99,8 @@ def get_weight(hyper: Hyper, key: str) -> float:
 def validate_hyper(hyper: Hyper) -> Hyper:
     if isinstance(hyper, dict):
         for key in hyper.keys():
-            if key not in SD15_HYPER_PARAMETERS and not key.endswith("_default"):
-                suggestion = fuzzywuzzy.process.extractOne(key, SD15_HYPER_PARAMETERS.keys())[0]
+            if key not in SD15_HYPERS and not key.endswith("_default"):
+                suggestion = fuzzywuzzy.process.extractOne(key, SD15_HYPERS.keys())[0]
                 raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
     elif not isinstance(hyper, float):
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")

@@ -8,8 +8,8 @@ recipe = sd_mecha.add_difference(
     alpha=1.0,
 )
 
-scheduler = sd_mecha.MergeScheduler(
+merger = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models",
 )
 
-scheduler.merge_and_save(recipe, output_path="Stable-diffusion/basic_merge")
+merger.merge_and_save(recipe, output_path="Stable-diffusion/basic_merge")

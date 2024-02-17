@@ -1,14 +1,13 @@
+import pathlib
 import sd_mecha
 sd_mecha.set_log_level()
 
 
-# plan a simple weighted sum
-recipe = sd_mecha.weighted_sum(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-)
+recipe_path = pathlib.Path(__file__).parent / 'recipes' / "test_weighted_sum.mecha"
+with open(recipe_path) as f:
+    recipe = sd_mecha.deserialize(f.readlines())
 
-# scheduler contains default parameters
+
 merger = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
 )

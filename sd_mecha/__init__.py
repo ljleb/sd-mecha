@@ -2,20 +2,38 @@ import logging
 import pathlib
 import torch
 from typing import Optional
-from sd_mecha.merge_scheduler import MergeScheduler
+from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods
-from sd_mecha.extensions import RecipeNodeOrModel, path_to_node
+from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.weight import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
+from sd_mecha.hypers import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
+from sd_mecha.recipe_serializer import serialize, deserialize
 
 
 def merge_and_save(
-    merge_tree: recipe_nodes.RecipeNode,
+    recipe: recipe_nodes.RecipeNode,
     base_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
-    scheduler = MergeScheduler(base_dir=base_dir)
-    scheduler.merge_and_save(merge_tree, output_path=output_path)
+    scheduler = RecipeMerger(base_dir=base_dir)
+    scheduler.merge_and_save(recipe, output_path=output_path)
+
+
+def serialize_and_save(
+    recipe: recipe_nodes.RecipeNode,
+    output_path: pathlib.Path | str,
+):
+    serialized = serialize(recipe)
+
+    if not isinstance(output_path, pathlib.Path):
+        output_path = pathlib.Path(output_path)
+    if not output_path.suffix:
+        output_path = output_path.with_suffix(".mecha")
+    output_path = output_path.absolute()
+
+    logging.info(f"Saving recipe to {output_path}")
+    with open(output_path, "w") as f:
+        f.write(serialized)
 
 
 weighted_sum = merge_methods.weighted_sum
@@ -23,7 +41,7 @@ slerp = merge_methods.slerp
 
 
 def add_difference(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 0.5,
     clip_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
@@ -58,7 +76,7 @@ def add_difference(
 
     if clip_to_ab:
         if a.merge_space != b.merge_space:
-            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clip the merge")
+            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clip the merge.")
         res = clip(
             res, a, b,
             device=device,
@@ -73,7 +91,7 @@ perpendicular_component = merge_methods.perpendicular_component
 
 
 def add_perpendicular(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: RecipeNodeOrModel, *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: RecipeNodeOrPath, *,
     alpha: Hyper = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -118,8 +136,8 @@ ties_sum = merge_methods.ties_sum
 
 
 def add_difference_ties(
-    base: RecipeNodeOrModel,
-    *models: RecipeNodeOrModel,
+    base: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,
     alpha: float,
     k: float = 0.2,
     device: Optional[str] = None,
@@ -150,7 +168,7 @@ def add_difference_ties(
 
 
 def copy_region(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel], *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath], *,
     width: Hyper = 0.5,
     offset: Hyper = 0.0,
     top_k: bool = False,
@@ -174,7 +192,8 @@ def copy_region(
             dtype=dtype,
         )
 
-    res = getattr(merge_methods, "top_k_tensor_sum" if top_k else "tensor_sum")(
+    copy_method = [merge_methods.copy_region, merge_methods.copy_top_k][int(top_k)]
+    res = copy_method(
         a=a,
         b=b,
         alpha=width,
@@ -201,7 +220,7 @@ crossover = merge_methods.crossover
 
 
 def rotate(
-    a: RecipeNodeOrModel, b: RecipeNodeOrModel, c: Optional[RecipeNodeOrModel] = None, *,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 1.0,
     beta: Hyper = 0.0,
     device: Optional[str] = None,

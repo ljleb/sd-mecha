@@ -256,7 +256,7 @@ def copy_difference(  # aka train_difference
     b: Tensor | SharedMergeSpace,
     c: Tensor | SharedMergeSpace,
     **kwargs,
-):
+) -> Tensor | SharedMergeSpace:
     ab_diff = a - b
     bc_dist = torch.abs(b - c)
     ba_dist = torch.abs(b - a)

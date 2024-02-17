@@ -1,14 +1,15 @@
+import functools
 import inspect
 import pathlib
 import textwrap
 
 import torch
-from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, SymbolicRecipeNode
-from sd_mecha.weight import Hyper
+from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, MergeRecipeNode
+from sd_mecha.hypers import Hyper
 from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, Set
 
 
-RecipeNodeOrModel = RecipeNode | str | pathlib.Path
+RecipeNodeOrPath = RecipeNode | str | pathlib.Path
 T = TypeVar("T")
 
 
@@ -101,6 +102,9 @@ class MergeMethod:
     def get_model_varargs_name(self) -> Optional[str]:
         return inspect.getfullargspec(self.__f).varargs
 
+    def get_name(self) -> str:
+        return self.__name
+
 
 def convert_to_recipe(
     f: Optional[Callable] = None,
@@ -117,7 +121,7 @@ def __convert_to_recipe_impl(
     default_hypers = merge_method.get_default_hypers()
 
     model_params = "".join(
-        f"{model_name}: {SymbolicRecipeNode.__name__}, "
+        f"{model_name}: {MergeRecipeNode.__name__}, "
         for model_name in merge_method.get_model_names()
     )
     hyper_params = "".join(
@@ -145,13 +149,13 @@ def __convert_to_recipe_impl(
     exec(textwrap.dedent(f"""
         def {f.__name__}(
             {model_params}
-            *args: {SymbolicRecipeNode.__name__},
+            *args: {MergeRecipeNode.__name__},
             {hyper_params}
             device: {Optional.__name__}[{str.__name__}] = None,
             dtype: {Optional.__name__}[{torch.dtype.__name__}] = None,
             **kwargs,
         ):
-            return {SymbolicRecipeNode.__name__}(
+            return {MergeRecipeNode.__name__}(
                 merge_method,
                 {model_args}
                 *({path_to_node.__name__}(arg) for arg in args),
@@ -162,10 +166,19 @@ def __convert_to_recipe_impl(
     """), fn_globals, fn_locals)
     res = fn_locals[f.__name__]
     res.__wrapped__ = f
+    methods_registry[f.__name__] = res
     return res
 
 
-def path_to_node(a: RecipeNodeOrModel) -> RecipeNode:
+methods_registry = {}
+
+
+@functools.cache
+def path_to_node(a: RecipeNodeOrPath) -> RecipeNode:
     if isinstance(a, (str, pathlib.Path)):
         return ModelRecipeNode(a)
     return a
+
+
+def clear_model_paths_cache():
+    path_to_node.cache_clear()

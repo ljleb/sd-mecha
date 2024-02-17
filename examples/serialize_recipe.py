@@ -22,8 +22,5 @@ recipe = sd_mecha.weighted_sum(
     ),
 )
 
-merger = sd_mecha.RecipeMerger(
-    base_dir=r"E:\sd\models\Stable-diffusion",
-)
 
-merger.merge_and_save(recipe, output_path="basic_merge")
+sd_mecha.serialize_and_save(recipe, "recipes/test_split_unet_text_encoder.mecha")
