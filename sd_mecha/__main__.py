@@ -33,7 +33,6 @@ def except_fallback(f):
 
 
 def print_exception(debug: bool, e: Exception):
-    """Prints exception information based on verbosity."""
     if debug:
         click.echo(traceback.format_exc(), err=True)
     else:
@@ -42,7 +41,6 @@ def print_exception(debug: bool, e: Exception):
 
 @click.group()
 def main():
-    """Main entry point for CLI."""
     pass
 
 
