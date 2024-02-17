@@ -20,7 +20,7 @@ DTYPE_MAPPING = {
 def except_fallback(f):
     @functools.wraps(f)
     def wrapped(*args, **kwargs):
-        verbose = kwargs.get('verbose', False)
+        verbose = kwargs['verbose']
         try:
             return f(*args, **kwargs)
         except UserError as e:
