@@ -38,11 +38,11 @@ I also needed something that allows to fully merge an entire tree of models with
 Typically, mergers load the entire list models into memory before initiating the merge process.
 This is very inefficient when the merge focuses on each key individually:
 
-[image of typical merge graph](/media/memory-gone.PNG)
+![image of typical merge graph](/media/memory-gone.PNG)
 
 sd-mecha doesn't have this problem as it saves a key as soon as it can:
 
-[image of sd-mecha merge graph](/media/did-you-see-something.PNG)
+![image of sd-mecha merge graph](/media/did-you-see-something.PNG)
 
 This allows to simultaneously merge a very large number of models (i.e. 8+) on low-end hardware,
 as only one model key needs to live in memory at a time.
