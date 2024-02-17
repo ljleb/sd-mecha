@@ -113,7 +113,7 @@ copy_difference = train_difference = merge_methods.copy_difference
 similarity_add_difference = merge_methods.similarity_add_difference
 normalized_similarity_sum = cosine_add_a = merge_methods.normalized_similarity_sum
 similarity_sum = cosine_add_b = merge_methods.similarity_sum
-ties_add_difference = merge_methods.ties_add_difference
+ties_sum = merge_methods.ties_sum
 
 
 def copy_region(

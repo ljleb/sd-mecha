@@ -146,29 +146,26 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 
 
 @convert_to_recipe
-def ties_add_difference(
+def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
     alpha: float,
-    beta: float,
+    k: float = 0.2,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     deltas = []
     signs = []
     for m in models:
-        deltas.append(filter_top_k(m, beta))
+        deltas.append(filter_top_k(m, k))
         signs.append(torch.sign(deltas[-1]))
 
     signs = torch.stack(signs, dim=0)
     final_sign = torch.sign(torch.sum(signs, dim=0))
     deltas = torch.stack(deltas, dim=0)
-    delta_filters = deltas * (signs == final_sign).float()
+    delta_filters = (signs == final_sign).float()
+    filtered_delta = (deltas * delta_filters).sum(dim=0)
 
-    res = torch.zeros_like(models[0], device=models[0].device)
-    for delta_filter in delta_filters:
-        res += delta_filter
-
-    param_count = torch.sum(delta_filters, dim=0)
-    return alpha * torch.nan_to_num(res / param_count)
+    param_counts = torch.sum(delta_filters, dim=0)
+    return alpha * torch.nan_to_num(filtered_delta / param_counts)
 
 
 def filter_top_k(a: Tensor, k: float):

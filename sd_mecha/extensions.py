@@ -5,12 +5,10 @@ import textwrap
 import torch
 from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, SymbolicRecipeNode
 from sd_mecha.weight import Hyper
-from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, \
-    Set
+from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, Set
+
 
 RecipeNodeOrModel = RecipeNode | str | pathlib.Path
-
-
 T = TypeVar("T")
 
 
@@ -58,6 +56,9 @@ class MergeMethod:
     def get_return_merge_space(self, merge_spaces_args: List[MergeSpace]) -> MergeSpace:
         type_hints = get_type_hints(self.__f)
         model_names = self.get_model_names()
+        varargs_name = self.get_model_varargs_name()
+        if varargs_name is not None:
+            model_names.extend([varargs_name]*(len(merge_spaces_args) - len(model_names)))
 
         resolved_input_spaces = {}
         for param, merge_space_arg in zip(model_names, merge_spaces_args):
@@ -96,6 +97,9 @@ class MergeMethod:
 
     def get_default_hypers(self) -> Dict[str, Hyper]:
         return inspect.getfullargspec(self.__f).kwonlydefaults or {}
+
+    def get_model_varargs_name(self) -> Optional[str]:
+        return inspect.getfullargspec(self.__f).varargs
 
 
 def convert_to_recipe(
@@ -150,7 +154,7 @@ def __convert_to_recipe_impl(
             return {SymbolicRecipeNode.__name__}(
                 merge_method,
                 {model_args}
-                *args,
+                *({path_to_node.__name__}(arg) for arg in args),
                 {hyper_args}
                 device=device,
                 dtype=dtype,

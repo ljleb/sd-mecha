@@ -91,10 +91,10 @@ class SymbolicRecipeNode(RecipeNode):
         self.__hypers = {k: validate_hyper(v) for k, v in hypers.items()}
         self.__device = device
         self.__dtype = dtype
-        self.__merge_space = self.__merge_method.get_return_merge_space(
+        self.__merge_space = self.__merge_method.get_return_merge_space([
             model.merge_space
             for model in self.__models
-        )
+        ])
 
     def visit(self, key: str, scheduler):
         return scheduler.symbolic_merge(
