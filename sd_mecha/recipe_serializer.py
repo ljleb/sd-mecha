@@ -98,11 +98,11 @@ class SerializerVisitor:
         self.instructions = instructions if instructions is not None else []
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.state_dict}"'
+        line = f'model "{node.path}"'
         return self.add_instruction(line)
 
     def visit_lora(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'lora "{node.state_dict}"'
+        line = f'lora "{node.path}"'
         return self.add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
