@@ -163,7 +163,7 @@ class GatherInputDictsVisitor:
 
 
 def load_dict(
-    node: recipe_nodes.ModelRecipeNode | recipe_nodes.LoraRecipeNode,
+    node: recipe_nodes.LeafRecipeNode,
     dict_class: type,
     base_dir: pathlib.Path,
 ) -> Mapping[str, torch.Tensor]:
