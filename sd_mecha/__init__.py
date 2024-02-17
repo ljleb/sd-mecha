@@ -59,7 +59,7 @@ def add_difference(
 
     if clip_to_ab:
         if a.merge_space != b.merge_space:
-            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clip the merge")
+            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clip the merge.")
         res = clip(
             res, a, b,
             device=device,
@@ -175,7 +175,8 @@ def copy_region(
             dtype=dtype,
         )
 
-    res = getattr(merge_methods, "top_k_tensor_sum" if top_k else "tensor_sum")(
+    copy_method = [merge_methods.copy_top_k, merge_methods.copy_region][int(top_k)]
+    res = copy_method(
         a=a,
         b=b,
         alpha=width,
