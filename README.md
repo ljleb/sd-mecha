@@ -30,7 +30,7 @@ See the [examples](/examples) directory for other examples.
 ## Features
 
 - Memory efficient model merging -- merge a very large number of models at the same time
-- Mecha recipes as a storable and executable format (.mecha)
+- Mecha recipes as a textual and interpretable format (.mecha)
 - Custom merge method programming interface for experiments
 
 Coming soon:
