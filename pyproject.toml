@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sd-mecha"
-version = "0.0.1"
+version = "0.0.2"
 description = "Stable Diffusion recipe merger"
 readme = "README.md"
 authors = [{ name = "ljleb" }]
@@ -16,7 +16,6 @@ classifiers = [
 dependencies = [
     "click",
     "numpy",
-    "safetensors",
     "tqdm",
     "scipy",
     "fuzzywuzzy",
