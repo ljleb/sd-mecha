@@ -22,6 +22,11 @@ dependencies = [
     "python-Levenshtein",
 ]
 
+[tool.setuptools]
+packages = [
+    "sd_mecha"
+]
+
 [project.urls]
 Homepage = "https://github.com/ljleb/sd-mecha"
 Issues = "https://github.com/ljleb/sd-mecha/issues"

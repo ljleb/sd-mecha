@@ -34,7 +34,7 @@ class InModelSafetensorsDict:
         return (
             key
             for key in self.header.keys()
-            if key is not "__metadata__"
+            if key != "__metadata__"
         )
 
     def values(self):
