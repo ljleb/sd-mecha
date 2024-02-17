@@ -11,12 +11,29 @@ from sd_mecha.recipe_serializer import serialize, deserialize
 
 
 def merge_and_save(
-    merge_tree: recipe_nodes.RecipeNode,
+    recipe: recipe_nodes.RecipeNode,
     base_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
     scheduler = MergeScheduler(base_dir=base_dir)
-    scheduler.merge_and_save(merge_tree, output_path=output_path)
+    scheduler.merge_and_save(recipe, output_path=output_path)
+
+
+def serialize_and_save(
+    recipe: recipe_nodes.RecipeNode,
+    output_path: pathlib.Path | str,
+):
+    serialized = serialize(recipe)
+
+    if not isinstance(output_path, pathlib.Path):
+        output_path = pathlib.Path(output_path)
+    if not output_path.suffix:
+        output_path = output_path.with_suffix(".mecha")
+    output_path = output_path.absolute()
+
+    logging.info(f"Saving recipe to {output_path}")
+    with open(output_path, "w") as f:
+        f.write(serialized)
 
 
 weighted_sum = merge_methods.weighted_sum
