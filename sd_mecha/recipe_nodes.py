@@ -98,7 +98,6 @@ class SymbolicRecipeNode(RecipeNode):
 
     def visit(self, key: str, scheduler):
         return scheduler.symbolic_merge(
-            key,
             self.__merge_method,
             visit_deeper_first(self.__models, key, scheduler),
             {k: get_weight(v, key) for k, v in self.__hypers.items()},

@@ -14,7 +14,6 @@ class MergeScheduler:
         threads: int = 1,
         default_device: str = "cpu",
         default_dtype: Optional[torch.dtype] = torch.float32,
-        cache: Optional[dict] = None
     ):
         self.__base_dir = base_dir if base_dir is not None else base_dir
         if isinstance(self.__base_dir, str):
@@ -24,7 +23,6 @@ class MergeScheduler:
         self.__threads = threads
         self.__default_device = default_device
         self.__default_dtype = default_dtype
-        self.__cache = cache
 
     def load_model(self, state_dict: str | pathlib.Path | InModelSafetensorsDict) -> InModelSafetensorsDict:
         if isinstance(state_dict, InModelSafetensorsDict):
@@ -50,10 +48,7 @@ class MergeScheduler:
 
         return InLoraSafetensorsDict(state_dict)
 
-    def symbolic_merge(self, key, merge_method, models, hypers, device, dtype):
-        if self.__cache is not None and key not in self.__cache:
-            self.__cache[key] = {}
-
+    def symbolic_merge(self, merge_method, models, hypers, device, dtype):
         return merge_method(
             models,
             hypers,
@@ -82,6 +77,7 @@ class MergeScheduler:
             k: {k: v for k, v in h.items() if k != "data_offsets"}
             for input_dict in input_dicts
             for k, h in input_dict.header.items()
+            if k != "__metadata__"
         }
 
         def _get_any_tensor(key: str):
@@ -95,7 +91,7 @@ class MergeScheduler:
         progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
-            progress.set_postfix({"key": key, "shape": merged_header[key]["shape"]})
+            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
             try:
                 merged = recipe.visit(key, self)
             except KeyError:
@@ -104,7 +100,9 @@ class MergeScheduler:
             progress.update()
 
         def _forward_and_save(key: str):
-            progress.set_postfix({"key": key})
+            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
+            t = _get_any_tensor(key)
+            output[key] = t.to(save_dtype)
             progress.update()
 
         with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -115,7 +113,8 @@ class MergeScheduler:
                 elif is_merge_key(key):
                     futures.append(executor.submit(_merge_and_save, key))
                 else:
-                    progress.update()
+                    progress.total -= 1
+                    progress.refresh()
 
         for res in futures:
             res.result()

@@ -17,7 +17,7 @@ class InModelSafetensorsDict:
         self.close()
 
     def __getitem__(self, key):
-        if key not in self.header:
+        if key not in self.header or key == "__metadata__":
             raise KeyError(key)
         return self._load_tensor(key)
 
@@ -31,14 +31,19 @@ class InModelSafetensorsDict:
         self.file.close()
 
     def keys(self):
-        return self.header.keys()
+        return (
+            key
+            for key in self.header.keys()
+            if key is not "__metadata__"
+        )
 
     def values(self):
         for key in self.keys():
             yield self[key]
 
     def items(self):
-        return zip(self.keys(), self.values())
+        for key in self.keys():
+            yield key, self[key]
 
     def _read_header(self):
         header_size_bytes = self.file.read(8)

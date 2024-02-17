@@ -36,13 +36,13 @@ def slerp(
     ab_dot = torch.sum(a_normalized * b_normalized)
 
     if 1 - torch.abs(ab_dot) < EPSILON:
-        return weighted_sum.__wrapped__(a, b, alpha)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     omega = torch.arccos(ab_dot)
     a_contrib = a * torch.sin((1-alpha)*omega)
     b_contrib = b * torch.sin(alpha*omega)
     res = (a_contrib + b_contrib) / torch.sin(omega)
-    return res * weighted_sum.__wrapped__(a.norm(), b.norm(), alpha)
+    return res * weighted_sum.__wrapped__(a.norm(), b.norm(), alpha=alpha)
 
 
 @convert_to_recipe
@@ -89,7 +89,7 @@ def multiply_difference(
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     a_pow = torch.pow(torch.abs(a), (1 - alpha))
     b_pow = torch.pow(torch.abs(b), alpha)
-    difference = torch.copysign(a_pow * b_pow, weighted_sum.__wrapped__(a, b, sign_alpha))
+    difference = torch.copysign(a_pow * b_pow, weighted_sum.__wrapped__(a, b, alpha=sign_alpha))
     return difference
 
 
@@ -106,8 +106,8 @@ def similarity_add_difference(
     similarity = (a * b / threshold**2 + 1) / 2
     similarity = torch.nan_to_num(similarity * similarity_scale, nan=similarity_scale)
 
-    ab_diff = add_difference.__wrapped__(a, b, alpha)
-    ab_sum = weighted_sum.__wrapped__(a, b, alpha / 2)
+    ab_diff = add_difference.__wrapped__(a, b, alpha=alpha)
+    ab_sum = weighted_sum.__wrapped__(a, b, alpha=alpha / 2)
     return (1 - similarity) * ab_diff + similarity * ab_sum
 
 
@@ -142,7 +142,7 @@ def similarity_sum(  # aka add_cosine_b
 
 def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -> Tensor:
     k = 1 - torch.clamp(similarity - alpha, 0, 1)
-    return weighted_sum.__wrapped__(a, b, k)
+    return weighted_sum.__wrapped__(a, b, alpha=k)
 
 
 @convert_to_recipe
@@ -284,7 +284,7 @@ def distribution_crossover(
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
     if a.shape == ():
-        return weighted_sum.__wrapped__(a, b, alpha)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     c_indices = torch.argsort(torch.flatten(c))
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
@@ -314,7 +314,7 @@ def crossover(
         return a
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, beta)
+        return weighted_sum.__wrapped__(a, b, alpha=beta)
 
     if a.shape[0] > 40000 or len(a.shape) == 4 and sum(a.shape[2:]) > 2:
         shape = a.shape[1:]
@@ -375,7 +375,7 @@ def rotate(
 
     is_conv = len(a.shape) == 4 and a.shape[-1] != 1
     if len(a.shape) == 0 or is_conv or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, beta)
+        return weighted_sum.__wrapped__(a, b, alpha=beta)
 
     if len(a.shape) == 4:
         shape_2d = (-1, functools.reduce(operator.mul, a.shape[1:]))
@@ -387,7 +387,7 @@ def rotate(
 
     a_centroid = a_neurons.mean(0)
     b_centroid = b_neurons.mean(0)
-    new_centroid = weighted_sum.__wrapped__(a_centroid, b_centroid, alpha)
+    new_centroid = weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alpha)
     if len(a.shape) == 1 or len(a.shape) == 2 and a.shape[0] == 1:
         return new_centroid.reshape_as(a)
 
@@ -434,7 +434,7 @@ def rotate(
 
     if beta != 0:
         # interpolate the relationship between the neurons
-        a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, beta)
+        a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, alpha=beta)
 
     a_neurons @= transform
     a_neurons += new_centroid
@@ -462,8 +462,7 @@ def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tenso
 @convert_to_recipe
 def clip(
     a: Tensor | SharedMergeSpace,
-    bounds: Tensor | SharedMergeSpace,
-    *,
+    *bounds: Tensor | SharedMergeSpace,
     stiffness: float = 0.0,
     **kwargs,
 ) -> Tensor | SharedMergeSpace:
@@ -479,7 +478,7 @@ def clip(
             smallest_positive = torch.where((smallest_positive >= bound) & (bound >= centers), bound, smallest_positive)
             largest_negative = torch.where((largest_negative <= bound) & (bound <= centers), bound, largest_negative)
 
-        maximums = weighted_sum.__wrapped__(maximums, smallest_positive, stiffness)
-        minimums = weighted_sum.__wrapped__(minimums, largest_negative, stiffness)
+        maximums = weighted_sum.__wrapped__(maximums, smallest_positive, alpha=stiffness)
+        minimums = weighted_sum.__wrapped__(minimums, largest_negative, alpha=stiffness)
 
     return torch.minimum(torch.maximum(a, minimums), maximums)

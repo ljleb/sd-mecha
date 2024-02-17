@@ -5,6 +5,7 @@ from typing import Optional
 from sd_mecha.merge_scheduler import MergeScheduler
 from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrModel, path_to_node
+from sd_mecha.recipe_nodes import MergeSpace
 from sd_mecha.weight import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
 
 
@@ -114,6 +115,38 @@ similarity_add_difference = merge_methods.similarity_add_difference
 normalized_similarity_sum = cosine_add_a = merge_methods.normalized_similarity_sum
 similarity_sum = cosine_add_b = merge_methods.similarity_sum
 ties_sum = merge_methods.ties_sum
+
+
+def add_difference_ties(
+    base: RecipeNodeOrModel,
+    *models: RecipeNodeOrModel,
+    alpha: float,
+    k: float = 0.2,
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> recipe_nodes.RecipeNode:
+    base = path_to_node(base)
+    models = tuple(path_to_node(model) for model in models)
+    models = tuple(
+        subtract(model, base)
+        if model.merge_space is MergeSpace.MODEL else
+        model
+        for model in models
+    )
+    res = ties_sum(
+        *models,
+        alpha=alpha,
+        k=k,
+        device=device,
+        dtype=dtype,
+    )
+    return add_difference(
+        base,
+        res,
+        alpha=1.0,
+        device=device,
+        dtype=dtype,
+    )
 
 
 def copy_region(
