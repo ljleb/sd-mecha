@@ -33,6 +33,9 @@ def deserialize(recipe: List[str]) -> RecipeNode:
         named_args = {}
         for arg_index, arg in enumerate(args):
             if '=' in arg:
+                # note: this is wrong if "=" is inside quotes
+                # however, quoted kwarg values (aka string hypers) will raise an exception in the constructor of recipes
+                # so I'm not gonna bother fixing this with the tokenizer until it is actually useful to do so
                 key, value = arg.split('=')
                 named_args[key] = get_arg_value(value, arg_index)
             else:

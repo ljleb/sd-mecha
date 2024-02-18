@@ -78,7 +78,9 @@ class MergeRecipeNode(RecipeNode):
     ):
         self.merge_method = merge_method
         self.models = models
-        self.hypers = {k: validate_hyper(v) for k, v in hypers.items()}
+        for hyper_v in hypers.values():
+            validate_hyper(hyper_v)
+        self.hypers = hypers
         self.device = device
         self.dtype = dtype
         self.__merge_space = self.merge_method.get_return_merge_space([

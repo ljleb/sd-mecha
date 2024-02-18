@@ -3,10 +3,12 @@ import pathlib
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, OutSafetensorsDict
-from sd_mecha import extensions, recipe_nodes
+from sd_mecha import extensions, recipe_nodes, streaming
 from sd_mecha.hypers import get_hyper
 from tqdm import tqdm
 from typing import Optional, Tuple, List, Mapping
+
+from sd_mecha.user_error import UserError
 
 
 class RecipeMerger:
@@ -44,6 +46,7 @@ class RecipeMerger:
 
         input_dicts_visitor = GatherInputDictsVisitor(self.__base_dir)
         input_dicts = recipe.accept(input_dicts_visitor)
+        validate_same_sd_version(input_dicts)
         merged_header = {
             k: {k: v for k, v in h.items() if k != "data_offsets"}
             for input_dict in input_dicts
@@ -185,10 +188,48 @@ def is_passthrough_key(key: str, header: dict):
     is_vae = key.startswith("first_stage_model.")
     is_time_embed = key.startswith("model.diffusion_model.time_embed.")
     is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
-    return is_metadata or is_vae or is_time_embed or is_position_ids or header["shape"] == [1000]
+
+    # sdxl only
+    is_label_embed = key.startswith("model.diffusion_model.label_emb.")
+    is_position_ids = is_position_ids or key == "conditioner.embedders.0.transformer.text_model.embeddings.position_ids"
+
+    return is_metadata or is_vae or is_time_embed or is_position_ids or is_label_embed or header["shape"] == [1000]
 
 
 def is_merge_key(key: str):
     is_unet = key.startswith("model.diffusion_model.")
     is_text_encoder = key.startswith("cond_stage_model.")
+
+    # sdxl only
+    is_text_encoder = is_text_encoder or key.startswith("conditioner.embedders.")
+
     return is_unet or is_text_encoder
+
+
+def validate_same_sd_version(input_dicts: List[streaming.InSafetensorsDict]):
+    are_sdxl = [
+        input_dict.is_sdxl
+        for input_dict in input_dicts
+    ]
+    if all(are_sdxl) or not any(are_sdxl):
+        return
+
+    sdxl_count = are_sdxl.count(True)
+    sd15_count = are_sdxl.count(False)
+    if sdxl_count < sd15_count:
+        bad_count, good_count = sdxl_count, sd15_count
+        bad_version, good_version = "SDXL", "SD1.5"
+        bad_models = ', '.join(
+            input_dict.input_path
+            for is_sdxl, input_dict in zip(are_sdxl, input_dicts)
+            if is_sdxl
+        )
+    else:
+        bad_count, good_count = sd15_count, sdxl_count
+        bad_version, good_version = "SD1.5", "SDXL"
+        bad_models = ', '.join(
+            input_dict.input_path
+            for is_sdxl, input_dict in zip(are_sdxl, input_dicts)
+            if not is_sdxl
+        )
+    raise UserError(f"Input models are not all the same version. Found {good_count} {good_version} vs {bad_count} {bad_version} models ({bad_models})")

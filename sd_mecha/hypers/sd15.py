@@ -1,9 +1,8 @@
-from typing import Dict, Optional
-import fuzzywuzzy.process
+from typing import Optional
 
 
 SD15_HYPERS = {
-    f"unet_{k}": v
+    f"sd15_unet_{k}": v
     for k, v in ({
         f"block_{k}": f"model.diffusion_model.{v}"
         for k, v in ({
@@ -47,7 +46,7 @@ SD15_HYPERS = {
         }).items()
     }).items()
 } | {
-    f"txt_{k}": v
+    f"l14_txt_{k}": v
     for k, v in ({
         f"block_{k}": f"cond_stage_model.transformer.text_model.{v}"
         for k, v in ({
@@ -74,40 +73,9 @@ SD15_HYPERS = {
         }).items()
     }).items()
 }
-Hyper = float | Dict[str, float]
 
 
-def get_hyper(hyper: Hyper, key: str) -> float:
-    if isinstance(hyper, float):
-        return hyper
-    elif isinstance(hyper, dict):
-        hypers = []
-        default = 0.0
-        for key_identifier, weight in hyper.items():
-            partial_key = SD15_HYPERS[key_identifier]
-            if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
-                hypers.append(weight)
-            elif key_identifier.endswith("_default"):
-                default = weight
-        if hypers:
-            return sum(hypers) / len(hypers)
-        return default
-    else:
-        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
-
-
-def validate_hyper(hyper: Hyper) -> Hyper:
-    if isinstance(hyper, dict):
-        for key in hyper.keys():
-            if key not in SD15_HYPERS and not key.endswith("_default"):
-                suggestion = fuzzywuzzy.process.extractOne(key, SD15_HYPERS.keys())[0]
-                raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
-    elif not isinstance(hyper, float):
-        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
-    return hyper
-
-
-def unet15_blocks(
+def sd15_unet_blocks(
     in00: Optional[float] = None,
     in01: Optional[float] = None,
     in02: Optional[float] = None,
@@ -137,12 +105,12 @@ def unet15_blocks(
 ) -> dict:
     out = out11
     return {
-        f"txt_block_{k}": v if v is not None else default
+        f"sd15_unet_block_{k}": v if v is not None else default
         for k, v in locals().items()
     }
 
 
-def unet15_classes(
+def sd15_unet_classes(
     default: float = 0.0, *,
     in0: Optional[float] = None,
     op: Optional[float] = None,
@@ -173,12 +141,12 @@ def unet15_classes(
     out2: Optional[float] = None,
 ):
     return {
-        f"unet_class_{k}": v if v is not None else default
+        f"sd15_unet_class_{k}": v if v is not None else default
         for k, v in locals().items()
     }
 
 
-def txt15_blocks(
+def sd15_txt_blocks(
     in00: Optional[float] = None,
     in01: Optional[float] = None,
     in02: Optional[float] = None,
@@ -196,12 +164,12 @@ def txt15_blocks(
     embed = in00
     final = in11
     return {
-        f"txt_block_{k}": v if v is not None else default
+        f"l14_txt_block_{k}": v if v is not None else default
         for k, v in locals().items()
     }
 
 
-def txt15_classes(
+def sd15_txt_classes(
     default: float = 0.0, *,
     pos_embed: Optional[float] = None,
     token_embed: Optional[float] = None,
@@ -216,6 +184,6 @@ def txt15_classes(
     out: Optional[float] = None,
 ):
     return {
-        f"txt_class_{k}": v if v is not None else default
+        f"l14_txt_class_{k}": v if v is not None else default
         for k, v in locals().items()
     }

@@ -6,7 +6,11 @@ from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.hypers import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
+from sd_mecha.hypers import (
+    Hyper,
+    sd15_unet_blocks, sd15_unet_classes, sd15_txt_blocks, sd15_txt_classes,
+    sdxl_unet_blocks, sdxl_unet_classes, sdxl_txt_blocks, sdxl_txt_classes, sdxl_txt_g14_blocks, sdxl_txt_g14_classes,
+)
 from sd_mecha.recipe_serializer import serialize, deserialize
 
 

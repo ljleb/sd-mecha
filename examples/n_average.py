@@ -19,4 +19,4 @@ for i, model in enumerate(models[1:], start=2):
     recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i, dtype=dtype)
 
 merger = sd_mecha.RecipeMerger(base_dir=r"E:\sd\models\Stable-diffusion")
-merger.merge_and_save(recipe, output_path="n_average")
+merger.merge_and_save(recipe, output_path="n_average", threads=10)
