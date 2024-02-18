@@ -189,7 +189,7 @@ class OutSafetensorsDict:
             for tensor_info in template_header.values()
             for offset in tensor_info.get('data_offsets', [0, 0])
         )
-        dummy_number = 10 ** min(max_digits, 10) - 1
+        dummy_number = 10 ** max(max_digits, 10) - 1
 
         dummy_header = {
             key: {**value, "data_offsets": [dummy_number, dummy_number]}
