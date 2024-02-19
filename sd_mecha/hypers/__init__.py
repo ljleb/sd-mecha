@@ -14,7 +14,7 @@ def get_hyper(hyper: Hyper, key: str) -> float:
         hypers = []
         default = 0.0
         for key_identifier, weight in hyper.items():
-            partial_key = all_hypers[key_identifier]
+            partial_key = all_hypers.get(key_identifier, key_identifier)
             if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
                 hypers.append(weight)
             elif key_identifier.endswith("_default"):

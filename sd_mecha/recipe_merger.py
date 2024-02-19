@@ -46,7 +46,7 @@ class RecipeMerger:
             output_path = output_path.with_suffix(".safetensors")
         logging.info(f"Saving to {output_path}")
 
-        number_of_dicts = recipe.accept(recipe_nodes.ModelsCountVisitor())
+        number_of_dicts = recipe.accept(recipe_nodes.ModelsCountVisitor()) + 1  # output dict
         input_dicts = recipe.accept(GatherInputDictsVisitor(
             self.__base_dir,
             total_buffer_size // number_of_dicts,
@@ -66,7 +66,7 @@ class RecipeMerger:
                 except KeyError:
                     continue
 
-        output = OutSafetensorsDict(output_path, merged_header)
+        output = OutSafetensorsDict(output_path, merged_header, total_buffer_size // number_of_dicts)
         progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
@@ -78,7 +78,7 @@ class RecipeMerger:
                     self.__default_dtype,
                 )
                 merged = recipe.accept(key_merger)
-            except KeyError:
+            except KeyError as e:
                 merged = _get_any_tensor(key)
             output[key] = merged.to(save_dtype)
             progress.update()

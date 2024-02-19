@@ -3,6 +3,8 @@ import multiprocessing
 import os
 import pathlib
 import struct
+from typing import Optional
+
 import torch
 import warnings
 
@@ -165,12 +167,15 @@ InSafetensorsDict = InModelSafetensorsDict | InLoraSafetensorsDict
 
 
 class OutSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, template_header: dict):
+    def __init__(self, file_path: pathlib.Path, template_header: dict, buffer_size: int):
         self.file = file_path.open('wb+')
         self.lock = multiprocessing.Lock()
         self.header = {}
         self.current_offset = 0
         self.header_size = self._init_buffer(template_header)
+        self.buffer_size = buffer_size
+        self.buffer_used = 0
+        self.buffer = bytearray(buffer_size)
 
     def __del__(self):
         self.file.close()
@@ -180,16 +185,33 @@ class OutSafetensorsDict:
             raise ValueError("key already exists")
 
         tensor_bytes = tensor.cpu().numpy().tobytes()
+        tensor_size = len(tensor_bytes)
+
         with self.lock:
+            if tensor_size > len(self.buffer) - self.buffer_used:
+                self._flush_buffer(next_tensor_size=tensor_size)
+
+            self.buffer[self.buffer_used:self.buffer_used + tensor_size] = tensor_bytes
             offset = self.current_offset
-            self.current_offset += len(tensor_bytes)
-            self.file.write(tensor_bytes)
+            self.current_offset += tensor_size
+            self.buffer_used += tensor_size
 
         self.header[key] = {
             "dtype": DTYPE_REVERSE_MAPPING[tensor.dtype],
             "shape": list(tensor.shape),
             "data_offsets": [offset, offset + len(tensor_bytes)]
         }
+
+    def _flush_buffer(self, next_tensor_size: Optional[int] = None):
+        if self.buffer_used > 0:
+            self.file.write(self.buffer[:self.buffer_used])
+            self.buffer_used = 0  # Reset used buffer size
+
+        if next_tensor_size is not None:
+            # Adjust buffer size if the next tensor is larger than the default size
+            required_buffer_size = max(self.buffer_size, next_tensor_size)
+            if required_buffer_size != len(self.buffer):
+                self.buffer = bytearray(required_buffer_size)
 
     def __len__(self):
         return len(self.header)
@@ -214,13 +236,21 @@ class OutSafetensorsDict:
         return header_size
 
     def finalize(self):
-        header_json = json.dumps(self.header, separators=(',', ':')).encode('utf-8')
-        self.file.seek(8)
-        self.file.write(header_json)
-        overhead = self.header_size - len(header_json)
-        if overhead < 0:
-            raise ValueError("safetensors header does not fit into memory")
-        self.file.write(b' ' * overhead)
+        with self.lock:
+            # I'm tempted to flush all tensors in case this was the result of a very long computation
+            # idk if it crashes because the header doesn't fit, then maybe there's a way for you to guess the start of each tensor...
+            # good luck!
+            self._flush_buffer()
+
+            header_json = json.dumps(self.header, separators=(',', ':')).encode('utf-8')
+            overhead = self.header_size - len(header_json)
+            if overhead < 0:
+                raise ValueError("Safetensors header does not fit into preallocated space.")
+
+            self.file.seek(8)
+            self.file.write(header_json)
+            self.file.write(b' ' * overhead)
+            self.file.flush()
 
 
 DTYPE_MAPPING = {
