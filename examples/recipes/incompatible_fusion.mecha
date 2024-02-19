@@ -1,0 +1,7 @@
+model "A"
+model "B"
+model "C"
+call "subtract" &1 &2
+call "add_difference" &0 &3 alpha=0.5
+call "clip" &4 &0 &1 stiffness=0.0
+call "rotate" &5 &0 beta=0.0 alpha=1.0

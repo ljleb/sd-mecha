@@ -120,7 +120,7 @@ class KeyMergeVisitor:
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         return node.merge_method(
             self.__visit_deeper_first(node.models),
-            {k: get_hyper(v, self.__key) for k, v in node.hypers.items()},
+            {k: get_hyper(v, self.__key) for k, v in node.hypers.items()} | node.volatile_hypers,
             node.device if node.device is not None else self.__default_device,
             node.dtype if node.dtype is not None else self.__default_dtype,
         )

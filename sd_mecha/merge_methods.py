@@ -360,7 +360,7 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float
     return dft_filter
 
 
-@convert_to_recipe
+@convert_to_recipe(volatile_hypers=["cache"])
 def rotate(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,

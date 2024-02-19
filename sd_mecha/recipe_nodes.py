@@ -2,7 +2,7 @@ import abc
 import enum
 import pathlib
 import torch
-from typing import Optional
+from typing import Optional, Dict, Any
 from sd_mecha.streaming import InModelSafetensorsDict, InLoraSafetensorsDict
 from sd_mecha.hypers import validate_hyper, Hyper
 
@@ -72,15 +72,17 @@ class MergeRecipeNode(RecipeNode):
         self,
         merge_method,
         *models: RecipeNode,
+        hypers: Dict[str, Hyper],
+        volatile_hypers: Dict[str, Any],
         device: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
-        **hypers: Hyper
     ):
         self.merge_method = merge_method
         self.models = models
         for hyper_v in hypers.values():
             validate_hyper(hyper_v)
         self.hypers = hypers
+        self.volatile_hypers = volatile_hypers
         self.device = device
         self.dtype = dtype
         self.__merge_space = self.merge_method.get_return_merge_space([
