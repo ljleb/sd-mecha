@@ -2,15 +2,20 @@ import torch
 import sd_mecha
 sd_mecha.set_log_level()
 
-a = "A"
-b = "B"
-c = "C"
+a = "animagineXLV3_v30"
+b = "juggernautXL_v9Rundiffusionphoto2"
+c = "pure/sd_xl_base"
 
 recipe = sd_mecha.rotate(
-    sd_mecha.add_difference(a, b, c, clip_to_ab=True),
+    sd_mecha.add_perpendicular(a, b, c),
     a,
-    device="cuda",
-    dtype=torch.float64,
+    alpha=0.99,
+    cache={},
+    device="cuda", dtype=torch.float64,
 )
 
-sd_mecha.serialize_and_save(recipe, output_path="recipes/incompatible_fusion")
+merger = sd_mecha.RecipeMerger(
+    models_dir=r"E:\sd\models\Stable-diffusion",
+)
+
+merger.merge_and_save(recipe)

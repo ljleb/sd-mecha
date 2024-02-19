@@ -367,14 +367,14 @@ def rotate(
     *,
     alpha: float,
     beta: float,
-    cache: Optional[Dict[str, Tensor]] = None,
+    cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if alpha == 0 and beta == 0:
         return a
 
     is_conv = len(a.shape) == 4 and a.shape[-1] != 1
-    if len(a.shape) == 0 or is_conv or torch.allclose(a.half(), b.half()):
+    if len(a.shape) <= 1 or is_conv or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=beta)
 
     if len(a.shape) == 4:
@@ -395,6 +395,12 @@ def rotate(
     b_neurons -= b_centroid
 
     alpha_is_float = alpha != round(alpha)
+
+    if cache is not None:
+        key = kwargs["key"]
+        if key not in cache:
+            cache[key] = {}
+        cache = cache[key]
 
     if cache is not None and "rotation" in cache:
         rotation = transform = cache["rotation"].to(a.device)

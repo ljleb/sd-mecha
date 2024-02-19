@@ -13,7 +13,9 @@ import warnings
 
 class InModelSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, buffer_size):
-        assert file_path.suffix == ".safetensors"
+        if not file_path.suffix == ".safetensors":
+            raise ValueError(f"Model type not supported: {file_path.suffix} (only safetensors are supported)")
+
         self.default_buffer_size = buffer_size
         self.file_path = file_path
         self.file = open(file_path, 'rb')

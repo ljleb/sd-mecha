@@ -15,11 +15,11 @@ from sd_mecha.user_error import UserError
 class RecipeMerger:
     def __init__(
         self, *,
-        base_dir: Optional[pathlib.Path | str] = None,
+        models_dir: Optional[pathlib.Path | str] = None,
         default_device: str = "cpu",
         default_dtype: Optional[torch.dtype] = torch.float32,
     ):
-        self.__base_dir = base_dir if base_dir is not None else base_dir
+        self.__base_dir = models_dir if models_dir is not None else models_dir
         if isinstance(self.__base_dir, str):
             self.__base_dir = pathlib.Path(self.__base_dir)
         if self.__base_dir is not None:
@@ -30,7 +30,7 @@ class RecipeMerger:
 
     def merge_and_save(
         self, recipe, *,
-        output_path: Optional[pathlib.Path | str] = None,
+        output_path: pathlib.Path | str = "merge",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 3,
         total_buffer_size: int = 2**32,
@@ -117,10 +117,14 @@ class KeyMergeVisitor:
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode) -> torch.Tensor:
         return node.state_dict[self.__key]
 
+    def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> torch.Tensor:
+        raise NotImplementedError(f"Interactive arguments are not yet implemented: parameter '{node.name}' has no value.")
+
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         return node.merge_method(
             self.__visit_deeper_first(node.models),
             {k: get_hyper(v, self.__key) for k, v in node.hypers.items()} | node.volatile_hypers,
+            self.__key,
             node.device if node.device is not None else self.__default_device,
             node.dtype if node.dtype is not None else self.__default_dtype,
         )
@@ -153,6 +157,9 @@ class GatherInputDictsVisitor:
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode) -> List[Mapping[str, torch.Tensor]]:
         node.state_dict = self.__load_dict(node, InLoraSafetensorsDict)
         return [node.state_dict]
+
+    def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode) -> List[Mapping[str, torch.Tensor]]:
+        return []
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> List[Mapping[str, torch.Tensor]]:
         return [

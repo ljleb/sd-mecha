@@ -1,11 +1,35 @@
+import pathlib
 import fuzzywuzzy.process
 from typing import List, Optional
+
+import safetensors.torch
+
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode, MergeSpace, ParameterRecipeNode
 from sd_mecha.user_error import UserError
 
 
-def deserialize(recipe: List[str]) -> RecipeNode:
+def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
+    if not isinstance(recipe, pathlib.Path):
+        recipe = pathlib.Path(recipe)
+    if models_dir is not None and not recipe.is_absolute():
+        recipe = models_dir / recipe
+    if not recipe.suffix:
+        try:
+            model_recipe = recipe.with_suffix(".safetensors")
+            with safetensors.safe_open(model_recipe, "pt") as f:
+                return recipe_nodes.ModelRecipeNode(model_recipe)
+        except safetensors.SafetensorError:
+            recipe = recipe.with_suffix(".mecha")
+
+    return deserialize(recipe)
+
+
+def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
+    if not isinstance(recipe, list):
+        with open(recipe, "r") as recipe:
+            recipe = recipe.readlines()
+
     results = []
 
     def parse(line):
@@ -17,6 +41,9 @@ def deserialize(recipe: List[str]) -> RecipeNode:
             results.append(ModelRecipeNode(*positional_args, **named_args))
         elif command == "lora":
             results.append(LoraRecipeNode(*positional_args, **named_args))
+        elif command == "parameter":
+            merge_space = MergeSpace[positional_args[1]]
+            results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
         elif command == "call":
             method, *positional_args = positional_args
             try:
@@ -102,11 +129,16 @@ class SerializerVisitor:
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
         line = f'model "{node.path}"'
-        return self.add_instruction(line)
+        return self.__add_instruction(line)
 
     def visit_lora(self, node: recipe_nodes.ModelRecipeNode) -> int:
         line = f'lora "{node.path}"'
-        return self.add_instruction(line)
+        return self.__add_instruction(line)
+
+    def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
+        merge_space = str(MergeSpace.MODEL).split(".")[1]
+        line = f'parameter "{node.name}" "{merge_space}"'
+        return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
         models = [
@@ -118,13 +150,13 @@ class SerializerVisitor:
         for hyper_k, hyper_v in node.hypers.items():
             if isinstance(hyper_v, dict):
                 dict_line = "dict" + "".join(f" {k}={v}" for k, v in hyper_v.items())
-                hyper_v = f"&{self.add_instruction(dict_line)}"
+                hyper_v = f"&{self.__add_instruction(dict_line)}"
             hypers.append(f" {hyper_k}={hyper_v}")
 
         line = f'call "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
-        return self.add_instruction(line)
+        return self.__add_instruction(line)
 
-    def add_instruction(self, instruction: str) -> int:
+    def __add_instruction(self, instruction: str) -> int:
         try:
             return self.instructions.index(instruction)
         except ValueError:

@@ -1,4 +1,5 @@
 import abc
+import dataclasses
 import enum
 import pathlib
 import torch
@@ -67,6 +68,19 @@ class LoraRecipeNode(LeafRecipeNode):
         return MergeSpace.DELTA
 
 
+class ParameterRecipeNode(RecipeNode):
+    def __init__(self, name: str, merge_space: MergeSpace = MergeSpace.MODEL):
+        self.name = name
+        self.__merge_space = merge_space
+
+    def accept(self, visitor, *args, **kwargs):
+        return visitor.visit_parameter(self, *args, **kwargs)
+
+    @property
+    def merge_space(self) -> MergeSpace:
+        return self.__merge_space
+
+
 class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
@@ -105,6 +119,9 @@ class DepthRecipeVisitor:
     def visit_lora(self, _node: LoraRecipeNode):
         return 1
 
+    def visit_parameter(self, _node: LoraRecipeNode):
+        return 0
+
     def visit_merge(self, node: MergeRecipeNode):
         return max(
             model.accept(self)
@@ -119,8 +136,35 @@ class ModelsCountVisitor:
     def visit_lora(self, _node: LoraRecipeNode):
         return 1
 
+    def visit_parameter(self, node: ParameterRecipeNode):
+        raise 0
+
     def visit_merge(self, node: MergeRecipeNode):
         return sum(
             model.accept(self)
             for model in node.models
+        )
+
+
+class ParameterResolverVisitor:
+    def __init__(self, arguments: Dict[str, RecipeNode]):
+        self.__arguments = arguments
+
+    def visit_model(self, node: ModelRecipeNode) -> RecipeNode:
+        return node
+
+    def visit_lora(self, node: LoraRecipeNode) -> RecipeNode:
+        return node
+
+    def visit_parameter(self, node: ParameterRecipeNode) -> RecipeNode:
+        return self.__arguments.get(node.name, node)
+
+    def visit_merge(self, node: MergeRecipeNode) -> RecipeNode:
+        return MergeRecipeNode(
+            node.merge_method,
+            *(node.accept(self) for node in node.models),
+            hypers=node.hypers,
+            volatile_hypers=node.volatile_hypers,
+            device=node.device,
+            dtype=node.dtype,
         )

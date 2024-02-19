@@ -23,7 +23,7 @@ recipe = sd_mecha.weighted_sum(
 )
 
 merger = sd_mecha.RecipeMerger(
-    base_dir=r"E:\sd\models\Stable-diffusion",
+    models_dir=r"E:\sd\models\Stable-diffusion",
 )
 
 merger.merge_and_save(recipe, output_path="basic_merge")

@@ -38,14 +38,15 @@ class MergeMethod:
         if spec.varkw is None:
             raise TypeError(f"**kwargs must be included in the function parameters")
 
-    def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], device, dtype):
-        args, kwargs = self.__get_args_kwargs(inputs, hypers, device, dtype)
+    def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
+        args, kwargs = self.__get_args_kwargs(inputs, hypers, key, device, dtype)
         return self.__f(*args, **kwargs)
 
     def __get_args_kwargs(
         self,
         inputs: Tuple[torch.Tensor, ...],
         hypers: Dict[str, float],
+        key: str,
         device: str,
         dtype: Optional[torch.dtype],
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
@@ -58,7 +59,11 @@ class MergeMethod:
             v.to(*to_args)
             for v in inputs
         )
-        return merge_method_args, hypers
+        return merge_method_args, hypers | {
+            "device": device,
+            "dtype": dtype,
+            "key": key,
+        }
 
     def get_return_merge_space(self, merge_spaces_args: List[MergeSpace]) -> MergeSpace:
         type_hints = get_type_hints(self.__f)

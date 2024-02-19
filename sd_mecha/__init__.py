@@ -1,7 +1,7 @@
 import logging
 import pathlib
 import torch
-from typing import Optional
+from typing import Optional, Dict
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
@@ -11,15 +11,15 @@ from sd_mecha.hypers import (
     sd15_unet_blocks, sd15_unet_classes, sd15_txt_blocks, sd15_txt_classes,
     sdxl_unet_blocks, sdxl_unet_classes, sdxl_txt_blocks, sdxl_txt_classes, sdxl_txt_g14_blocks, sdxl_txt_g14_classes,
 )
-from sd_mecha.recipe_serializer import serialize, deserialize
+from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 
 
 def merge_and_save(
     recipe: recipe_nodes.RecipeNode,
-    base_dir: pathlib.Path,
+    models_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
-    scheduler = RecipeMerger(base_dir=base_dir)
+    scheduler = RecipeMerger(models_dir=models_dir)
     scheduler.merge_and_save(recipe, output_path=output_path)
 
 
@@ -46,7 +46,7 @@ slerp = merge_methods.slerp
 
 def add_difference(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
-    alpha: Hyper = 0.5,
+    alpha: Hyper = 1.0,
     clip_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -230,6 +230,7 @@ def rotate(
     beta: Hyper = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = torch.float64,
+    cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = path_to_node(a)
     b = path_to_node(b)
@@ -253,6 +254,7 @@ def rotate(
         b=b,
         alpha=alpha,
         beta=beta,
+        cache=cache,
         device=device,
         dtype=dtype,
     )
