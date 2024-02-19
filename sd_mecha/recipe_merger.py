@@ -32,8 +32,8 @@ class RecipeMerger:
         self, recipe, *,
         output_path: Optional[pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
-        threads: int = 4,
-        total_buffer_size: int = 2**28,
+        threads: int = 3,
+        total_buffer_size: int = 2**32,
     ):
         extensions.clear_model_paths_cache()
         if save_dtype is None:
@@ -66,7 +66,7 @@ class RecipeMerger:
                 except KeyError:
                     continue
 
-        output = OutSafetensorsDict(output_path, merged_header, total_buffer_size // number_of_dicts)
+        output = OutSafetensorsDict(output_path, merged_header, total_buffer_size // number_of_dicts // threads)
         progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
@@ -102,7 +102,7 @@ class RecipeMerger:
             for future in as_completed(futures):
                 future.result()
 
-        output.finalize()
+            output.close()
 
 
 @dataclasses.dataclass

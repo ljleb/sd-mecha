@@ -1,8 +1,10 @@
+import contextlib
+import dataclasses
 import json
-import multiprocessing
 import os
 import pathlib
 import struct
+import threading
 from typing import Optional
 
 import torch
@@ -18,7 +20,7 @@ class InModelSafetensorsDict:
         self.header_size, self.header = self._read_header()
         self.buffer = self.file.read(self.default_buffer_size)
         self.buffer_start_offset = 8 + self.header_size
-        self.lock = multiprocessing.Lock()
+        self.lock = threading.Lock()
 
     def __del__(self):
         self.close()
@@ -93,8 +95,8 @@ class InModelSafetensorsDict:
 
 
 class InLoraSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path):
-        self.safetensors_dict = InModelSafetensorsDict(file_path)
+    def __init__(self, file_path: pathlib.Path, buffer_size: int):
+        self.safetensors_dict = InModelSafetensorsDict(file_path, buffer_size)
         with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
             self.key_map = json.load(f)
 
@@ -166,52 +168,50 @@ class InLoraSafetensorsDict:
 InSafetensorsDict = InModelSafetensorsDict | InLoraSafetensorsDict
 
 
+@dataclasses.dataclass
+class OutSafetensorsDictThreadState:
+    buffer: bytearray
+    memory_used: int = dataclasses.field(default=0)
+    sub_header: dict = dataclasses.field(default_factory=dict)
+
+
 class OutSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, template_header: dict, buffer_size: int):
-        self.file = file_path.open('wb+')
-        self.lock = multiprocessing.Lock()
+    def __init__(self, file_path: pathlib.Path, template_header: dict, minimum_buffer_size: int):
+        self.thread_states = {}
+        self.lock = threading.Lock()
+
         self.header = {}
-        self.current_offset = 0
+        self.file = file_path.open('wb+')
+        self.flushed_size = 0
+
         self.header_size = self._init_buffer(template_header)
-        self.buffer_size = buffer_size
-        self.buffer_used = 0
-        self.buffer = bytearray(buffer_size)
+        self.minimum_buffer_size = minimum_buffer_size
 
     def __del__(self):
         self.file.close()
 
     def __setitem__(self, key: str, tensor: torch.Tensor):
-        if key in self.header:
-            raise ValueError("key already exists")
+        tid = threading.current_thread().ident
+        if tid not in self.thread_states:
+            self.thread_states[tid] = OutSafetensorsDictThreadState(bytearray(self.minimum_buffer_size))
+
+        state = self.thread_states[tid]
 
         tensor_bytes = tensor.cpu().numpy().tobytes()
         tensor_size = len(tensor_bytes)
 
-        with self.lock:
-            if tensor_size > len(self.buffer) - self.buffer_used:
-                self._flush_buffer(next_tensor_size=tensor_size)
+        if tensor_size > len(state.buffer) - state.memory_used:
+            self._flush_buffer(state, next_tensor_size=tensor_size)
 
-            self.buffer[self.buffer_used:self.buffer_used + tensor_size] = tensor_bytes
-            offset = self.current_offset
-            self.current_offset += tensor_size
-            self.buffer_used += tensor_size
+        local_offset = state.memory_used
+        state.buffer[state.memory_used:state.memory_used + tensor_size] = tensor_bytes
+        state.memory_used += tensor_size
 
-        self.header[key] = {
+        state.sub_header[key] = {
             "dtype": DTYPE_REVERSE_MAPPING[tensor.dtype][0],
             "shape": list(tensor.shape),
-            "data_offsets": [offset, offset + len(tensor_bytes)]
+            "data_offsets": [local_offset, local_offset + tensor_size]
         }
-
-    def _flush_buffer(self, next_tensor_size: Optional[int] = None):
-        if self.buffer_used > 0:
-            self.file.write(self.buffer[:self.buffer_used])
-            self.buffer_used = 0  # Reset used buffer size
-
-        if next_tensor_size is not None:
-            # Adjust buffer size if the next tensor is larger than the default size
-            required_buffer_size = max(self.buffer_size, next_tensor_size)
-            if required_buffer_size != len(self.buffer):
-                self.buffer = bytearray(required_buffer_size)
 
     def __len__(self):
         return len(self.header)
@@ -235,12 +235,39 @@ class OutSafetensorsDict:
         self.file.seek(header_size, os.SEEK_CUR)  # Reserve space for the header
         return header_size
 
-    def finalize(self):
+    def _flush_buffer(self, state: OutSafetensorsDictThreadState, next_tensor_size: Optional[int] = None, lock: bool = True):
+        if lock:
+            lock_obj = self.lock
+        else:
+            lock_obj = contextlib.nullcontext()
+
+        with lock_obj:
+            self.file.write(state.buffer[:state.memory_used])
+            buffer_offset = self.flushed_size
+            self.flushed_size += state.memory_used
+
+        state.memory_used = 0
+        if next_tensor_size is not None:
+            required_buffer_size = max(self.minimum_buffer_size, next_tensor_size)
+            if required_buffer_size != len(state.buffer):
+                state.buffer = bytearray(required_buffer_size)
+
+        global_sub_header = {
+            k: dict(
+                (attr, val)
+                if attr != "data_offsets"
+                else (attr, (val[0] + buffer_offset, val[1] + buffer_offset))
+                for attr, val in v.items()
+            )
+            for k, v in state.sub_header.items()
+        }
+        self.header.update(global_sub_header)
+        state.sub_header.clear()
+
+    def close(self):
         with self.lock:
-            # I'm tempted to flush all tensors in case this was the result of a very long computation
-            # idk if it crashes because the header doesn't fit, then maybe there's a way for you to guess the start of each tensor...
-            # good luck!
-            self._flush_buffer()
+            for state in self.thread_states.values():
+                self._flush_buffer(state, lock=False)
 
             header_json = json.dumps(self.header, separators=(',', ':')).encode('utf-8')
             overhead = self.header_size - len(header_json)
@@ -250,7 +277,7 @@ class OutSafetensorsDict:
             self.file.seek(8)
             self.file.write(header_json)
             self.file.write(b' ' * overhead)
-            self.file.flush()
+            self.file.close()
 
 
 DTYPE_MAPPING = {
