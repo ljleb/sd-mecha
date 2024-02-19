@@ -108,3 +108,17 @@ class DepthRecipeVisitor:
             model.accept(self)
             for model in node.models
         ) + 1
+
+
+class ModelsCountVisitor:
+    def visit_model(self, _node: ModelRecipeNode):
+        return 1
+
+    def visit_lora(self, _node: LoraRecipeNode):
+        return 1
+
+    def visit_merge(self, node: MergeRecipeNode):
+        return sum(
+            model.accept(self)
+            for model in node.models
+        )

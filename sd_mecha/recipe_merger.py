@@ -1,3 +1,4 @@
+import dataclasses
 import logging
 import pathlib
 import torch
@@ -32,6 +33,7 @@ class RecipeMerger:
         output_path: Optional[pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 1,
+        total_buffer_size: int = 2**28,
     ):
         extensions.clear_model_paths_cache()
         if save_dtype is None:
@@ -44,8 +46,11 @@ class RecipeMerger:
             output_path = output_path.with_suffix(".safetensors")
         logging.info(f"Saving to {output_path}")
 
-        input_dicts_visitor = GatherInputDictsVisitor(self.__base_dir)
-        input_dicts = recipe.accept(input_dicts_visitor)
+        number_of_dicts = recipe.accept(recipe_nodes.ModelsCountVisitor())
+        input_dicts = recipe.accept(GatherInputDictsVisitor(
+            self.__base_dir,
+            total_buffer_size // number_of_dicts,
+        ))
         validate_same_sd_version(input_dicts)
         merged_header = {
             k: {k: v for k, v in h.items() if k != "data_offsets"}
@@ -69,7 +74,6 @@ class RecipeMerger:
             try:
                 key_merger = KeyMergeVisitor(
                     key,
-                    self.__base_dir,
                     self.__default_device,
                     self.__default_dtype,
                 )
@@ -101,24 +105,16 @@ class RecipeMerger:
         output.finalize()
 
 
+@dataclasses.dataclass
 class KeyMergeVisitor:
-    def __init__(
-        self, key: str,
-        base_dir: pathlib.Path,
-        default_device: str,
-        default_dtype: torch.dtype,
-    ):
-        self.__key = key
-        self.__base_dir = base_dir
-        self.__default_device = default_device
-        self.__default_dtype = default_dtype
+    __key: str
+    __default_device: str
+    __default_dtype: torch.dtype
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
-        node.state_dict = load_dict(node, InModelSafetensorsDict, self.__base_dir)
         return node.state_dict[self.__key]
 
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode) -> torch.Tensor:
-        node.state_dict = load_dict(node, InLoraSafetensorsDict, self.__base_dir)
         return node.state_dict[self.__key]
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
@@ -145,16 +141,17 @@ class KeyMergeVisitor:
         return merged
 
 
+@dataclasses.dataclass
 class GatherInputDictsVisitor:
-    def __init__(self, base_dir: pathlib.Path):
-        self.__base_dir = base_dir
+    __base_dir: pathlib.Path
+    __buffer_size_per_dict: int
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> List[Mapping[str, torch.Tensor]]:
-        node.state_dict = load_dict(node, InModelSafetensorsDict, self.__base_dir)
+        node.state_dict = self.__load_dict(node, InModelSafetensorsDict)
         return [node.state_dict]
 
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode) -> List[Mapping[str, torch.Tensor]]:
-        node.state_dict = load_dict(node, InLoraSafetensorsDict, self.__base_dir)
+        node.state_dict = self.__load_dict(node, InLoraSafetensorsDict)
         return [node.state_dict]
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> List[Mapping[str, torch.Tensor]]:
@@ -164,23 +161,22 @@ class GatherInputDictsVisitor:
             for input_dict in model.accept(self)
         ]
 
+    def __load_dict(
+        self,
+        node: recipe_nodes.LeafRecipeNode,
+        dict_class: type,
+    ) -> Mapping[str, torch.Tensor]:
+        if node.state_dict is not None:
+            return node.state_dict
 
-def load_dict(
-    node: recipe_nodes.LeafRecipeNode,
-    dict_class: type,
-    base_dir: pathlib.Path,
-) -> Mapping[str, torch.Tensor]:
-    if node.state_dict is not None:
-        return node.state_dict
-
-    path = node.path
-    if not isinstance(path, pathlib.Path):
-        path = pathlib.Path(path)
-    if not path.is_absolute():
-        path = base_dir / path
-    if not path.suffix:
-        path = path.with_suffix(".safetensors")
-    return dict_class(path)
+        path = node.path
+        if not isinstance(path, pathlib.Path):
+            path = pathlib.Path(path)
+        if not path.is_absolute():
+            path = self.__base_dir / path
+        if not path.suffix:
+            path = path.with_suffix(".safetensors")
+        return dict_class(path, self.__buffer_size_per_dict)
 
 
 def is_passthrough_key(key: str, header: dict):

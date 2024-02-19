@@ -11,7 +11,12 @@ recipe = sd_mecha.weighted_sum(
 # scheduler contains default parameters
 merger = sd_mecha.RecipeMerger(
     base_dir=r"E:\sd\models\Stable-diffusion",
+    default_device="cuda",
 )
 
 # perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output_path="basic_merge", threads=1)
+merger.merge_and_save(
+    recipe,
+    output_path="basic_merge",
+    threads=2,
+)

@@ -6,7 +6,7 @@ Hyper = float | Dict[str, float]
 
 
 def get_hyper(hyper: Hyper, key: str) -> float:
-    if isinstance(hyper, float):
+    if isinstance(hyper, float) or hyper is None:
         return hyper
     elif isinstance(hyper, dict):
         all_hypers = SDXL_HYPERS if any(key.startswith(("g14_txt_", "sdxl_unet_")) for key in hyper.keys()) else SD15_HYPERS
@@ -34,6 +34,7 @@ def validate_hyper(hyper: Hyper) -> Hyper:
             if key not in all_hypers and not key.endswith("_default"):
                 suggestion = fuzzywuzzy.process.extractOne(key, all_hypers.keys())[0]
                 raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
-    elif not isinstance(hyper, float):
+    elif isinstance(hyper, float) or hyper is None:
+        return hyper
+    else:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
-    return hyper

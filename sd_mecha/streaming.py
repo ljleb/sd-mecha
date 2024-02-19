@@ -1,20 +1,22 @@
 import json
-import mmap
 import multiprocessing
 import os
 import pathlib
 import struct
 import torch
 import warnings
-from collections import OrderedDict
 
 
 class InModelSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path):
+    def __init__(self, file_path: pathlib.Path, buffer_size):
         assert file_path.suffix == ".safetensors"
+        self.default_buffer_size = buffer_size
         self.file_path = file_path
         self.file = open(file_path, 'rb')
         self.header_size, self.header = self._read_header()
+        self.buffer = self.file.read(self.default_buffer_size)
+        self.buffer_start_offset = 8 + self.header_size
+        self.lock = multiprocessing.Lock()
 
     def __del__(self):
         self.close()
@@ -65,18 +67,27 @@ class InModelSafetensorsDict:
         sorted_header = dict(sorted(header.items(), key=lambda item: item[1].get('data_offsets', [0])[0]))
         return header_size, sorted_header
 
+    def _ensure_buffer(self, start_pos, length):
+        if start_pos < self.buffer_start_offset or start_pos + length > self.buffer_start_offset + len(self.buffer):
+            self.file.seek(start_pos)
+            del self.buffer
+            necessary_buffer_size = max(self.default_buffer_size, length)
+            self.buffer = self.file.read(necessary_buffer_size)
+            self.buffer_start_offset = start_pos
+
     def _load_tensor(self, tensor_name):
         tensor_info = self.header[tensor_name]
         offsets = tensor_info['data_offsets']
-        dtype = DTYPE_MAPPING[tensor_info['dtype']]
+        dtype, dtype_bytes = DTYPE_MAPPING[tensor_info['dtype']]
         shape = tensor_info['shape']
         total_bytes = offsets[1] - offsets[0]
         absolute_start_pos = 8 + self.header_size + offsets[0]
-        self.file.seek(absolute_start_pos)
-        data = self.file.read(total_bytes)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return torch.frombuffer(data, dtype=dtype).reshape(shape)
+            with self.lock:
+                self._ensure_buffer(absolute_start_pos, total_bytes)
+                buffer_offset = absolute_start_pos - self.buffer_start_offset
+                return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).reshape(shape)
 
 
 class InLoraSafetensorsDict:
@@ -213,14 +224,14 @@ class OutSafetensorsDict:
 
 
 DTYPE_MAPPING = {
-    'F16': torch.float16,
-    'F32': torch.float32,
-    'F64': torch.float64,
-    'I8': torch.int8,
-    'I16': torch.int16,
-    'I32': torch.int32,
-    'I64': torch.int64,
+    'F16': (torch.float16, 2),
+    'F32': (torch.float32, 4),
+    'F64': (torch.float64, 8),
+    'I8': (torch.int8, 1),
+    'I16': (torch.int16, 2),
+    'I32': (torch.int32, 4),
+    'I64': (torch.int64, 8),
 }
 
 
-DTYPE_REVERSE_MAPPING = {v: k for k, v in DTYPE_MAPPING.items()}
+DTYPE_REVERSE_MAPPING = {v: (k, b) for k, (v, b) in DTYPE_MAPPING.items()}
