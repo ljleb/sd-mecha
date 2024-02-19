@@ -137,7 +137,7 @@ class ModelsCountVisitor:
         return 1
 
     def visit_parameter(self, node: ParameterRecipeNode):
-        raise 0
+        return 0
 
     def visit_merge(self, node: MergeRecipeNode):
         return sum(

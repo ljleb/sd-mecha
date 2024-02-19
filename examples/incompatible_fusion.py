@@ -7,15 +7,9 @@ b = sd_mecha.parameter("b")
 c = sd_mecha.parameter("c")
 
 recipe = sd_mecha.rotate(
-    sd_mecha.add_perpendicular(a, b, c),
-    a,
-    alpha=0.99,
-    cache={},
+    sd_mecha.add_perpendicular(a, b, c), a,
+    alpha=1.0,
     device="cuda", dtype=torch.float64,
 )
 
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-)
-
-merger.merge_and_save(recipe)
+sd_mecha.serialize_and_save(recipe, "recipes/incompatible_fusion")
