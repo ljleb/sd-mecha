@@ -33,7 +33,7 @@ class RecipeMerger:
         output_path: Optional[pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 1,
-        total_buffer_size: int = 2**28,
+        total_buffer_size: int = 2**32,
     ):
         extensions.clear_model_paths_cache()
         if save_dtype is None:

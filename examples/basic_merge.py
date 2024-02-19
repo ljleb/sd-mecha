@@ -18,5 +18,4 @@ merger = sd_mecha.RecipeMerger(
 merger.merge_and_save(
     recipe,
     output_path="basic_merge",
-    threads=2,
 )

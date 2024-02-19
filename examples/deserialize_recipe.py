@@ -13,4 +13,4 @@ merger = sd_mecha.RecipeMerger(
 )
 
 # perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output_path="basic_merge", threads=10)
+merger.merge_and_save(recipe, output_path="basic_merge")
