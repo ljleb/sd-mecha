@@ -22,6 +22,8 @@ def except_fallback(f):
     @functools.wraps(f)
     def wrapped(*args, **kwargs):
         debug = kwargs['debug']
+        if debug:
+            click.echo("Debug mode active.", err=True)
         try:
             return f(*args, **kwargs)
         except UserError as e:
@@ -65,9 +67,6 @@ def merge(
     save_dtype: str,
     debug: bool,
 ):
-    if debug:
-        click.echo("Merge in debug mode.", err=True)
-
     if output is None:
         output = models_directory / "merge.safetensors"
 
@@ -99,9 +98,6 @@ def compose(
     output: Optional[pathlib.Path],
     debug: bool,
 ):
-    if debug:
-        click.echo("Merge in debug mode.", err=True)
-
     if output is None:
         output = pathlib.Path("merge.mecha")
 
@@ -118,6 +114,7 @@ def compose(
 
 main.add_command(merge)
 main.add_command(compose)
+
 
 if __name__ == "__main__":
     main()
