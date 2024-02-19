@@ -71,12 +71,12 @@ def add_difference(
         dtype=dtype,
     )
 
-    ab_same_space = a.merge_space == b.merge_space
     abo_same_space = a.merge_space == original_b.merge_space
     if abo_same_space:
         b = original_b
 
     if clip_to_ab is None:
+        ab_same_space = a.merge_space == b.merge_space
         clip_to_ab = ab_same_space or abo_same_space
 
     if clip_to_ab:
