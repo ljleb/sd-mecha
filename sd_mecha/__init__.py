@@ -64,8 +64,7 @@ def add_difference(
         )
 
     res = merge_methods.add_difference(
-        a=a,
-        b=b,
+        a, b,
         alpha=alpha,
         device=device,
         dtype=dtype,
@@ -117,15 +116,13 @@ def add_perpendicular(
     )
 
     perp_diff = merge_methods.perpendicular_component(
-        a=a_diff,
-        b=b_diff,
+        a_diff, b_diff,
         device=device,
         dtype=dtype,
     )
 
     return merge_methods.add_difference(
-        a=a,
-        b=perp_diff,
+        a, perp_diff,
         alpha=alpha,
         device=device,
         dtype=dtype,
@@ -164,8 +161,7 @@ def add_difference_ties(
         dtype=dtype,
     )
     return add_difference(
-        base,
-        res,
+        base, res,
         alpha=1.0,
         device=device,
         dtype=dtype,
@@ -199,8 +195,7 @@ def copy_region(
 
     copy_method = [merge_methods.copy_region, merge_methods.copy_top_k][int(top_k)]
     res = copy_method(
-        a=a,
-        b=b,
+        a, b,
         alpha=width,
         beta=offset,
         device=device,
@@ -209,8 +204,7 @@ def copy_region(
 
     if c is not None:
         res = merge_methods.add_difference(
-            a=c,
-            b=res,
+            c, res,
             alpha=1.0,
             device=device,
             dtype=dtype,
@@ -250,8 +244,7 @@ def rotate(
         )
 
     res = merge_methods.rotate(
-        a=a,
-        b=b,
+        a, b,
         alpha=alpha,
         beta=beta,
         cache=cache,
@@ -261,8 +254,7 @@ def rotate(
 
     if c is not None:
         res = merge_methods.add_difference(
-            a=c,
-            b=res,
+            c, res,
             alpha=1.0,
             device=device,
             dtype=dtype,
@@ -274,20 +266,16 @@ def rotate(
 clip = merge_methods.clip
 
 
-def model(
-    state_dict: str | pathlib.Path,
-):
-    return recipe_nodes.ModelRecipeNode(
-        state_dict=state_dict,
-    )
+def model(state_dict: str | pathlib.Path):
+    return recipe_nodes.ModelRecipeNode(state_dict)
 
 
-def lora(
-    state_dict: str | pathlib.Path,
-):
-    return recipe_nodes.LoraRecipeNode(
-        state_dict=state_dict,
-    )
+def lora(state_dict: str | pathlib.Path):
+    return recipe_nodes.LoraRecipeNode(state_dict)
+
+
+def parameter(name: str):
+    return recipe_nodes.ParameterRecipeNode(name)
 
 
 def set_log_level(level: str = "INFO"):

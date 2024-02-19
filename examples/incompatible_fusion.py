@@ -2,9 +2,9 @@ import torch
 import sd_mecha
 sd_mecha.set_log_level()
 
-a = "animagineXLV3_v30"
-b = "juggernautXL_v9Rundiffusionphoto2"
-c = "pure/sd_xl_base"
+a = sd_mecha.parameter("a")
+b = sd_mecha.parameter("b")
+c = sd_mecha.parameter("c")
 
 recipe = sd_mecha.rotate(
     sd_mecha.add_perpendicular(a, b, c),
