@@ -197,7 +197,7 @@ class OutSafetensorsDict:
             self.buffer_used += tensor_size
 
         self.header[key] = {
-            "dtype": DTYPE_REVERSE_MAPPING[tensor.dtype],
+            "dtype": DTYPE_REVERSE_MAPPING[tensor.dtype][0],
             "shape": list(tensor.shape),
             "data_offsets": [offset, offset + len(tensor_bytes)]
         }
