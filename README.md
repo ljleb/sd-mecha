@@ -52,7 +52,9 @@ The pypi package does not ship with `torch` so that you can install the appropri
 
 ## Usage
 
-### Merge recipes with the CLI
+### Merge models
+
+You can merge models following a recipe. Make sure the recipe does not contain any parameters:
 
 ```shell
 python -m sd_mecha merge <path/to/recipe.mecha> -o path/to/output.safetensors [options]
@@ -64,7 +66,19 @@ For more information:
 python -m sd_mecha merge --help
 ```
 
-It is also possible to merge recipes from python code using the library. See the [examples](/examples).
+### Compose recipes
+
+You can compose recipes together to create complex merging 
+
+```shell
+python -m sd_mecha merge <path/to/recipe.mecha> -o path/to/output.safetensors [options]
+```
+
+For more information:
+
+```shell
+python -m sd_mecha merge --help
+```
 
 ## Motivation
 

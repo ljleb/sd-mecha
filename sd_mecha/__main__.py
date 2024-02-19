@@ -49,7 +49,7 @@ def main():
 
 @click.command(help="Merge models following a recipe")
 @click.argument("recipe", type=pathlib.Path)
-@click.option("--models-directory", type=pathlib.Path, default=pathlib.Path(), help="Base directory for .safetensors checkpoints.")
+@click.option("--models-directory", type=pathlib.Path, envvar="MECHA_MODELS_DIR", default=pathlib.Path(), help="Base directory for .safetensors checkpoints.")
 @click.option("--output", "-o", type=pathlib.Path, default=None, help="Output file for the merge result.")
 @click.option("--threads", "-j", default=1, help="Number of keys to merge in parallel.")
 @click.option("--device", "-d", default="cpu", help="Device used for merging.")
@@ -86,7 +86,7 @@ def merge(
 
 @click.command(help="Compose recipes together to form a larger recipe")
 @click.argument("base_recipe", type=pathlib.Path)
-@click.option("--models-directory", type=pathlib.Path, default=pathlib.Path(), help="Base directory for .safetensors checkpoints.")
+@click.option("--models-directory", type=pathlib.Path, envvar="MECHA_MODELS_DIR", default=pathlib.Path(), help="Base directory for .safetensors checkpoints.")
 @click.option("arguments", "--argument", "-p", type=(str, str), multiple=True, help="Recipe or model argument to pass to the base recipe.")
 @click.option("--output", "-o", type=pathlib.Path, default=None, help="Output file of the composed recipe.")
 @click.option("--debug", is_flag=True, help="Print the stacktrace when an error occurs.")

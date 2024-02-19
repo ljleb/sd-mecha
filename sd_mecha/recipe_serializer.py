@@ -3,7 +3,6 @@ import fuzzywuzzy.process
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode, MergeSpace, ParameterRecipeNode
-from sd_mecha.user_error import UserError
 
 
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
@@ -22,7 +21,7 @@ def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | path
     if not recipe.suffix:
         recipe = recipe.with_suffix(".safetensors")
     elif recipe.suffix != ".safetensors":
-        raise UserError(f"Invalid path to safetensors or recipe: {recipe}")
+        raise ValueError(f"invalid path to safetensors or recipe: {recipe}")
     return recipe_nodes.ModelRecipeNode(recipe)
 
 
@@ -113,7 +112,7 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
         try:
             parse(line)
         except ValueError as e:
-            raise UserError(f"line {line_num}: {e}.\n    {line}")
+            raise ValueError(f"line {line_num}: {e}.\n    {line}")
 
     return results[-1]
 

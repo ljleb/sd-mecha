@@ -280,7 +280,7 @@ def distribution_crossover(
     c: Tensor | SameMergeSpace,
     *,
     alpha: float,
-    beta: float,
+    tilt: float,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if a.shape == ():
@@ -293,7 +293,7 @@ def distribution_crossover(
     a_dft = torch.fft.rfft(a_dist)
     b_dft = torch.fft.rfft(b_dist)
 
-    dft_filter = create_filter((a_dft.numel(),), alpha, beta, device=a.device)
+    dft_filter = create_filter((a_dft.numel(),), alpha, tilt, device=a.device)
 
     x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
     x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
@@ -307,14 +307,14 @@ def crossover(
     b: Tensor | SameMergeSpace,
     *,
     alpha: float,
-    beta: float,
+    tilt: float,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if alpha == 0 and beta == 0:
+    if alpha == 0 and tilt == 0:
         return a
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, alpha=beta)
+        return weighted_sum.__wrapped__(a, b, alpha=tilt)
 
     if a.shape[0] > 40000 or len(a.shape) == 4 and sum(a.shape[2:]) > 2:
         shape = a.shape[1:]
@@ -324,13 +324,13 @@ def crossover(
     a_dft = torch.fft.rfftn(a, s=shape)
     b_dft = torch.fft.rfftn(b, s=shape)
 
-    dft_filter = create_filter(a_dft.shape, alpha, beta, device=a.device)
+    dft_filter = create_filter(a_dft.shape, alpha, tilt, device=a.device)
 
     x_dft = (1 - dft_filter)*a_dft + dft_filter*b_dft
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float, steps=100, precision=EPSILON, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float, steps=100, precision=EPSILON, device=None):
     gradients = [
         torch.linspace(0, 1, s, device=device)**2
         for s in shape
@@ -346,11 +346,11 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float
     phi_alpha = alpha
     dft_filter = mesh
     for step in range(steps):
-        if beta < EPSILON:
+        if tilt < EPSILON:
             dft_filter = (mesh > 1 - phi_alpha).float()
         else:
-            cot_b = 1 / math.tan(math.pi * beta / 2)
-            dft_filter = torch.clamp(mesh*cot_b + phi_alpha*cot_b + phi_alpha - cot_b, 0, 1)
+            tilt_cot = 1 / math.tan(math.pi * tilt / 2)
+            dft_filter = torch.clamp(mesh*tilt_cot + phi_alpha*tilt_cot + phi_alpha - tilt_cot, 0, 1)
         filter_mean = dft_filter.mean()
         loss = alpha - filter_mean
         if abs(loss) < precision:
