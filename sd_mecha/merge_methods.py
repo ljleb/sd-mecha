@@ -8,28 +8,28 @@ from sd_mecha.extensions import MergeSpace, LiftFlag, convert_to_recipe
 
 
 EPSILON = 1e-10
-SharedMergeSpace = TypeVar("SharedMergeSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
+SameMergeSpace = TypeVar("SameMergeSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
 
 
 @convert_to_recipe
 def weighted_sum(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float = 0.5,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     return (1 - alpha) * a + alpha * b
 
 
 @convert_to_recipe
 def slerp(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float = 0.5,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     a_normalized = a / a.norm()
     b_normalized = b / b.norm()
 
@@ -47,12 +47,12 @@ def slerp(
 
 @convert_to_recipe
 def add_difference(
-    a: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     alpha: float = 0.5,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     return a + alpha * b
 
 
@@ -67,10 +67,10 @@ def subtract(
 
 @convert_to_recipe
 def perpendicular_component(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     norm_a = torch.linalg.norm(a)
     res = b - a * (a / norm_a * (b / norm_a)).sum()
     if res.isnan().any():
@@ -177,13 +177,13 @@ def filter_top_k(a: Tensor, k: float):
 
 @convert_to_recipe
 def copy_region(  # aka tensor_sum
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     width: float,
     offset: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     start_i, end_i, region_is_inverted = ratio_to_region(width, offset, a.size(0))
     if region_is_inverted:
         b[start_i:end_i] = a[start_i:end_i]
@@ -195,13 +195,13 @@ def copy_region(  # aka tensor_sum
 
 @convert_to_recipe
 def copy_top_k(  # aka top_k_tensor_sum
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     width: float,
     offset: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
     a_dist = torch.msort(a_flat)
     b_indices = torch.argsort(torch.flatten(b), stable=True)
@@ -252,11 +252,11 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
 
 @convert_to_recipe
 def copy_difference(  # aka train_difference
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
+    c: Tensor | SameMergeSpace,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     ab_diff = a - b
     bc_dist = torch.abs(b - c)
     ba_dist = torch.abs(b - a)
@@ -275,14 +275,14 @@ def copy_difference(  # aka train_difference
 
 @convert_to_recipe
 def distribution_crossover(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
+    c: Tensor | SameMergeSpace,
     *,
     alpha: float,
     beta: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     if a.shape == ():
         return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
@@ -303,13 +303,13 @@ def distribution_crossover(
 
 @convert_to_recipe
 def crossover(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float,
     beta: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     if alpha == 0 and beta == 0:
         return a
 
@@ -362,14 +362,14 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float
 
 @convert_to_recipe
 def rotate(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float,
     beta: float,
     cache: Optional[Dict[str, Tensor]] = None,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     if alpha == 0 and beta == 0:
         return a
 
@@ -461,11 +461,11 @@ def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tenso
 
 @convert_to_recipe
 def clip(
-    a: Tensor | SharedMergeSpace,
-    *bounds: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    *bounds: Tensor | SameMergeSpace,
     stiffness: float = 0.0,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
     centers = (maximums + minimums) / 2
