@@ -1,9 +1,6 @@
 import pathlib
 import fuzzywuzzy.process
 from typing import List, Optional
-
-import safetensors.torch
-
 from sd_mecha import extensions, recipe_nodes
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode, MergeSpace, ParameterRecipeNode
 from sd_mecha.user_error import UserError
@@ -12,17 +9,21 @@ from sd_mecha.user_error import UserError
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
     if not isinstance(recipe, pathlib.Path):
         recipe = pathlib.Path(recipe)
+    if recipe.exists():
+        if recipe.suffix == ".safetensors":
+            return recipe_nodes.ModelRecipeNode(recipe)
+        elif recipe.suffix == ".mecha":
+            return deserialize(recipe)
+        else:
+            raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
+
     if models_dir is not None and not recipe.is_absolute():
         recipe = models_dir / recipe
     if not recipe.suffix:
-        try:
-            model_recipe = recipe.with_suffix(".safetensors")
-            with safetensors.safe_open(model_recipe, "pt") as f:
-                return recipe_nodes.ModelRecipeNode(model_recipe)
-        except safetensors.SafetensorError:
-            recipe = recipe.with_suffix(".mecha")
-
-    return deserialize(recipe)
+        recipe = recipe.with_suffix(".safetensors")
+    elif recipe.suffix != ".safetensors":
+        raise UserError(f"Invalid path to safetensors or recipe: {recipe}")
+    return recipe_nodes.ModelRecipeNode(recipe)
 
 
 def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
