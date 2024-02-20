@@ -222,7 +222,7 @@ def rotate(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 1.0,
     beta: Hyper = 0.0,
-    device: Optional[str] = None,
+    device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = torch.float64,
     cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:

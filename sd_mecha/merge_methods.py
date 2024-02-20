@@ -390,7 +390,7 @@ def rotate(
         return a
 
     is_conv = len(a.shape) == 4 and a.shape[-1] != 1
-    if len(a.shape) <= 1 or is_conv or torch.allclose(a.half(), b.half()):
+    if len(a.shape) == 0 or is_conv or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=beta)
 
     if len(a.shape) == 4:
