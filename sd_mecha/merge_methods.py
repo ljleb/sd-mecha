@@ -441,7 +441,7 @@ def rotate(
             )
 
         if cache is not None:
-            cache["rotation"] = rotation.to("cpu", torch.float32)
+            cache["rotation"] = rotation.to("cpu", torch.float16)
 
     if alpha_is_float:
         transform = fractional_matrix_power(transform, alpha, cache)
@@ -473,9 +473,9 @@ def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tenso
         eigenvalues, eigenvectors = torch.linalg.eig(matrix)
         eigenvectors_inv = torch.linalg.inv(eigenvectors)
         if cache is not None:
-            cache["eigenvalues"] = eigenvalues.to("cpu", torch.complex64)
-            cache["eigenvectors"] = eigenvectors.to("cpu", torch.complex64)
-            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.complex64)
+            cache["eigenvalues"] = eigenvalues.to("cpu", torch.complex32)
+            cache["eigenvectors"] = eigenvectors.to("cpu", torch.complex32)
+            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.complex32)
 
     eigenvalues.pow_(power)
     result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
