@@ -32,7 +32,7 @@ class RecipeMerger:
         self, recipe, *,
         output_path: pathlib.Path | str = "merge",
         save_dtype: Optional[torch.dtype] = torch.float16,
-        threads: int = 3,
+        threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
     ):
         extensions.clear_model_paths_cache()
@@ -47,6 +47,9 @@ class RecipeMerger:
         logging.info(f"Saving to {output_path}")
 
         number_of_dicts = recipe.accept(recipe_nodes.ModelsCountVisitor()) + 1  # output dict
+        if threads is None:
+            threads = number_of_dicts
+
         input_dicts = recipe.accept(GatherInputDictsVisitor(
             self.__base_dir,
             total_buffer_size // number_of_dicts,

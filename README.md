@@ -32,11 +32,14 @@ See the [examples](/examples) directory for other examples.
 - Memory efficient model merging -- merge a very large number of models at the same time
 - Mecha recipes as a textual and interpretable format (.mecha)
 - Custom merge method programming interface for experiments
+- Recipe variables for general recipe templates
+- Compose recipe templates to create mega recipes
+- SD1.5 and SDXL supported
+- Merge loras (SD1.5)
 
 Coming soon:
 
-- Recipe variables for general recipe templates
-- Compose recipe templates to create mega recipes
+- Save lora from delta space model
 
 ## Install
 

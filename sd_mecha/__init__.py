@@ -51,8 +51,8 @@ def add_difference(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = extensions.path_to_node(a)
-    b = extensions.path_to_node(b)
+    a: recipe_nodes.RecipeNode = extensions.path_to_node(a)
+    b: recipe_nodes.RecipeNode = extensions.path_to_node(b)
     original_b = b
 
     if c is not None:
@@ -70,13 +70,11 @@ def add_difference(
         dtype=dtype,
     )
 
-    abo_same_space = a.merge_space == original_b.merge_space
-    if abo_same_space:
+    if a.merge_space == original_b.merge_space:
         b = original_b
 
     if clip_to_ab is None:
-        ab_same_space = a.merge_space == b.merge_space
-        clip_to_ab = ab_same_space or abo_same_space
+        clip_to_ab = a.merge_space == b.merge_space
 
     if clip_to_ab:
         if a.merge_space != b.merge_space:
