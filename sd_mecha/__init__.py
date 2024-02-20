@@ -129,7 +129,7 @@ def add_perpendicular(
     )
 
 
-multiply_difference = merge_methods.multiply_difference
+geometric_sum = merge_methods.geometric_sum
 copy_difference = train_difference = merge_methods.copy_difference
 similarity_add_difference = merge_methods.similarity_add_difference
 normalized_similarity_sum = cosine_add_a = merge_methods.normalized_similarity_sum

@@ -79,18 +79,17 @@ def perpendicular_component(
 
 
 @convert_to_recipe
-def multiply_difference(
+def geometric_sum(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     alpha: float,
-    sign_alpha: float,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    a_pow = torch.pow(torch.abs(a), (1 - alpha))
-    b_pow = torch.pow(torch.abs(b), alpha)
-    difference = torch.copysign(a_pow * b_pow, weighted_sum.__wrapped__(a, b, alpha=sign_alpha))
-    return difference
+    a = torch.complex(a, torch.zeros_like(a))
+    b = torch.complex(b, torch.zeros_like(b))
+    res = a ** (1 - alpha) * b ** alpha
+    return res.abs() * torch.cos(res.angle())
 
 
 @convert_to_recipe
