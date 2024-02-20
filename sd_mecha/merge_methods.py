@@ -419,7 +419,7 @@ def rotate(
         cache = cache[key]
 
     if cache is not None and "rotation" in cache:
-        rotation = transform = cache["rotation"].to(a.device)
+        rotation = transform = cache["rotation"].to(a.device, a.dtype)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a_neurons.T @ b_neurons, driver=svd_driver)
@@ -441,7 +441,7 @@ def rotate(
             )
 
         if cache is not None:
-            cache["rotation"] = rotation.cpu()
+            cache["rotation"] = rotation.to("cpu", torch.float16)
 
     if alpha_is_float:
         transform = fractional_matrix_power(transform, alpha, cache)
@@ -465,16 +465,16 @@ def rotate(
 
 def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tensor]):
     if cache is not None and "eigenvalues" in cache:
-        eigenvalues = cache["eigenvalues"].to(matrix.device)
-        eigenvectors = cache["eigenvectors"].to(matrix.device)
-        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device)
+        eigenvalues = cache["eigenvalues"].to(matrix.device, matrix.dtype)
+        eigenvectors = cache["eigenvectors"].to(matrix.device, matrix.dtype)
+        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device, matrix.dtype)
     else:
         eigenvalues, eigenvectors = torch.linalg.eig(matrix)
         eigenvectors_inv = torch.linalg.inv(eigenvectors)
         if cache is not None:
-            cache["eigenvalues"] = eigenvalues.cpu()
-            cache["eigenvectors"] = eigenvectors.cpu()
-            cache["eigenvectors_inv"] = eigenvectors_inv.cpu()
+            cache["eigenvalues"] = eigenvalues.to("cpu", torch.float16)
+            cache["eigenvectors"] = eigenvectors.to("cpu", torch.float16)
+            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.float16)
 
     eigenvalues.pow_(power)
     result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
