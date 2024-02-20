@@ -441,7 +441,7 @@ def rotate(
             )
 
         if cache is not None:
-            cache["rotation"] = rotation.to("cpu", torch.float16)
+            cache["rotation"] = rotation.to("cpu", torch.float32)
 
     if alpha_is_float:
         transform = fractional_matrix_power(transform, alpha, cache)
@@ -465,20 +465,29 @@ def rotate(
 
 def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tensor]):
     if cache is not None and "eigenvalues" in cache:
-        eigenvalues = cache["eigenvalues"].to(matrix.device, matrix.dtype)
-        eigenvectors = cache["eigenvectors"].to(matrix.device, matrix.dtype)
-        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device, matrix.dtype)
+        complex_dtype = torch_complex_dtype_map[matrix.dtype]
+        eigenvalues = cache["eigenvalues"].to(matrix.device, complex_dtype)
+        eigenvectors = cache["eigenvectors"].to(matrix.device, complex_dtype)
+        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device, complex_dtype)
     else:
         eigenvalues, eigenvectors = torch.linalg.eig(matrix)
         eigenvectors_inv = torch.linalg.inv(eigenvectors)
         if cache is not None:
-            cache["eigenvalues"] = eigenvalues.to("cpu", torch.float16)
-            cache["eigenvectors"] = eigenvectors.to("cpu", torch.float16)
-            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.float16)
+            cache["eigenvalues"] = eigenvalues.to("cpu", torch.complex64)
+            cache["eigenvectors"] = eigenvectors.to("cpu", torch.complex64)
+            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.complex64)
 
     eigenvalues.pow_(power)
     result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
     return result.real.to(dtype=matrix.dtype)
+
+
+torch_complex_dtype_map = {
+    torch.bfloat16: torch.complex32,
+    torch.float16: torch.complex32,
+    torch.float32: torch.complex64,
+    torch.float64: torch.complex128,
+}
 
 
 @convert_to_recipe
