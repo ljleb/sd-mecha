@@ -75,7 +75,7 @@ class RecipeMerger:
         progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
-            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape"), "decision": "merge"})
+            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
             try:
                 key_merger = KeyMergeVisitor(
                     key,
@@ -89,7 +89,7 @@ class RecipeMerger:
             progress.update()
 
         def _forward_and_save(key: str):
-            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape"), "decision": "forward"})
+            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
             output[key] = _get_any_tensor(key).to(save_dtype)
             progress.update()
 

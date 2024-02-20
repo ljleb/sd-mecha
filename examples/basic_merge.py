@@ -8,10 +8,9 @@ recipe = sd_mecha.weighted_sum(
     "dreamshaper_332BakedVaeClipFix",
 )
 
-# scheduler contains default parameters
+# scheduler provides global defaults for methods
 merger = sd_mecha.RecipeMerger(
     models_dir=r"E:\sd\models\Stable-diffusion",
-    default_device="cuda",
 )
 
 # perform the entire merge plan and save to output path
