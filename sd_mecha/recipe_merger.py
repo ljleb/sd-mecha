@@ -4,7 +4,7 @@ import pathlib
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, OutSafetensorsDict
-from sd_mecha import extensions, recipe_nodes, streaming
+from sd_mecha import extensions, recipe_nodes, streaming, recipe_serializer
 from sd_mecha.hypers import get_hyper
 from tqdm import tqdm
 from typing import Optional, Tuple, List, Mapping
@@ -33,7 +33,7 @@ class RecipeMerger:
         output_path: pathlib.Path | str = "merge",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: int = 3,
-        total_buffer_size: int = 2**32,
+        total_buffer_size: int = 2**28,
     ):
         extensions.clear_model_paths_cache()
         if save_dtype is None:
@@ -66,7 +66,12 @@ class RecipeMerger:
                 except KeyError:
                     continue
 
-        output = OutSafetensorsDict(output_path, merged_header, total_buffer_size // number_of_dicts // threads)
+        output = OutSafetensorsDict(
+            output_path,
+            merged_header,
+            recipe_serializer.serialize(recipe),
+            total_buffer_size // number_of_dicts // threads,
+        )
         progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
@@ -102,7 +107,8 @@ class RecipeMerger:
             for future in as_completed(futures):
                 future.result()
 
-            output.close()
+        progress.close()
+        output.close()
 
 
 @dataclasses.dataclass

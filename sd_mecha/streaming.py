@@ -1,20 +1,19 @@
 import contextlib
 import dataclasses
 import json
-import os
 import pathlib
 import struct
 import threading
 from typing import Optional
-
 import torch
 import warnings
+from tqdm import tqdm
 
 
 class InModelSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":
-            raise ValueError(f"Model type not supported: {file_path.suffix} (only safetensors are supported)")
+            raise ValueError(f"Model type not supported: {file_path} (only safetensors are supported)")
 
         self.default_buffer_size = buffer_size
         self.file_path = file_path
@@ -178,16 +177,19 @@ class OutSafetensorsDictThreadState:
 
 
 class OutSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, template_header: dict, minimum_buffer_size: int):
+    def __init__(self, file_path: pathlib.Path, template_header: dict, mecha_recipe: str, minimum_buffer_size: int):
         self.thread_states = {}
         self.lock = threading.Lock()
 
-        self.header = {}
-        self.file = file_path.open('wb+')
+        self.header = {
+            "__metadata__": {"mecha_recipe": mecha_recipe}
+        }
+        self.file = file_path.open("wb")
+        self.file_path = file_path
         self.flushed_size = 0
-
-        self.header_size = self._init_buffer(template_header)
         self.minimum_buffer_size = minimum_buffer_size
+
+        self.max_header_size = self._init_buffer(template_header)
 
     def __del__(self):
         self.file.close()
@@ -219,6 +221,9 @@ class OutSafetensorsDict:
         return len(self.header)
 
     def _init_buffer(self, template_header) -> int:
+        # pretend the variable sections of the header take all the space they possibly can
+        # this should be mostly the "data_offsets" tuples
+        # we assume they take at least 10 digits, in case they are missing in the template
         max_digits = max(
             len(str(offset))
             for tensor_info in template_header.values()
@@ -230,15 +235,14 @@ class OutSafetensorsDict:
             key: {**value, "data_offsets": [dummy_number, dummy_number]}
             for key, value in template_header.items()
         }
+        dummy_header["__metadata__"] = self.header["__metadata__"]
         header_json = json.dumps(dummy_header, separators=(',', ':')).encode('utf-8')
-        header_size = len(header_json)
-        self.file.seek(0)
-        self.file.write(struct.pack('<Q', header_size))
-        self.file.seek(header_size, os.SEEK_CUR)  # Reserve space for the header
-        return header_size
+        max_header_size = len(header_json)
+        self.file.seek(8 + max_header_size)  # Reserve space for the header
+        return max_header_size
 
-    def _flush_buffer(self, state: OutSafetensorsDictThreadState, next_tensor_size: Optional[int] = None, lock: bool = True):
-        if lock:
+    def _flush_buffer(self, state: OutSafetensorsDictThreadState, next_tensor_size: Optional[int] = None, close: bool = False):
+        if not close:
             lock_obj = self.lock
         else:
             lock_obj = contextlib.nullcontext()
@@ -247,49 +251,79 @@ class OutSafetensorsDict:
             self.file.write(state.buffer[:state.memory_used])
             buffer_offset = self.flushed_size
             self.flushed_size += state.memory_used
+            state.memory_used = 0
 
-        state.memory_used = 0
         if next_tensor_size is not None:
             required_buffer_size = max(self.minimum_buffer_size, next_tensor_size)
             if required_buffer_size != len(state.buffer):
                 state.buffer = bytearray(required_buffer_size)
 
         global_sub_header = {
-            k: dict(
-                (attr, val)
+            k: {
+                attr: val
                 if attr != "data_offsets"
-                else (attr, (val[0] + buffer_offset, val[1] + buffer_offset))
+                else (val[0] + buffer_offset, val[1] + buffer_offset)
                 for attr, val in v.items()
-            )
+            }
             for k, v in state.sub_header.items()
         }
         self.header.update(global_sub_header)
         state.sub_header.clear()
+        if close:
+            state.buffer = b""
 
     def close(self):
         with self.lock:
             for state in self.thread_states.values():
-                self._flush_buffer(state, lock=False)
+                self._flush_buffer(state, close=True)
 
             header_json = json.dumps(self.header, separators=(',', ':')).encode('utf-8')
-            overhead = self.header_size - len(header_json)
-            if overhead < 0:
-                raise ValueError("Safetensors header does not fit into preallocated space.")
+            header_size = len(header_json)
+            overhead = self.max_header_size - header_size
 
-            self.file.seek(8)
+            if overhead < 0:
+                # not enough space. we have to move the entire data section by `-overhead`
+                # this should never happen, but it's here just in case as a fallback
+                data_offset = -overhead
+                old_data_section = 8 + self.max_header_size
+                old_file_end = 8 + self.max_header_size + self.flushed_size
+                new_file_end = 8 + header_size + self.flushed_size
+                self.file.truncate(new_file_end)
+
+                # close and reopen the file in read-write mode
+                self.file.close()
+                self.file = open(self.file_path, "rb+")
+
+                # move data in chunks from the end to avoid overwriting
+                for chunk_end in tqdm(range(old_file_end, old_data_section, -self.minimum_buffer_size), desc="Reallocating data section"):
+                    chunk_start = max(chunk_end - self.minimum_buffer_size, old_data_section)
+                    chunk_size = chunk_end - chunk_start
+                    self.file.seek(chunk_start)
+                    data = self.file.read(chunk_size)
+
+                    # calculate the new position and write the chunk
+                    self.file.seek(chunk_start + data_offset)
+                    self.file.write(data)
+
+                # we made just enough space for the header
+                overhead = 0
+
+            self.file.seek(0)
+            self.file.write(struct.pack('<Q', max(self.max_header_size, header_size)))
             self.file.write(header_json)
             self.file.write(b' ' * overhead)
             self.file.close()
 
 
 DTYPE_MAPPING = {
-    'F16': (torch.float16, 2),
-    'F32': (torch.float32, 4),
     'F64': (torch.float64, 8),
+    'F32': (torch.float32, 4),
+    'F16': (torch.float16, 2),
+    'BF16': (torch.bfloat16, 2),
     'I8': (torch.int8, 1),
-    'I16': (torch.int16, 2),
-    'I32': (torch.int32, 4),
     'I64': (torch.int64, 8),
+    'I32': (torch.int32, 4),
+    'I16': (torch.int16, 2),
 }
 
 
