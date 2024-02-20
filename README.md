@@ -78,7 +78,7 @@ For this to work, the base recipe must contain free parameters:
 python -m sd_mecha compose <path/to/recipe.mecha> [options]
 ```
 
-For exampl, here we compose the recipe in `examples/recipes/incompatible_fusion.mecha`
+For example, here we compose the recipe in `examples/recipes/incompatible_fusion.mecha`
 with another recipe for parameter "a" and
 the sd1.5 base model for parameter "c":
 
