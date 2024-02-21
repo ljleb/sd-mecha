@@ -1,11 +1,35 @@
+import pathlib
 import fuzzywuzzy.process
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode
-from sd_mecha.user_error import UserError
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode, MergeSpace, ParameterRecipeNode
 
 
-def deserialize(recipe: List[str]) -> RecipeNode:
+def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
+    if not isinstance(recipe, pathlib.Path):
+        recipe = pathlib.Path(recipe)
+    if recipe.exists():
+        if recipe.suffix == ".safetensors":
+            return recipe_nodes.ModelRecipeNode(recipe)
+        elif recipe.suffix == ".mecha":
+            return deserialize(recipe)
+        else:
+            raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
+
+    if models_dir is not None and not recipe.is_absolute():
+        recipe = models_dir / recipe
+    if not recipe.suffix:
+        recipe = recipe.with_suffix(".safetensors")
+    elif recipe.suffix != ".safetensors":
+        raise ValueError(f"invalid path to safetensors or recipe: {recipe}")
+    return recipe_nodes.ModelRecipeNode(recipe)
+
+
+def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
+    if not isinstance(recipe, list):
+        with open(recipe, "r") as recipe:
+            recipe = recipe.readlines()
+
     results = []
 
     def parse(line):
@@ -17,6 +41,9 @@ def deserialize(recipe: List[str]) -> RecipeNode:
             results.append(ModelRecipeNode(*positional_args, **named_args))
         elif command == "lora":
             results.append(LoraRecipeNode(*positional_args, **named_args))
+        elif command == "parameter":
+            merge_space = MergeSpace[positional_args[1]]
+            results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
         elif command == "call":
             method, *positional_args = positional_args
             try:
@@ -33,6 +60,9 @@ def deserialize(recipe: List[str]) -> RecipeNode:
         named_args = {}
         for arg_index, arg in enumerate(args):
             if '=' in arg:
+                # note: this is wrong if "=" is inside quotes
+                # however, quoted kwarg values (aka string hypers) will raise an exception in the constructor of recipes
+                # so I'm not gonna bother fixing this with the tokenizer until it is actually useful to do so
                 key, value = arg.split('=')
                 named_args[key] = get_arg_value(value, arg_index)
             else:
@@ -82,7 +112,7 @@ def deserialize(recipe: List[str]) -> RecipeNode:
         try:
             parse(line)
         except ValueError as e:
-            raise UserError(f"line {line_num}: {e}.\n    {line}")
+            raise ValueError(f"line {line_num}: {e}.\n    {line}")
 
     return results[-1]
 
@@ -99,11 +129,16 @@ class SerializerVisitor:
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
         line = f'model "{node.path}"'
-        return self.add_instruction(line)
+        return self.__add_instruction(line)
 
     def visit_lora(self, node: recipe_nodes.ModelRecipeNode) -> int:
         line = f'lora "{node.path}"'
-        return self.add_instruction(line)
+        return self.__add_instruction(line)
+
+    def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
+        merge_space = str(MergeSpace.MODEL).split(".")[1]
+        line = f'parameter "{node.name}" "{merge_space}"'
+        return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
         models = [
@@ -115,13 +150,13 @@ class SerializerVisitor:
         for hyper_k, hyper_v in node.hypers.items():
             if isinstance(hyper_v, dict):
                 dict_line = "dict" + "".join(f" {k}={v}" for k, v in hyper_v.items())
-                hyper_v = f"&{self.add_instruction(dict_line)}"
+                hyper_v = f"&{self.__add_instruction(dict_line)}"
             hypers.append(f" {hyper_k}={hyper_v}")
 
         line = f'call "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
-        return self.add_instruction(line)
+        return self.__add_instruction(line)
 
-    def add_instruction(self, instruction: str) -> int:
+    def __add_instruction(self, instruction: str) -> int:
         try:
             return self.instructions.index(instruction)
         except ValueError:

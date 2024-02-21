@@ -8,7 +8,7 @@ recipe = sd_mecha.rotate(
 )
 
 merger = sd_mecha.RecipeMerger(
-    base_dir=r"E:\sd\models\Stable-diffusion",
+    models_dir=r"E:\sd\models\Stable-diffusion",
     default_device="cuda",
 )
 

@@ -9,7 +9,7 @@ recipe = sd_mecha.add_difference(
 )
 
 merger = sd_mecha.RecipeMerger(
-    base_dir=r"E:\sd\models",
+    models_dir=r"E:\sd\models",
 )
 
 merger.merge_and_save(recipe, output_path="Stable-diffusion/basic_merge")

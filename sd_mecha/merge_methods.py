@@ -8,28 +8,28 @@ from sd_mecha.extensions import MergeSpace, LiftFlag, convert_to_recipe
 
 
 EPSILON = 1e-10
-SharedMergeSpace = TypeVar("SharedMergeSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
+SameMergeSpace = TypeVar("SameMergeSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
 
 
 @convert_to_recipe
 def weighted_sum(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float = 0.5,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     return (1 - alpha) * a + alpha * b
 
 
 @convert_to_recipe
 def slerp(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float = 0.5,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     a_normalized = a / a.norm()
     b_normalized = b / b.norm()
 
@@ -47,12 +47,12 @@ def slerp(
 
 @convert_to_recipe
 def add_difference(
-    a: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     alpha: float = 0.5,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     return a + alpha * b
 
 
@@ -67,10 +67,10 @@ def subtract(
 
 @convert_to_recipe
 def perpendicular_component(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     norm_a = torch.linalg.norm(a)
     res = b - a * (a / norm_a * (b / norm_a)).sum()
     if res.isnan().any():
@@ -79,18 +79,17 @@ def perpendicular_component(
 
 
 @convert_to_recipe
-def multiply_difference(
+def geometric_sum(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     alpha: float,
-    sign_alpha: float,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    a_pow = torch.pow(torch.abs(a), (1 - alpha))
-    b_pow = torch.pow(torch.abs(b), alpha)
-    difference = torch.copysign(a_pow * b_pow, weighted_sum.__wrapped__(a, b, alpha=sign_alpha))
-    return difference
+    a = torch.complex(a, torch.zeros_like(a))
+    b = torch.complex(b, torch.zeros_like(b))
+    res = a ** (1 - alpha) * b ** alpha
+    return res.abs() * torch.cos(res.angle())
 
 
 @convert_to_recipe
@@ -177,13 +176,13 @@ def filter_top_k(a: Tensor, k: float):
 
 @convert_to_recipe
 def copy_region(  # aka tensor_sum
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     width: float,
     offset: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     start_i, end_i, region_is_inverted = ratio_to_region(width, offset, a.size(0))
     if region_is_inverted:
         b[start_i:end_i] = a[start_i:end_i]
@@ -195,13 +194,13 @@ def copy_region(  # aka tensor_sum
 
 @convert_to_recipe
 def copy_top_k(  # aka top_k_tensor_sum
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     width: float,
     offset: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
     a_dist = torch.msort(a_flat)
     b_indices = torch.argsort(torch.flatten(b), stable=True)
@@ -252,11 +251,11 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
 
 @convert_to_recipe
 def copy_difference(  # aka train_difference
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
+    c: Tensor | SameMergeSpace,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     ab_diff = a - b
     bc_dist = torch.abs(b - c)
     ba_dist = torch.abs(b - a)
@@ -275,16 +274,18 @@ def copy_difference(  # aka train_difference
 
 @convert_to_recipe
 def distribution_crossover(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
-    c: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
+    c: Tensor | SameMergeSpace,
     *,
-    alpha: float,
-    beta: float,
+    mean: float,
+    tilt: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
-    if a.shape == ():
-        return weighted_sum.__wrapped__(a, b, alpha=alpha)
+) -> Tensor | SameMergeSpace:
+    if mean == 0:
+        return a
+    if tilt == 1 or a.shape == ():
+        return weighted_sum.__wrapped__(a, b, alpha=mean)
 
     c_indices = torch.argsort(torch.flatten(c))
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
@@ -293,7 +294,7 @@ def distribution_crossover(
     a_dft = torch.fft.rfft(a_dist)
     b_dft = torch.fft.rfft(b_dist)
 
-    dft_filter = create_filter((a_dft.numel(),), alpha, beta, device=a.device)
+    dft_filter = create_filter((a_dft.numel(),), mean, tilt, device=a.device)
 
     x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
     x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
@@ -303,18 +304,20 @@ def distribution_crossover(
 
 @convert_to_recipe
 def crossover(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
-    alpha: float,
-    beta: float,
+    mean: float,
+    tilt: float,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
-    if alpha == 0 and beta == 0:
+) -> Tensor | SameMergeSpace:
+    if mean == 0:
         return a
+    if tilt == 1:
+        return weighted_sum.__wrapped__(a, b, alpha=mean)
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, alpha=beta)
+        return weighted_sum.__wrapped__(a, b, alpha=tilt)
 
     if a.shape[0] > 40000 or len(a.shape) == 4 and sum(a.shape[2:]) > 2:
         shape = a.shape[1:]
@@ -324,13 +327,26 @@ def crossover(
     a_dft = torch.fft.rfftn(a, s=shape)
     b_dft = torch.fft.rfftn(b, s=shape)
 
-    dft_filter = create_filter(a_dft.shape, alpha, beta, device=a.device)
+    dft_filter = create_filter(a_dft.shape, mean, tilt, device=a.device)
 
     x_dft = (1 - dft_filter)*a_dft + dft_filter*b_dft
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float, steps=100, precision=EPSILON, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, mean: float, tilt: float, steps=100, precision=EPSILON, device=None):
+    """
+    Create a crossover filter. The cut is first tilted, then slid along its normal to match the mean.
+    :param shape: shape of the filter
+    :param mean: the mean of the filter. must be in [0, 1]
+    :param tilt: tilt of the filter. 0 = vertical filter, 0.5 = 45 degrees, 1 = degenerates to a weighted sum with alpha=mean
+    :param steps: maximum number of optimization steps to apply over the mean until the filter converges
+    :param precision: the accepted loss between the requested mean and the effective mean of the filter
+    :param device: device of the filter
+    :return:
+    """
+    if not 0 <= mean <= 1:
+        raise ValueError("filter mean must be between 0 and 1")
+
     gradients = [
         torch.linspace(0, 1, s, device=device)**2
         for s in shape
@@ -342,34 +358,34 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, beta: float
     else:
         mesh = gradients[0]
 
-    # train the cut to pick the right ratio of parameters
-    phi_alpha = alpha
+    # train the offset of the cut to pick the right ratio of parameters
+    trained_offset = mean
     dft_filter = mesh
     for step in range(steps):
-        if beta < EPSILON:
-            dft_filter = (mesh > 1 - phi_alpha).float()
+        if tilt < EPSILON:
+            dft_filter = (mesh > 1 - trained_offset).float()
         else:
-            cot_b = 1 / math.tan(math.pi * beta / 2)
-            dft_filter = torch.clamp(mesh*cot_b + phi_alpha*cot_b + phi_alpha - cot_b, 0, 1)
-        filter_mean = dft_filter.mean()
-        loss = alpha - filter_mean
+            tilt_cot = 1 / math.tan(math.pi * tilt / 2)
+            dft_filter = torch.clamp(mesh*tilt_cot + trained_offset*tilt_cot + trained_offset - tilt_cot, 0, 1)
+        current_mean = dft_filter.mean()
+        loss = mean - current_mean
         if abs(loss) < precision:
             break
-        phi_alpha += loss
+        trained_offset += loss
 
     return dft_filter
 
 
-@convert_to_recipe
+@convert_to_recipe(volatile_hypers=["cache"])
 def rotate(
-    a: Tensor | SharedMergeSpace,
-    b: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: float,
     beta: float,
-    cache: Optional[Dict[str, Tensor]] = None,
+    cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     if alpha == 0 and beta == 0:
         return a
 
@@ -396,8 +412,14 @@ def rotate(
 
     alpha_is_float = alpha != round(alpha)
 
+    if cache is not None:
+        key = kwargs["key"]
+        if key not in cache:
+            cache[key] = {}
+        cache = cache[key]
+
     if cache is not None and "rotation" in cache:
-        rotation = transform = cache["rotation"].to(a.device)
+        rotation = transform = cache["rotation"].to(a.device, a.dtype)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a_neurons.T @ b_neurons, driver=svd_driver)
@@ -419,7 +441,7 @@ def rotate(
             )
 
         if cache is not None:
-            cache["rotation"] = rotation.cpu()
+            cache["rotation"] = rotation.to("cpu", torch.float16)
 
     if alpha_is_float:
         transform = fractional_matrix_power(transform, alpha, cache)
@@ -443,29 +465,38 @@ def rotate(
 
 def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tensor]):
     if cache is not None and "eigenvalues" in cache:
-        eigenvalues = cache["eigenvalues"].to(matrix.device)
-        eigenvectors = cache["eigenvectors"].to(matrix.device)
-        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device)
+        complex_dtype = torch_complex_dtype_map[matrix.dtype]
+        eigenvalues = cache["eigenvalues"].to(matrix.device, complex_dtype)
+        eigenvectors = cache["eigenvectors"].to(matrix.device, complex_dtype)
+        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device, complex_dtype)
     else:
         eigenvalues, eigenvectors = torch.linalg.eig(matrix)
         eigenvectors_inv = torch.linalg.inv(eigenvectors)
         if cache is not None:
-            cache["eigenvalues"] = eigenvalues.cpu()
-            cache["eigenvectors"] = eigenvectors.cpu()
-            cache["eigenvectors_inv"] = eigenvectors_inv.cpu()
+            cache["eigenvalues"] = eigenvalues.to("cpu", torch.complex32)
+            cache["eigenvectors"] = eigenvectors.to("cpu", torch.complex32)
+            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.complex32)
 
     eigenvalues.pow_(power)
     result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
     return result.real.to(dtype=matrix.dtype)
 
 
+torch_complex_dtype_map = {
+    torch.bfloat16: torch.complex32,
+    torch.float16: torch.complex32,
+    torch.float32: torch.complex64,
+    torch.float64: torch.complex128,
+}
+
+
 @convert_to_recipe
 def clip(
-    a: Tensor | SharedMergeSpace,
-    *bounds: Tensor | SharedMergeSpace,
+    a: Tensor | SameMergeSpace,
+    *bounds: Tensor | SameMergeSpace,
     stiffness: float = 0.0,
     **kwargs,
-) -> Tensor | SharedMergeSpace:
+) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
     centers = (maximums + minimums) / 2

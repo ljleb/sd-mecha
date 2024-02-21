@@ -32,11 +32,14 @@ See the [examples](/examples) directory for other examples.
 - Memory efficient model merging -- merge a very large number of models at the same time
 - Mecha recipes as a textual and interpretable format (.mecha)
 - Custom merge method programming interface for experiments
+- Recipe variables for general recipe templates
+- Compose recipe templates to create mega recipes
+- SD1.5 and SDXL supported
+- Merge loras (SD1.5)
 
 Coming soon:
 
-- Recipe variables for general recipe templates
-- Compose recipe templates to create mega recipes
+- Save lora from delta space model
 
 ## Install
 
@@ -52,10 +55,12 @@ The pypi package does not ship with `torch` so that you can install the appropri
 
 ## Usage
 
-### Merge recipes with the CLI
+### Merge models
+
+You can merge models following a recipe. Make sure the recipe does not contain any parameters:
 
 ```shell
-python -m sd_mecha merge <path/to/recipe.mecha> -o path/to/output.safetensors [options]
+python -m sd_mecha merge <path/to/recipe.mecha> [options]
 ```
 
 For more information:
@@ -64,7 +69,30 @@ For more information:
 python -m sd_mecha merge --help
 ```
 
-It is also possible to merge recipes from python code using the library. See the [examples](/examples).
+### Compose recipes
+
+You can compose recipes together to create more complex recipes.
+For this to work, the base recipe must contain free parameters:
+
+```shell
+python -m sd_mecha compose <path/to/recipe.mecha> [options]
+```
+
+For example, here we compose the recipe in `examples/recipes/incompatible_fusion.mecha`
+with another recipe for parameter "a" and
+the sd1.5 base model for parameter "c":
+
+```shell
+python -m sd_mecha compose examples/recipes/incompatible_fusion.mecha \
+  -p a examples/recipes/weighted_sum.mecha \
+  -p c pure/v1-5-pruned
+```
+
+For more information:
+
+```shell
+python -m sd_mecha merge --help
+```
 
 ## Motivation
 

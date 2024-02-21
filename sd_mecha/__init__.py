@@ -1,21 +1,25 @@
 import logging
 import pathlib
 import torch
-from typing import Optional
+from typing import Optional, Dict
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods
 from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.hypers import Hyper, unet15_blocks, unet15_classes, txt15_blocks, txt15_classes
-from sd_mecha.recipe_serializer import serialize, deserialize
+from sd_mecha.hypers import (
+    Hyper,
+    sd15_unet_blocks, sd15_unet_classes, sd15_txt_blocks, sd15_txt_classes,
+    sdxl_unet_blocks, sdxl_unet_classes, sdxl_txt_blocks, sdxl_txt_classes, sdxl_txt_g14_blocks, sdxl_txt_g14_classes,
+)
+from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 
 
 def merge_and_save(
     recipe: recipe_nodes.RecipeNode,
-    base_dir: pathlib.Path,
+    models_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
-    scheduler = RecipeMerger(base_dir=base_dir)
+    scheduler = RecipeMerger(models_dir=models_dir)
     scheduler.merge_and_save(recipe, output_path=output_path)
 
 
@@ -42,13 +46,13 @@ slerp = merge_methods.slerp
 
 def add_difference(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
-    alpha: Hyper = 0.5,
+    alpha: Hyper = 1.0,
     clip_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = extensions.path_to_node(a)
-    b = extensions.path_to_node(b)
+    a: recipe_nodes.RecipeNode = extensions.path_to_node(a)
+    b: recipe_nodes.RecipeNode = extensions.path_to_node(b)
     original_b = b
 
     if c is not None:
@@ -60,19 +64,17 @@ def add_difference(
         )
 
     res = merge_methods.add_difference(
-        a=a,
-        b=b,
+        a, b,
         alpha=alpha,
         device=device,
         dtype=dtype,
     )
 
+    if a.merge_space == original_b.merge_space:
+        b = original_b
+
     if clip_to_ab is None:
-        ab_same_space = a.merge_space == b.merge_space
-        abo_same_space = a.merge_space == original_b.merge_space
-        clip_to_ab = ab_same_space or abo_same_space
-        if abo_same_space:
-            b = original_b
+        clip_to_ab = a.merge_space == b.merge_space
 
     if clip_to_ab:
         if a.merge_space != b.merge_space:
@@ -112,22 +114,20 @@ def add_perpendicular(
     )
 
     perp_diff = merge_methods.perpendicular_component(
-        a=a_diff,
-        b=b_diff,
+        a_diff, b_diff,
         device=device,
         dtype=dtype,
     )
 
     return merge_methods.add_difference(
-        a=a,
-        b=perp_diff,
+        a, perp_diff,
         alpha=alpha,
         device=device,
         dtype=dtype,
     )
 
 
-multiply_difference = merge_methods.multiply_difference
+geometric_sum = merge_methods.geometric_sum
 copy_difference = train_difference = merge_methods.copy_difference
 similarity_add_difference = merge_methods.similarity_add_difference
 normalized_similarity_sum = cosine_add_a = merge_methods.normalized_similarity_sum
@@ -159,8 +159,7 @@ def add_difference_ties(
         dtype=dtype,
     )
     return add_difference(
-        base,
-        res,
+        base, res,
         alpha=1.0,
         device=device,
         dtype=dtype,
@@ -194,8 +193,7 @@ def copy_region(
 
     copy_method = [merge_methods.copy_region, merge_methods.copy_top_k][int(top_k)]
     res = copy_method(
-        a=a,
-        b=b,
+        a, b,
         alpha=width,
         beta=offset,
         device=device,
@@ -204,8 +202,7 @@ def copy_region(
 
     if c is not None:
         res = merge_methods.add_difference(
-            a=c,
-            b=res,
+            c, res,
             alpha=1.0,
             device=device,
             dtype=dtype,
@@ -223,8 +220,9 @@ def rotate(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 1.0,
     beta: Hyper = 0.0,
-    device: Optional[str] = None,
+    device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = torch.float64,
+    cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = path_to_node(a)
     b = path_to_node(b)
@@ -244,18 +242,17 @@ def rotate(
         )
 
     res = merge_methods.rotate(
-        a=a,
-        b=b,
+        a, b,
         alpha=alpha,
         beta=beta,
+        cache=cache,
         device=device,
         dtype=dtype,
     )
 
     if c is not None:
         res = merge_methods.add_difference(
-            a=c,
-            b=res,
+            c, res,
             alpha=1.0,
             device=device,
             dtype=dtype,
@@ -267,20 +264,16 @@ def rotate(
 clip = merge_methods.clip
 
 
-def model(
-    state_dict: str | pathlib.Path,
-):
-    return recipe_nodes.ModelRecipeNode(
-        state_dict=state_dict,
-    )
+def model(state_dict: str | pathlib.Path):
+    return recipe_nodes.ModelRecipeNode(state_dict)
 
 
-def lora(
-    state_dict: str | pathlib.Path,
-):
-    return recipe_nodes.LoraRecipeNode(
-        state_dict=state_dict,
-    )
+def lora(state_dict: str | pathlib.Path):
+    return recipe_nodes.LoraRecipeNode(state_dict)
+
+
+def parameter(name: str):
+    return recipe_nodes.ParameterRecipeNode(name)
 
 
 def set_log_level(level: str = "INFO"):

@@ -6,7 +6,7 @@ import textwrap
 import torch
 from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
-from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, Set
+from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, Set, Iterable
 
 
 RecipeNodeOrPath = RecipeNode | str | pathlib.Path
@@ -19,27 +19,34 @@ class LiftFlag(Generic[T]):
 
 
 class MergeMethod:
-    def __init__(self, f: Callable):
+    def __init__(self, f: Callable, volatile_hypers: Iterable[str]):
         self.__f = f
         self.__name = f.__name__
+        self.__volatile_hypers = volatile_hypers
         self.__validate_f()
 
     def __validate_f(self):
         spec = inspect.getfullargspec(self.__f)
         if spec.defaults:
-            raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({spec.defaults})")
+            params_with_default = spec.args[-len(spec.defaults):]
+            raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({params_with_default})")
+
+        for volatile_hyper in self.__volatile_hypers:
+            if volatile_hyper not in spec.kwonlydefaults:
+                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it missing or does not have a default value")
 
         if spec.varkw is None:
-            raise TypeError(f"**kwargs must be specified")
+            raise TypeError(f"**kwargs must be included in the function parameters")
 
-    def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], device, dtype):
-        args, kwargs = self.__get_args_kwargs(inputs, hypers, device, dtype)
+    def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
+        args, kwargs = self.__get_args_kwargs(inputs, hypers, key, device, dtype)
         return self.__f(*args, **kwargs)
 
     def __get_args_kwargs(
         self,
         inputs: Tuple[torch.Tensor, ...],
         hypers: Dict[str, float],
+        key: str,
         device: str,
         dtype: Optional[torch.dtype],
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
@@ -52,7 +59,11 @@ class MergeMethod:
             v.to(*to_args)
             for v in inputs
         )
-        return merge_method_args, hypers
+        return merge_method_args, hypers | {
+            "device": device,
+            "dtype": dtype,
+            "key": key,
+        }
 
     def get_return_merge_space(self, merge_spaces_args: List[MergeSpace]) -> MergeSpace:
         type_hints = get_type_hints(self.__f)
@@ -96,6 +107,9 @@ class MergeMethod:
     def get_hyper_names(self) -> Set[str]:
         return set(inspect.getfullargspec(self.__f).kwonlyargs)
 
+    def get_volatile_hyper_names(self) -> Set[str]:
+        return set(self.__volatile_hypers)
+
     def get_default_hypers(self) -> Dict[str, Hyper]:
         return inspect.getfullargspec(self.__f).kwonlydefaults or {}
 
@@ -107,17 +121,19 @@ class MergeMethod:
 
 
 def convert_to_recipe(
-    f: Optional[Callable] = None,
+    f: Optional[Callable] = None, *,
+    volatile_hypers: Iterable[str] = (),
 ):
     if f is None:
-        return lambda f: __convert_to_recipe_impl(f)
-    return __convert_to_recipe_impl(f)
+        return lambda f: __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers)
+    return __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers)
 
 
 def __convert_to_recipe_impl(
-    f: Callable,
+    f: Callable, *,
+    volatile_hypers: Iterable[str],
 ):
-    merge_method = MergeMethod(f)
+    merge_method = MergeMethod(f, volatile_hypers)
     default_hypers = merge_method.get_default_hypers()
 
     model_params = "".join(
@@ -137,7 +153,11 @@ def __convert_to_recipe_impl(
     )
     hyper_args = "".join(
         f"{hyper_name}={hyper_name}, "
-        for hyper_name in merge_method.get_hyper_names()
+        for hyper_name in merge_method.get_hyper_names() - merge_method.get_volatile_hyper_names()
+    )
+    volatile_hyper_args = "".join(
+        f"{hyper_name}={hyper_name}, "
+        for hyper_name in merge_method.get_volatile_hyper_names()
     )
 
     fn_locals = {}
@@ -159,7 +179,8 @@ def __convert_to_recipe_impl(
                 merge_method,
                 {model_args}
                 *({path_to_node.__name__}(arg) for arg in args),
-                {hyper_args}
+                hypers=dict({hyper_args}),
+                volatile_hypers=dict({volatile_hyper_args}),
                 device=device,
                 dtype=dtype,
             )
