@@ -130,13 +130,20 @@ class DepthRecipeVisitor:
 
 
 class ModelsCountVisitor:
-    def visit_model(self, _node: ModelRecipeNode):
-        return 1
+    def __init__(self):
+        self.__seen_nodes = []
 
-    def visit_lora(self, _node: LoraRecipeNode):
-        return 1
+    def visit_model(self, node: ModelRecipeNode):
+        seen = node in self.__seen_nodes
+        self.__seen_nodes.append(node)
+        return not seen
 
-    def visit_parameter(self, node: ParameterRecipeNode):
+    def visit_lora(self, node: LoraRecipeNode):
+        seen = node in self.__seen_nodes
+        self.__seen_nodes.append(node)
+        return not seen
+
+    def visit_parameter(self, _node: ParameterRecipeNode):
         return 0
 
     def visit_merge(self, node: MergeRecipeNode):
