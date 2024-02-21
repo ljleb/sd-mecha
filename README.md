@@ -1,5 +1,7 @@
 # sd-mecha
 
+[![PyPI version](https://badge.fury.io/py/sd-mecha.svg)](https://badge.fury.io/py/sd-mecha)
+
 sd-mecha is a stable diffusion recipe merger:
 
 ```python
