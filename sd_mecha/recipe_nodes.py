@@ -23,6 +23,10 @@ class RecipeNode(abc.ABC):
     def merge_space(self) -> MergeSpace:
         pass
 
+    @abc.abstractmethod
+    def __contains__(self, item):
+        pass
+
 
 class LeafRecipeNode(RecipeNode, abc.ABC):
     def __init__(
@@ -36,6 +40,12 @@ class LeafRecipeNode(RecipeNode, abc.ABC):
         else:
             self.path = state_dict
             self.state_dict = None
+
+    def __contains__(self, item):
+        if isinstance(item, LeafRecipeNode):
+            return self.path == item.path
+        else:
+            return False
 
 
 class ModelRecipeNode(LeafRecipeNode):
@@ -80,6 +90,12 @@ class ParameterRecipeNode(RecipeNode):
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
 
+    def __contains__(self, item):
+        if isinstance(item, ParameterRecipeNode):
+            return self.name == item.name and self.merge_space == item.merge_space
+        else:
+            return False
+
 
 class MergeRecipeNode(RecipeNode):
     def __init__(
@@ -110,6 +126,15 @@ class MergeRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
+
+    def __contains__(self, item):
+        if isinstance(item, MergeRecipeNode):
+            return self is item or any(
+                item in model
+                for model in self.models
+            )
+        else:
+            return False
 
 
 class DepthRecipeVisitor:

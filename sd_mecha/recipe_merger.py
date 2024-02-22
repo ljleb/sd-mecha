@@ -8,7 +8,6 @@ from sd_mecha import extensions, recipe_nodes, streaming, recipe_serializer
 from sd_mecha.hypers import get_hyper
 from tqdm import tqdm
 from typing import Optional, Tuple, List, Mapping, MutableMapping, Dict
-from sd_mecha.user_error import UserError
 
 
 class RecipeMerger:
@@ -30,19 +29,24 @@ class RecipeMerger:
     def merge_and_save(
         self, recipe: extensions.RecipeNodeOrPath, *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
+        fallback_model: Optional[Mapping[str, torch.Tensor] | pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
-        passthrough_model: Optional[Mapping[str, torch.Tensor] | pathlib.Path | str] = None,
     ):
-        recipe = extensions.path_to_node(recipe)
         if save_dtype is None:
             save_dtype = self.__default_dtype
+
+        recipe = extensions.path_to_node(recipe)
+        if isinstance(fallback_model, (str, pathlib.Path)):
+            fallback_model = extensions.path_to_node(fallback_model)
+        fallback_in_recipe = fallback_model in recipe
+        extensions.clear_model_paths_cache()
 
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
             int(isinstance(output, (str, pathlib.Path))) +
-            int(isinstance(passthrough_model, (str, pathlib.Path)))
+            int(isinstance(fallback_model, recipe_nodes.RecipeNode) and not fallback_in_recipe)
         )
         buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
@@ -53,20 +57,13 @@ class RecipeMerger:
             buffer_size_per_file,
         )
         recipe.accept(load_input_dicts_visitor)
-        if isinstance(passthrough_model, (str, pathlib.Path)):
-            passthrough_model = extensions.path_to_node(passthrough_model)
-            passthrough_model.accept(load_input_dicts_visitor)
-            passthrough_model = passthrough_model.accept(GatherInputDictsVisitor())[0]
-        extensions.clear_model_paths_cache()
+        if isinstance(fallback_model, recipe_nodes.RecipeNode):
+            fallback_model.accept(load_input_dicts_visitor)
+            fallback_model = fallback_model.accept(GatherInputDictsVisitor())[0]
 
         input_dicts = recipe.accept(GatherInputDictsVisitor())
         validate_same_sd_version(input_dicts)
-        merged_header = {
-            k: {k: v for k, v in h.items() if k != "data_offsets"}
-            for input_dict in input_dicts
-            for k, h in input_dict.header.items()
-            if k != "__metadata__"
-        }
+        merged_header = recipe.accept(GatherCombinedHeaderVisitor())
 
         output = self.__normalize_output_to_dict(
             output,
@@ -75,47 +72,35 @@ class RecipeMerger:
             buffer_size_per_file // threads,
         )
 
-        def _get_passthrough_tensor(key: str):
-            if passthrough_model is not None and key in passthrough_model:
-                return passthrough_model[key]
+        key_merger = KeyMerger(
+            output,
+            fallback_model,
+            input_dicts,
+            recipe,
+            self.__default_device,
+            self.__default_dtype,
+            save_dtype,
+        )
+        merge_schedule = {}
+        for key in merged_header:
+            if is_passthrough_key(key, merged_header[key]):
+                merge_schedule[key] = key_merger.forward_and_save
+            elif is_merge_key(key):
+                merge_schedule[key] = key_merger.merge_and_save
 
-            for input_dict in input_dicts:
-                try:
-                    return input_dict[key]
-                except KeyError:
-                    continue
+        merged_header_copy = merged_header.copy()
+        merged_header.clear()
+        merged_header.update({
+            k: v
+            for k, v in merged_header_copy.items()
+            if k in merge_schedule
+        })
 
-        progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
-
-        def _merge_and_save(key: str):
-            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
-            try:
-                key_merger = KeyMergeVisitor(
-                    key,
-                    self.__default_device,
-                    self.__default_dtype,
-                )
-                merged = recipe.accept(key_merger)
-            except KeyError as e:
-                merged = _get_passthrough_tensor(key)
-            output[key] = merged.to(save_dtype)
-            progress.update()
-
-        def _forward_and_save(key: str):
-            progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
-            output[key] = _get_passthrough_tensor(key).to(save_dtype)
-            progress.update()
-
+        progress = tqdm(total=len(merge_schedule), desc="Merging recipe")
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
-            for key in merged_header:
-                if is_passthrough_key(key, merged_header[key]):
-                    futures.append(executor.submit(_forward_and_save, key))
-                elif is_merge_key(key):
-                    futures.append(executor.submit(_merge_and_save, key))
-                else:
-                    progress.total -= 1
-                    progress.refresh()
+            for key, f in merge_schedule.items():
+                futures.append(executor.submit(self.__wrap_progress(f, progress), key, merged_header[key]))
 
             for future in as_completed(futures):
                 future.result()
@@ -147,6 +132,58 @@ class RecipeMerger:
                 buffer_size_per_thread,
             )
         return output
+
+    def __wrap_progress(self, f, progress):
+        def track_progress(key, key_header, *args, **kwargs):
+            progress.set_postfix({"key": key, "shape": key_header.get("shape")})
+            res = f(key, key_header, *args, **kwargs)
+            progress.update()
+            return res
+        return track_progress
+
+
+@dataclasses.dataclass
+class KeyMerger:
+    output: MutableMapping[str, torch.Tensor]
+    fallback_model: Mapping[str, torch.Tensor]
+    input_dicts: List[Mapping[str, torch.Tensor]]
+    recipe: recipe_nodes.RecipeNode
+    default_device: str
+    default_dtype: torch.dtype
+    save_dtype: torch.dtype
+
+    def merge_and_save(
+        self,
+        key: str,
+        key_header: dict,
+    ):
+        try:
+            key_merger = KeyMergeVisitor(
+                key,
+                self.default_device,
+                self.default_dtype,
+            )
+            merged = self.recipe.accept(key_merger)
+        except KeyError as e:
+            merged = self.__get_passthrough_tensor(key)
+        self.output[key] = merged.to(self.save_dtype)
+
+    def forward_and_save(
+        self,
+        key: str,
+        key_header: dict,
+    ):
+        self.output[key] = self.__get_passthrough_tensor(key).to(self.save_dtype)
+
+    def __get_passthrough_tensor(self, key: str):
+        if self.fallback_model is not None and key in self.fallback_model:
+            return self.fallback_model[key]
+
+        for input_dict in self.input_dicts:
+            try:
+                return input_dict[key]
+            except KeyError:
+                continue
 
 
 @dataclasses.dataclass
@@ -244,8 +281,26 @@ class LoadInputDictsVisitor:
         return dict_class(path, self.__buffer_size_per_dict)
 
 
+@dataclasses.dataclass
+class GatherCombinedHeaderVisitor:
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> Dict[str, dict]:
+        return node.state_dict.header.items()
+
+    def visit_lora(self, node: recipe_nodes.LoraRecipeNode):
+        return node.state_dict.header.items()
+
+    def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
+        return {}
+
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
+        return {
+            k: v
+            for model in node.models
+            for k, v in model.accept(self)
+        }
+
+
 def is_passthrough_key(key: str, header: dict):
-    is_metadata = key == "__metadata__"
     is_vae = key.startswith("first_stage_model.")
     is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
 
@@ -253,7 +308,7 @@ def is_passthrough_key(key: str, header: dict):
     is_label_embed = key.startswith("model.diffusion_model.label_emb.")
     is_position_ids = is_position_ids or key == "conditioner.embedders.0.transformer.text_model.embeddings.position_ids"
 
-    return is_metadata or is_vae or is_position_ids or is_label_embed or header["shape"] == [1000]
+    return is_vae or is_position_ids or is_label_embed or (key != "__metadata__" and header["shape"] == [1000])
 
 
 def is_merge_key(key: str):
@@ -292,4 +347,4 @@ def validate_same_sd_version(input_dicts: List[streaming.InSafetensorsDict]):
             for is_sdxl, input_dict in zip(are_sdxl, input_dicts)
             if not is_sdxl
         )
-    raise UserError(f"Input models are not all the same version. Found {good_count} {good_version} vs {bad_count} {bad_version} models ({bad_models})")
+    raise ValueError(f"Input models are not all the same version. Found {good_count} {good_version} vs {bad_count} {bad_version} models ({bad_models})")

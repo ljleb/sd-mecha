@@ -58,7 +58,7 @@ class InModelSafetensorsDict:
     @property
     def is_sdxl(self):
         for key in self.keys():
-            if key.startswith("conditioner"):
+            if key.startswith("conditioner."):
                 return True
         return False
 
