@@ -12,4 +12,4 @@ merger = sd_mecha.RecipeMerger(
     default_device="cuda",
 )
 
-merger.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output="basic_merge")

@@ -26,4 +26,4 @@ merger = sd_mecha.RecipeMerger(
     models_dir=r"E:\sd\models\Stable-diffusion",
 )
 
-merger.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output="basic_merge")

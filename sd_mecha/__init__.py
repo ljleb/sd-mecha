@@ -19,8 +19,8 @@ def merge_and_save(
     models_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
-    scheduler = RecipeMerger(models_dir=models_dir)
-    scheduler.merge_and_save(recipe, output_path=output_path)
+    merger = RecipeMerger(models_dir=models_dir)
+    merger.merge_and_save(recipe, output=output_path)
 
 
 def serialize_and_save(

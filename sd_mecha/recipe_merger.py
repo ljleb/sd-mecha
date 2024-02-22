@@ -7,8 +7,7 @@ from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, Ou
 from sd_mecha import extensions, recipe_nodes, streaming, recipe_serializer
 from sd_mecha.hypers import get_hyper
 from tqdm import tqdm
-from typing import Optional, Tuple, List, Mapping
-
+from typing import Optional, Tuple, List, Mapping, MutableMapping, Dict
 from sd_mecha.user_error import UserError
 
 
@@ -29,31 +28,38 @@ class RecipeMerger:
         self.__default_dtype = default_dtype
 
     def merge_and_save(
-        self, recipe, *,
-        output_path: pathlib.Path | str = "merge",
+        self, recipe: extensions.RecipeNodeOrPath, *,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
+        passthrough_model: Optional[Mapping[str, torch.Tensor] | pathlib.Path | str] = None,
     ):
-        extensions.clear_model_paths_cache()
+        recipe = extensions.path_to_node(recipe)
         if save_dtype is None:
             save_dtype = self.__default_dtype
-        if not isinstance(output_path, pathlib.Path):
-            output_path = pathlib.Path(output_path)
-        if not output_path.is_absolute():
-            output_path = self.__base_dir / output_path
-        if not output_path.suffix:
-            output_path = output_path.with_suffix(".safetensors")
-        logging.info(f"Saving to {output_path}")
 
-        number_of_dicts = recipe.accept(recipe_nodes.ModelsCountVisitor()) + 1  # output dict
+        total_files_open = (
+            recipe.accept(recipe_nodes.ModelsCountVisitor()) +
+            int(isinstance(output, (str, pathlib.Path))) +
+            int(isinstance(passthrough_model, (str, pathlib.Path)))
+        )
+        buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
-            threads = number_of_dicts
+            threads = total_files_open
 
-        input_dicts = recipe.accept(GatherInputDictsVisitor(
+        load_input_dicts_visitor = LoadInputDictsVisitor(
             self.__base_dir,
-            total_buffer_size // number_of_dicts,
-        ))
+            buffer_size_per_file,
+        )
+        recipe.accept(load_input_dicts_visitor)
+        if isinstance(passthrough_model, (str, pathlib.Path)):
+            passthrough_model = extensions.path_to_node(passthrough_model)
+            passthrough_model.accept(load_input_dicts_visitor)
+            passthrough_model = passthrough_model.accept(GatherInputDictsVisitor())[0]
+        extensions.clear_model_paths_cache()
+
+        input_dicts = recipe.accept(GatherInputDictsVisitor())
         validate_same_sd_version(input_dicts)
         merged_header = {
             k: {k: v for k, v in h.items() if k != "data_offsets"}
@@ -62,19 +68,23 @@ class RecipeMerger:
             if k != "__metadata__"
         }
 
-        def _get_any_tensor(key: str):
+        output = self.__normalize_output(
+            output,
+            merged_header,
+            recipe_serializer.serialize(recipe),
+            buffer_size_per_file // threads,
+        )
+
+        def _get_passthrough_tensor(key: str):
+            if passthrough_model is not None and key in passthrough_model:
+                return passthrough_model[key]
+
             for input_dict in input_dicts:
                 try:
                     return input_dict[key]
                 except KeyError:
                     continue
 
-        output = OutSafetensorsDict(
-            output_path,
-            merged_header,
-            recipe_serializer.serialize(recipe),
-            total_buffer_size // number_of_dicts // threads,
-        )
         progress = tqdm(total=len(merged_header.keys()), desc="Merging recipe")
 
         def _merge_and_save(key: str):
@@ -87,13 +97,13 @@ class RecipeMerger:
                 )
                 merged = recipe.accept(key_merger)
             except KeyError as e:
-                merged = _get_any_tensor(key)
+                merged = _get_passthrough_tensor(key)
             output[key] = merged.to(save_dtype)
             progress.update()
 
         def _forward_and_save(key: str):
             progress.set_postfix({"key": key, "shape": merged_header[key].get("shape")})
-            output[key] = _get_any_tensor(key).to(save_dtype)
+            output[key] = _get_passthrough_tensor(key).to(save_dtype)
             progress.update()
 
         with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -111,7 +121,32 @@ class RecipeMerger:
                 future.result()
 
         progress.close()
-        output.close()
+        if hasattr(output, "close"):
+            output.close()
+
+    def __normalize_output(
+        self,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
+        merged_header: Dict[str, dict],
+        serialized_recipe: str,
+        buffer_size_per_thread: int,
+    ):
+        if isinstance(output, (str, pathlib.Path)):
+            if not isinstance(output, pathlib.Path):
+                output = pathlib.Path(output)
+            if not output.is_absolute():
+                output = self.__base_dir / output
+            if not output.suffix:
+                output = output.with_suffix(".safetensors")
+            logging.info(f"Saving to {output}")
+
+            output = OutSafetensorsDict(
+                output,
+                merged_header,
+                serialized_recipe,
+                buffer_size_per_thread,
+            )
+        return output
 
 
 @dataclasses.dataclass
@@ -154,28 +189,42 @@ class KeyMergeVisitor:
         return merged
 
 
-@dataclasses.dataclass
 class GatherInputDictsVisitor:
-    __base_dir: pathlib.Path
-    __buffer_size_per_dict: int
-
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> List[Mapping[str, torch.Tensor]]:
-        node.state_dict = self.__load_dict(node, InModelSafetensorsDict)
         return [node.state_dict]
 
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode) -> List[Mapping[str, torch.Tensor]]:
-        node.state_dict = self.__load_dict(node, InLoraSafetensorsDict)
         return [node.state_dict]
 
     def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode) -> List[Mapping[str, torch.Tensor]]:
         return []
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> List[Mapping[str, torch.Tensor]]:
-        return [
-            input_dict
-            for model in node.models
-            for input_dict in model.accept(self)
-        ]
+        res = []
+        for model in node.models:
+            for input_dict in model.accept(self):
+                if input_dict not in res:
+                    res.append(input_dict)
+        return res
+
+
+@dataclasses.dataclass
+class LoadInputDictsVisitor:
+    __base_dir: pathlib.Path
+    __buffer_size_per_dict: int
+
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode):
+        node.state_dict = self.__load_dict(node, InModelSafetensorsDict)
+
+    def visit_lora(self, node: recipe_nodes.LoraRecipeNode):
+        node.state_dict = self.__load_dict(node, InLoraSafetensorsDict)
+
+    def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
+        return
+
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
+        for model in node.models:
+            model.accept(self)
 
     def __load_dict(
         self,
