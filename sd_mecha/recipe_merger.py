@@ -68,7 +68,7 @@ class RecipeMerger:
             if k != "__metadata__"
         }
 
-        output = self.__normalize_output(
+        output = self.__normalize_output_to_dict(
             output,
             merged_header,
             recipe_serializer.serialize(recipe),
@@ -124,7 +124,7 @@ class RecipeMerger:
         if hasattr(output, "close"):
             output.close()
 
-    def __normalize_output(
+    def __normalize_output_to_dict(
         self,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
         merged_header: Dict[str, dict],
