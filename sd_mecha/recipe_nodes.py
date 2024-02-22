@@ -1,10 +1,8 @@
 import abc
-import dataclasses
 import enum
 import pathlib
 import torch
 from typing import Optional, Dict, Any
-from sd_mecha.streaming import InModelSafetensorsDict, InLoraSafetensorsDict
 from sd_mecha.hypers import validate_hyper, Hyper
 
 
@@ -31,15 +29,10 @@ class RecipeNode(abc.ABC):
 class LeafRecipeNode(RecipeNode, abc.ABC):
     def __init__(
         self,
-        state_dict,
-        dict_class,
+        state_dict: str | pathlib.Path,
     ):
-        if isinstance(state_dict, dict_class):
-            self.path = state_dict.file_path
-            self.state_dict = state_dict
-        else:
-            self.path = state_dict
-            self.state_dict = None
+        self.path = state_dict
+        self.state_dict = None
 
     def __contains__(self, item):
         if isinstance(item, LeafRecipeNode):
@@ -51,9 +44,9 @@ class LeafRecipeNode(RecipeNode, abc.ABC):
 class ModelRecipeNode(LeafRecipeNode):
     def __init__(
         self,
-        state_dict: str | pathlib.Path | InModelSafetensorsDict,
+        state_dict: str | pathlib.Path,
     ):
-        super().__init__(state_dict, InModelSafetensorsDict)
+        super().__init__(state_dict)
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_model(self, *args, **kwargs)
@@ -66,9 +59,11 @@ class ModelRecipeNode(LeafRecipeNode):
 class LoraRecipeNode(LeafRecipeNode):
     def __init__(
         self,
-        state_dict: str | pathlib.Path | InLoraSafetensorsDict,
+        state_dict: str | pathlib.Path,
+        dtype: Optional[torch.dtype],
     ):
-        super().__init__(state_dict, InLoraSafetensorsDict)
+        super().__init__(state_dict)
+        self.dtype = dtype
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_lora(self, *args, **kwargs)

@@ -10,7 +10,7 @@ import warnings
 from tqdm import tqdm
 
 
-class InModelSafetensorsDict:
+class InSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":
             raise ValueError(f"Model type not supported: {file_path} (only safetensors are supported)")
@@ -93,80 +93,6 @@ class InModelSafetensorsDict:
                 self._ensure_buffer(absolute_start_pos, total_bytes)
                 buffer_offset = absolute_start_pos - self.buffer_start_offset
                 return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).reshape(shape)
-
-
-class InLoraSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, buffer_size: int):
-        self.safetensors_dict = InModelSafetensorsDict(file_path, buffer_size)
-        with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
-            self.key_map = json.load(f)
-
-    def __del__(self):
-        self.close()
-
-    def __getitem__(self, key):
-        if key.startswith("lora_"):
-            raise KeyError("Direct access to 'lora_' keys is not allowed. Use target keys instead.")
-
-        lora_key = self.key_map.get(key)
-        if lora_key is None:
-            raise KeyError(f"No lora key mapping found for target key: {key}")
-
-        return self._convert_lora_to_weight(lora_key)
-
-    def __iter__(self):
-        return iter(self.keys())
-
-    def __len__(self):
-        return len(set(self.key_map.keys()))
-
-    def close(self):
-        self.safetensors_dict.close()
-
-    def keys(self):
-        return (
-            self.key_map[key[:-len(".lora_up.weight")]]
-            for key in self.safetensors_dict.keys()
-            if ".lora_up.weight" in key
-        )
-
-    def values(self):
-        for key in self.keys():
-            yield self[key]
-
-    def items(self):
-        for key in self.keys():
-            yield key, self[key]
-
-    @property
-    def header(self):
-        return self.safetensors_dict.header
-
-    @property
-    def file_path(self):
-        return self.safetensors_dict.file_path
-
-    @property
-    def is_sdxl(self):
-        # sdxl lora not yet supported
-        return False
-
-    def _convert_lora_to_weight(self, lora_key):
-        up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].to(torch.float32)
-        down_weight = self.safetensors_dict[f"{lora_key}.lora_down.weight"].to(torch.float32)
-        alpha = self.safetensors_dict[f"{lora_key}.alpha"].to(torch.float32)
-        dim = down_weight.size()[0]
-        scale = alpha / dim
-
-        if len(down_weight.size()) == 2:  # linear
-            return (up_weight @ down_weight) * scale
-        elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
-            return (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3) * scale
-        else:  # conv2d 3x3
-            return torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3) * scale
-
-
-InSafetensorsDict = InModelSafetensorsDict | InLoraSafetensorsDict
 
 
 @dataclasses.dataclass

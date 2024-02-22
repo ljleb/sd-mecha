@@ -1,9 +1,10 @@
 import dataclasses
+import json
 import logging
 import pathlib
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from sd_mecha.streaming import InLoraSafetensorsDict, InModelSafetensorsDict, OutSafetensorsDict
+from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
 from sd_mecha import extensions, recipe_nodes, streaming, recipe_serializer
 from sd_mecha.hypers import get_hyper
 from tqdm import tqdm
@@ -15,7 +16,7 @@ class RecipeMerger:
         self, *,
         models_dir: Optional[pathlib.Path | str] = None,
         default_device: str = "cpu",
-        default_dtype: Optional[torch.dtype] = torch.float32,
+        default_dtype: Optional[torch.dtype] = torch.float64,
     ):
         self.__base_dir = models_dir if models_dir is not None else models_dir
         if isinstance(self.__base_dir, str):
@@ -34,9 +35,6 @@ class RecipeMerger:
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
     ):
-        if save_dtype is None:
-            save_dtype = self.__default_dtype
-
         recipe = extensions.path_to_node(recipe)
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.path_to_node(fallback_model)
@@ -65,6 +63,19 @@ class RecipeMerger:
         validate_same_sd_version(input_dicts)
         merged_header = recipe.accept(GatherCombinedHeaderVisitor())
 
+        key_decisions = {}
+        for key in merged_header:
+            if is_passthrough_key(key, merged_header[key]):
+                key_decisions[key] = lambda: key_merger.forward_and_save
+            elif is_merge_key(key):
+                key_decisions[key] = lambda: key_merger.merge_and_save
+
+        merged_header = {
+            k: v
+            for k, v in merged_header.items()
+            if k in key_decisions
+        }
+
         output = self.__normalize_output_to_dict(
             output,
             merged_header,
@@ -79,28 +90,14 @@ class RecipeMerger:
             recipe,
             self.__default_device,
             self.__default_dtype,
-            save_dtype,
+            save_dtype or self.__default_dtype,
         )
-        merge_schedule = {}
-        for key in merged_header:
-            if is_passthrough_key(key, merged_header[key]):
-                merge_schedule[key] = key_merger.forward_and_save
-            elif is_merge_key(key):
-                merge_schedule[key] = key_merger.merge_and_save
 
-        merged_header_copy = merged_header.copy()
-        merged_header.clear()
-        merged_header.update({
-            k: v
-            for k, v in merged_header_copy.items()
-            if k in merge_schedule
-        })
-
-        progress = tqdm(total=len(merge_schedule), desc="Merging recipe")
+        progress = tqdm(total=len(key_decisions), desc="Merging recipe")
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
-            for key, f in merge_schedule.items():
-                futures.append(executor.submit(self.__wrap_progress(f, progress), key, merged_header[key]))
+            for key, f in key_decisions.items():
+                futures.append(executor.submit(self.__wrap_progress(f(), progress), key, merged_header[key]))
 
             for future in as_completed(futures):
                 future.result()
@@ -196,7 +193,22 @@ class KeyMergeVisitor:
         return node.state_dict[self.__key]
 
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode) -> torch.Tensor:
-        return node.state_dict[self.__key]
+        lora_key = SD15_LORA_KEY_MAP.get(self.__key)
+        if lora_key is None:
+            raise KeyError(f"No lora key mapping found for target key: {self.__key}")
+
+        up_weight = node.state_dict[f"{lora_key}.lora_up.weight"].to(torch.float64)
+        down_weight = node.state_dict[f"{lora_key}.lora_down.weight"].to(torch.float64)
+        alpha = node.state_dict[f"{lora_key}.alpha"].to(torch.float64)
+        dim = down_weight.size()[0]
+
+        if len(down_weight.size()) == 2:  # linear
+            res = up_weight @ down_weight
+        elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
+            res = (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3)
+        else:  # conv2d 3x3
+            res = torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3)
+        return res * (alpha / dim)
 
     def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> torch.Tensor:
         raise NotImplementedError(f"Interactive arguments are not yet implemented: parameter '{node.name}' has no value.")
@@ -226,6 +238,10 @@ class KeyMergeVisitor:
         return merged
 
 
+with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
+    SD15_LORA_KEY_MAP = json.load(f)
+
+
 class GatherInputDictsVisitor:
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> List[Mapping[str, torch.Tensor]]:
         return [node.state_dict]
@@ -251,10 +267,10 @@ class LoadInputDictsVisitor:
     __buffer_size_per_dict: int
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
-        node.state_dict = self.__load_dict(node, InModelSafetensorsDict)
+        node.state_dict = self.__load_dict(node)
 
     def visit_lora(self, node: recipe_nodes.LoraRecipeNode):
-        node.state_dict = self.__load_dict(node, InLoraSafetensorsDict)
+        node.state_dict = self.__load_dict(node)
 
     def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
         return
@@ -266,8 +282,7 @@ class LoadInputDictsVisitor:
     def __load_dict(
         self,
         node: recipe_nodes.LeafRecipeNode,
-        dict_class: type,
-    ) -> Mapping[str, torch.Tensor]:
+    ) -> InSafetensorsDict:
         if node.state_dict is not None:
             return node.state_dict
 
@@ -278,7 +293,7 @@ class LoadInputDictsVisitor:
             path = self.__base_dir / path
         if not path.suffix:
             path = path.with_suffix(".safetensors")
-        return dict_class(path, self.__buffer_size_per_dict)
+        return InSafetensorsDict(path, self.__buffer_size_per_dict)
 
 
 @dataclasses.dataclass

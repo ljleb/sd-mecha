@@ -221,7 +221,7 @@ def rotate(
     alpha: Hyper = 1.0,
     beta: Hyper = 0.0,
     device: Optional[str] = "cuda",
-    dtype: Optional[torch.dtype] = torch.float64,
+    dtype: Optional[torch.dtype] = None,
     cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = path_to_node(a)
@@ -268,8 +268,8 @@ def model(state_dict: str | pathlib.Path):
     return recipe_nodes.ModelRecipeNode(state_dict)
 
 
-def lora(state_dict: str | pathlib.Path):
-    return recipe_nodes.LoraRecipeNode(state_dict)
+def lora(state_dict: str | pathlib.Path, load_dtype: Optional[torch.dtype] = None):
+    return recipe_nodes.LoraRecipeNode(state_dict, load_dtype)
 
 
 def parameter(name: str):
