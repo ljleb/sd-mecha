@@ -79,6 +79,7 @@ SDXL_HYPERS = {
             for i in range(9)
         } | {
             "out": "out.",
+            "time_embed": "time_embed.",
         }).items()
     } | {
         f"class_{k}": v
@@ -107,6 +108,8 @@ SDXL_HYPERS = {
             "conv": ".conv.",
             "out0": ".out.0.",
             "out2": ".out.2.",
+            "time_embed0": ".time_embed.0",
+            "time_embed2": ".time_embed.2",
         }).items()
     }).items()
 } | CLIP_L14_HYEPRS | CLIP_G14_HYPERS
@@ -135,11 +138,27 @@ def sdxl_unet_blocks(
     out08: Optional[float] = None,
     default: float = 0.0,
 ) -> dict:
-    out = out08
+    (
+        out,
+        time_embed,
+    ) = (
+        out08,
+        calculate_time_embed_from_blocks(locals())
+    )
     return {
         f"sdxl_unet_block_{k}": v if v is not None else default
         for k, v in locals().items() if v is not None
     }
+
+
+def calculate_time_embed_from_blocks(blocks: dict) -> float:
+    blocks_without_time = {"in00", "in03", "in06", "in09", "default"}
+    return sum(
+        v if v is not None else blocks["default"]
+        for k, v in blocks.items()
+        if k not in blocks_without_time
+    ) / (len(blocks) - len(blocks_without_time))
+
 
 
 def sdxl_unet_classes(
@@ -171,6 +190,8 @@ def sdxl_unet_classes(
     conv: Optional[float] = None,
     out0: Optional[float] = None,
     out2: Optional[float] = None,
+    time_embed0: Optional[float] = None,
+    time_embed2: Optional[float] = None,
 ):
     return {
         f"sdxl_unet_class_{k}": v if v is not None else default

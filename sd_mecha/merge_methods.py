@@ -33,7 +33,7 @@ def slerp(
     a_normalized = a / a.norm()
     b_normalized = b / b.norm()
 
-    ab_dot = torch.sum(a_normalized * b_normalized)
+    ab_dot = (a_normalized * b_normalized).sum().clip(-1, 1)
 
     if 1 - torch.abs(ab_dot) < EPSILON:
         return weighted_sum.__wrapped__(a, b, alpha=alpha)

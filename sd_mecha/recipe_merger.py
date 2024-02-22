@@ -198,14 +198,13 @@ class GatherInputDictsVisitor:
 def is_passthrough_key(key: str, header: dict):
     is_metadata = key == "__metadata__"
     is_vae = key.startswith("first_stage_model.")
-    is_time_embed = key.startswith("model.diffusion_model.time_embed.")
     is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
 
     # sdxl only
     is_label_embed = key.startswith("model.diffusion_model.label_emb.")
     is_position_ids = is_position_ids or key == "conditioner.embedders.0.transformer.text_model.embeddings.position_ids"
 
-    return is_metadata or is_vae or is_time_embed or is_position_ids or is_label_embed or header["shape"] == [1000]
+    return is_metadata or is_vae or is_position_ids or is_label_embed or header["shape"] == [1000]
 
 
 def is_merge_key(key: str):

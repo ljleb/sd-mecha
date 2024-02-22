@@ -15,6 +15,7 @@ SD15_HYPERS = {
             for i in range(12)
         } | {
             "out": "out.",
+            "time_embed": "time_embed.",
         }).items()
     } | {
         f"class_{k}": v
@@ -43,6 +44,8 @@ SD15_HYPERS = {
             "conv": ".conv.",
             "out0": ".out.0.",
             "out2": ".out.2.",
+            "time_embed0": ".time_embed.0",
+            "time_embed2": ".time_embed.2",
         }).items()
     }).items()
 } | {
@@ -103,11 +106,26 @@ def sd15_unet_blocks(
     out11: Optional[float] = None,
     default: float = 0.0,
 ) -> dict:
-    out = out11
+    (
+        out,
+        time_embed,
+    ) = (
+        out11,
+        calculate_time_embed_from_blocks(locals()),
+    )
     return {
         f"sd15_unet_block_{k}": v if v is not None else default
         for k, v in locals().items()
     }
+
+
+def calculate_time_embed_from_blocks(blocks: dict) -> float:
+    blocks_without_time = {"in00", "in03", "in06", "in09", "default"}
+    return sum(
+        v if v is not None else blocks["default"]
+        for k, v in blocks.items()
+        if k not in blocks_without_time
+    ) / (len(blocks) - len(blocks_without_time))
 
 
 def sd15_unet_classes(
@@ -139,6 +157,8 @@ def sd15_unet_classes(
     conv: Optional[float] = None,
     out0: Optional[float] = None,
     out2: Optional[float] = None,
+    time_embed0: Optional[float] = None,
+    time_embed2: Optional[float] = None,
 ):
     return {
         f"sd15_unet_class_{k}": v if v is not None else default
