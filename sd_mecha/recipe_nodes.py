@@ -132,7 +132,25 @@ class MergeRecipeNode(RecipeNode):
             return False
 
 
-class DepthRecipeVisitor:
+class RecipeVisitor(abc.ABC):
+    @abc.abstractmethod
+    def visit_model(self, node: ModelRecipeNode):
+        pass
+
+    @abc.abstractmethod
+    def visit_lora(self, node: LoraRecipeNode):
+        pass
+
+    @abc.abstractmethod
+    def visit_parameter(self, node: ParameterRecipeNode):
+        pass
+
+    @abc.abstractmethod
+    def visit_merge(self, node: MergeRecipeNode):
+        pass
+
+
+class DepthRecipeVisitor(RecipeVisitor):
     def visit_model(self, _node: ModelRecipeNode):
         return 1
 
@@ -149,7 +167,7 @@ class DepthRecipeVisitor:
         ) + 1
 
 
-class ModelsCountVisitor:
+class ModelsCountVisitor(RecipeVisitor):
     def __init__(self):
         self.__seen_nodes = []
 
@@ -173,7 +191,7 @@ class ModelsCountVisitor:
         )
 
 
-class ParameterResolverVisitor:
+class ParameterResolverVisitor(RecipeVisitor):
     def __init__(self, arguments: Dict[str, RecipeNode]):
         self.__arguments = arguments
 

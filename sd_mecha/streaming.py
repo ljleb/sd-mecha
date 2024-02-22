@@ -55,13 +55,6 @@ class InSafetensorsDict:
         for key in self.keys():
             yield key, self[key]
 
-    @property
-    def is_sdxl(self):
-        for key in self.keys():
-            if key.startswith("conditioner."):
-                return True
-        return False
-
     def _read_header(self):
         header_size_bytes = self.file.read(8)
         header_size = struct.unpack('<Q', header_size_bytes)[0]
