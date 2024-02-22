@@ -160,7 +160,6 @@ def calculate_time_embed_from_blocks(blocks: dict) -> float:
     ) / (len(blocks) - len(blocks_without_time))
 
 
-
 def sdxl_unet_classes(
     default: float = 0.0, *,
     in0: Optional[float] = None,
