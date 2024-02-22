@@ -152,7 +152,7 @@ def sdxl_unet_blocks(
 
 
 def calculate_time_embed_from_blocks(blocks: dict) -> float:
-    blocks_without_time = {"in00", "in03", "in06", "in09", "default"}
+    blocks_without_time = {"in00", "in03", "in06", "default"}
     return sum(
         v if v is not None else blocks["default"]
         for k, v in blocks.items()
