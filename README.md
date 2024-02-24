@@ -36,11 +36,13 @@ See the [examples](/examples) directory for other examples.
 - Recipe variables for general recipe templates
 - Compose recipe templates to create mega recipes
 - SD1.5 and SDXL supported
-- Merge loras (SD1.5)
+- Merge LoRAs to models and with other LoRAs (SD1.5)
 
 Coming soon:
 
-- Save lora from delta space model
+- Support arbitrary model types and versions using the `sd_mecha.extensions` module
+- Merge SDXL LoRAs to models and with other LoRAs
+- Save LoRA from delta merge space
 
 ## Install
 
@@ -92,7 +94,7 @@ python -m sd_mecha compose examples/recipes/incompatible_fusion.mecha \
 For more information:
 
 ```shell
-python -m sd_mecha merge --help
+python -m sd_mecha compose --help
 ```
 
 ## Motivation
