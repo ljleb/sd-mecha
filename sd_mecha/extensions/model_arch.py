@@ -18,8 +18,10 @@ def discover_block_prefixes(keys: Set[str], config: dict, version_id: str):
 
     for module, module_config in config["merge"].items():
         prefix = module_config["prefix"]
-        for block_patterns, shorthand in module_config["blocks"].items():
-            patterns = block_patterns.split(" ")
+        for shorthand, patterns in module_config["blocks"].items():
+            if isinstance(patterns, str):
+                patterns = [patterns]
+
             first_pattern_re = re.escape(patterns[0]).replace(re.escape(WILDCARD), r'(\w+)').replace(re.escape(PADDING), r'\w+')
             pattern = re.compile(rf"^{prefix}\.{first_pattern_re}")
 
@@ -30,10 +32,10 @@ def discover_block_prefixes(keys: Set[str], config: dict, version_id: str):
                     block_shorthand = (version_id + "_" + module + "_block_" + shorthand.replace(WILDCARD, "{}")).format(block_id)
                     if block_shorthand not in discovered_blocks:
                         discovered_blocks[block_shorthand] = {
-                            "patterns": [
-                                re.compile(re.escape(f"{prefix}.{p.replace(WILDCARD, block_id)}.").replace(re.escape(PADDING), r'\w+'))
+                            "patterns": [re.compile(p) for p in sorted((
+                                re.escape(f"{prefix}.{p.replace(WILDCARD, block_id)}.").replace(re.escape(PADDING), r'\w+')
                                 for p in patterns
-                            ],
+                            ), key=lambda s: len(s.split(".")), reverse=True)],
                             "module": module,
                         }
 
@@ -59,7 +61,7 @@ def discover_blocks(keys, discovered_block_prefixes, version_id):
 
 
 @dataclasses.dataclass
-class ModelVersion:
+class ModelArch:
     identifier: str
     components: Set[str]
     keys: Set[str]
@@ -76,14 +78,14 @@ class ModelVersion:
         )
 
 
-def register_model_version(
+def register_model_arch(
     yaml_config_path: str | pathlib.Path,
     identifier: str,
 ):
     stack_frame = traceback.extract_stack(None, 2)[0]
 
-    if identifier in _model_versions_registry:
-        existing_location = _model_versions_registry[identifier].location
+    if identifier in _model_archs_registry:
+        existing_location = _model_archs_registry[identifier].location
         raise ValueError(f"Extension '{identifier}' is already registered at {existing_location}.")
 
     if isinstance(yaml_config_path, str):
@@ -105,15 +107,15 @@ def register_model_version(
     components = set(config["merge"].keys())
 
     location = f"{stack_frame.filename}:{stack_frame.lineno}"
-    _model_versions_registry[identifier] = ModelVersion(identifier, components, keys, keys_to_forward, keys_to_merge, blocks, classes, location)
+    _model_archs_registry[identifier] = ModelArch(identifier, components, keys, keys_to_forward, keys_to_merge, blocks, classes, location)
 
 
-_model_versions_registry = {}
+_model_archs_registry = {}
 
 
-def resolve(identifier: str) -> ModelVersion:
+def resolve(identifier: str) -> ModelArch:
     try:
-        return _model_versions_registry[identifier]
+        return _model_archs_registry[identifier]
     except KeyError as e:
-        suggestion = fuzzywuzzy.process.extractOne(str(e), _model_versions_registry.keys())[0]
-        raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
+        suggestion = fuzzywuzzy.process.extractOne(str(e), _model_archs_registry.keys())[0]
+        raise ValueError(f"unknown model architecture: {e}. Nearest match is '{suggestion}'")

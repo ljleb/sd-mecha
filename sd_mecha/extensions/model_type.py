@@ -4,7 +4,7 @@ import fuzzywuzzy.process
 import traceback
 import torch
 from sd_mecha.merge_space import MergeSpace
-from sd_mecha.extensions.model_version import ModelVersion
+from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.streaming import DTYPE_REVERSE_MAPPING, DTYPE_MAPPING
 from torch._subclasses.fake_tensor import FakeTensorMode
 from typing import Callable, Mapping, Optional, List
@@ -23,7 +23,7 @@ class ModelType:
     def get_tensor(self, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return self.__f(state_dict, key)
 
-    def convert_header(self, header: Mapping[str, Mapping[str, str | List[int]]], model_version: ModelVersion):
+    def convert_header(self, header: Mapping[str, Mapping[str, str | List[int]]], model_arch: ModelArch):
         fake_mode = FakeTensorMode()
 
         def _create_fake_tensor(*shape, dtype):
@@ -36,7 +36,7 @@ class ModelType:
                 if k != "__metadata__"
             }
             converted_state_dict = {}
-            for k in model_version.keys:
+            for k in model_arch.keys:
                 try:
                     converted_state_dict[k] = self.get_tensor(fake_state_dict, k)
                 except KeyError:
@@ -98,4 +98,4 @@ def resolve(identifier: str) -> ModelType:
         return _model_types_registry[identifier]
     except KeyError as e:
         suggestion = fuzzywuzzy.process.extractOne(str(e), _model_types_registry.keys())[0]
-        raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
+        raise ValueError(f"unknown model type: {e}. Nearest match is '{suggestion}'")

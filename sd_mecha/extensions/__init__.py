@@ -1,1 +1,1 @@
-from . import merge_method, model_version, model_type
+from . import merge_method, model_arch, model_type

@@ -2,7 +2,7 @@ import logging
 import pathlib
 import torch
 import sd_mecha.builtin_model_types
-import sd_mecha.builtin_model_versions
+import sd_mecha.builtin_model_archs
 from typing import Optional, Dict
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
@@ -274,12 +274,12 @@ def supermario(
     return add_difference(a, ba_mario_delta, alpha=l)
 
 
-def model(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1", model_type: Optional[str] = "base"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_version, model_type)
+def model(state_dict: str | pathlib.Path, model_arch: Optional[str] = "sd1", model_type: Optional[str] = "base"):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
 
 
-def lora(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_version, "lora")
+def lora(state_dict: str | pathlib.Path, model_arch: Optional[str] = "sd1"):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, "lora")
 
 
 def parameter(name: str, merge_space: MergeSpace):

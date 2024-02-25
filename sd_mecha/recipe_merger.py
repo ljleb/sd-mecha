@@ -41,8 +41,8 @@ class RecipeMerger:
             raise ValueError(f"Recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
-        fallback_in_recipe = fallback_model is not None and fallback_model in recipe
         extensions.merge_method.clear_model_paths_cache()
+        fallback_in_recipe = fallback_model is not None and fallback_model in recipe
 
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +

@@ -3,13 +3,13 @@ import pathlib
 import torch
 from typing import Optional, Dict, Any
 from sd_mecha import extensions
-from sd_mecha.extensions.model_version import ModelVersion
+from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import validate_hyper, Hyper
 from sd_mecha.merge_space import MergeSpace
 
 
 class RecipeNode(abc.ABC):
-    model_version: ModelVersion
+    model_arch: ModelArch
 
     @abc.abstractmethod
     def accept(self, visitor, *args, **kwargs):
@@ -29,13 +29,13 @@ class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
         state_dict_path: str | pathlib.Path,
-        model_version: str = "sd1",
+        model_arch: str = "sd1",
         model_type: str = "base",
     ):
         self.path = state_dict_path
         self.state_dict = None
         self.model_type = extensions.model_type.resolve(model_type)
-        self.model_version = extensions.model_version.resolve(model_version)
+        self.model_arch = extensions.model_arch.resolve(model_arch)
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_model(self, *args, **kwargs)
@@ -82,9 +82,9 @@ class MergeRecipeNode(RecipeNode):
     ):
         self.merge_method = merge_method
         self.models = models
-        self.model_version = self.models[0].model_version
+        self.model_arch = self.models[0].model_arch
         for hyper_v in hypers.values():
-            validate_hyper(hyper_v, self.model_version)
+            validate_hyper(hyper_v, self.model_arch)
         self.hypers = hypers
         self.volatile_hypers = volatile_hypers
         self.device = device

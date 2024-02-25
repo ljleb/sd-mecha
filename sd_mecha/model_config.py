@@ -4,7 +4,7 @@ import functools
 import pathlib
 import torch
 from typing import Iterable, Dict, List, Mapping, Callable, Tuple, Optional
-from sd_mecha.extensions.model_version import ModelVersion
+from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import get_hyper
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, MergeRecipeNode, DepthRecipeVisitor, RecipeVisitor
 
@@ -13,17 +13,17 @@ from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNo
 class ModelConfig:
     __minimal_dummy_header: Dict[str, Dict[str, str | List[int]]]
     __input_paths: List[str | pathlib.Path]
-    __model_version: ModelVersion
+    __model_arch: ModelArch
 
     def __post_init__(self):
         self.__keys_to_forward = set(
             k for k in self.__minimal_dummy_header
-            if k in self.__model_version.keys_to_forward
+            if k in self.__model_arch.keys_to_forward
         )
         self.__keys_to_merge = set(
             k for k in self.__minimal_dummy_header
             if k not in self.__keys_to_forward
-            and k in self.__model_version.keys_to_merge
+            and k in self.__model_arch.keys_to_merge
         )
         self.__minimal_dummy_header = {
             k: v
@@ -44,19 +44,19 @@ class ModelConfig:
         return self.__input_paths
 
     def intersect(self, other):
-        if self.__model_version is not other.__model_version:
+        if self.__model_arch is not other.__model_arch:
             self_paths = ', '.join(str(p) for p in self.__input_paths)
             other_paths = ', '.join(str(p) for p in other.__input_paths)
             raise ValueError(
                 "Found incompatible model versions: "
-                f"{len(self.__input_paths)} {self.__model_version} models ({self_paths}) vs "
-                f"{len(other.__input_paths)} {other.__model_version} models ({other_paths})"
+                f"{len(self.__input_paths)} {self.__model_arch} models ({self_paths}) vs "
+                f"{len(other.__input_paths)} {other.__model_arch} models ({other_paths})"
             )
 
         return ModelConfig(
             self.__minimal_dummy_header | other.__minimal_dummy_header,
             self.__input_paths + other.__input_paths,
-            self.__model_version,
+            self.__model_arch,
         )
 
     def get_key_merger(
@@ -82,9 +82,9 @@ class ModelConfig:
 class DetermineConfigVisitor(RecipeVisitor):
     def visit_model(self, node: ModelRecipeNode) -> ModelConfig:
         return ModelConfig(
-            node.model_type.convert_header(node.state_dict.header, node.model_version),
+            node.model_type.convert_header(node.state_dict.header, node.model_arch),
             [node.state_dict.file_path],
-            node.model_version,
+            node.model_arch,
         )
 
     def visit_parameter(self, node: ParameterRecipeNode) -> ModelConfig:
@@ -162,7 +162,7 @@ class KeyMergeVisitor(KeyVisitor):
     def visit_merge(self, node: MergeRecipeNode) -> torch.Tensor:
         return node.merge_method(
             self.__visit_deeper_first(node.models),
-            {k: get_hyper(v, self._key, node.model_version) for k, v in node.hypers.items()} | node.volatile_hypers,
+            {k: get_hyper(v, self._key, node.model_arch) for k, v in node.hypers.items()} | node.volatile_hypers,
             self._key,
             node.device if node.device is not None else self._default_device,
             node.dtype if node.dtype is not None else self._default_dtype,
