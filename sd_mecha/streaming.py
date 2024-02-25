@@ -4,9 +4,11 @@ import json
 import pathlib
 import struct
 import threading
-from typing import Optional
+from typing import Optional, Set
 import torch
 import warnings
+
+from torch._subclasses import FakeTensorMode
 from tqdm import tqdm
 
 
@@ -100,7 +102,15 @@ class OutSafetensorsDictThreadState:
 
 
 class OutSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, template_header: dict, mecha_recipe: str, minimum_buffer_size: int):
+    def __init__(
+        self,
+        file_path: pathlib.Path,
+        template_header: dict,
+        keys_to_merge: Set[str],
+        mecha_recipe: str,
+        minimum_buffer_size: int,
+        save_dtype: torch.dtype,
+    ):
         self.thread_states = {}
         self.lock = threading.Lock()
 
@@ -112,7 +122,7 @@ class OutSafetensorsDict:
         self.flushed_size = 0
         self.minimum_buffer_size = minimum_buffer_size
 
-        self.max_header_size = self._init_buffer(template_header)
+        self.max_header_size = self._init_buffer(template_header, keys_to_merge, save_dtype)
 
     def __del__(self):
         self.file.close()
@@ -143,21 +153,34 @@ class OutSafetensorsDict:
     def __len__(self):
         return len(self.header)
 
-    def _init_buffer(self, template_header) -> int:
-        # pretend the variable sections of the header take all the space they possibly can
-        # this should be mostly the "data_offsets" tuples
-        # we assume they take at least 10 digits, in case they are missing in the template
-        max_digits = max(
-            len(str(offset))
-            for tensor_info in template_header.values()
-            for offset in tensor_info.get('data_offsets', [0, 0])
-        )
-        dummy_number = 10 ** max(max_digits, 10) - 1
+    def _init_buffer(self, template_header: dict, keys_to_merge: Set[str], save_dtype: torch.dtype) -> int:
+        fake_mode = FakeTensorMode()
 
-        dummy_header = {
-            key: {**value, "data_offsets": [dummy_number, dummy_number]}
-            for key, value in template_header.items()
-        }
+        def _create_fake_tensor(*shape, dtype):
+            return fake_mode.from_tensor(torch.empty(shape, dtype=dtype))
+
+        with fake_mode:
+            fake_state_dict = {
+                k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
+                for k, h in template_header.items()
+                if k != "__metadata__"
+            }
+            fake_state_dict = dict(sorted(
+                fake_state_dict.items(),
+                key=lambda x: x[1].numel() * x[1].element_size(),
+                reverse=True,
+            ))
+
+            data_offset = 0
+            dummy_header = {
+                k: {
+                    "dtype": DTYPE_REVERSE_MAPPING[save_dtype][0] if k in keys_to_merge else DTYPE_REVERSE_MAPPING[t.dtype][0],
+                    "shape": list(t.shape),
+                    "data_offsets": [data_offset, (data_offset := data_offset + t.numel() * t.element_size())],
+                }
+                for k, t in fake_state_dict.items()
+            }
+
         dummy_header["__metadata__"] = self.header["__metadata__"]
         header_json = json.dumps(dummy_header, separators=(',', ':')).encode('utf-8')
         max_header_size = len(header_json)

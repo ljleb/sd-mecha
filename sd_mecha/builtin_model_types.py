@@ -30,3 +30,8 @@ def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
 
 with open(pathlib.Path(__file__).parent / "lora" / "sd1_ldm_to_lora.json", 'r') as f:
     SD1_MODEL_TO_LORA_KEYS = json.load(f)
+
+
+@register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl")
+def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+    pass

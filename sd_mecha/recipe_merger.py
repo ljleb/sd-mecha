@@ -9,7 +9,7 @@ from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
-from typing import Optional, Mapping, MutableMapping, Dict
+from typing import Optional, Mapping, MutableMapping, Dict, Set
 
 
 class RecipeMerger:
@@ -31,24 +31,26 @@ class RecipeMerger:
     def merge_and_save(
         self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
-        fallback_model: Optional[Mapping[str, torch.Tensor] | pathlib.Path | str] = None,
+        fallback_model: Optional[Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**29,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
         if recipe.merge_space != recipe_nodes.MergeSpace.BASE:
-            raise ValueError(f"Recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
+            raise ValueError(f"recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
+        elif not isinstance(fallback_model, (recipe_nodes.ModelRecipeNode, Mapping[str, torch.Tensor])):
+            raise ValueError(f"fallback_model should be a simple model or None, not {type(fallback_model)}")
         extensions.merge_method.clear_model_paths_cache()
-        is_custom_fallback = isinstance(fallback_model, recipe_nodes.RecipeNode)
-        fallback_in_recipe = fallback_model is not None and fallback_model in recipe
 
+        fallback_is_recipe = isinstance(fallback_model, recipe_nodes.ModelRecipeNode)
+        fallback_in_recipe = fallback_is_recipe and fallback_model in recipe
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
             int(isinstance(output, (str, pathlib.Path))) +
-            int(is_custom_fallback and not fallback_in_recipe)
+            int(fallback_is_recipe and not fallback_in_recipe)
         )
         buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
@@ -59,19 +61,21 @@ class RecipeMerger:
             buffer_size_per_file,
         )
         recipe.accept(load_input_dicts_visitor)
-        if is_custom_fallback:
+        if fallback_is_recipe:
             fallback_model.accept(load_input_dicts_visitor)
 
         model_config = recipe.accept(DetermineConfigVisitor())
-        if is_custom_fallback:
+        if fallback_is_recipe:
             model_config = model_config.intersect(fallback_model.accept(DetermineConfigVisitor()))
             fallback_model = fallback_model.state_dict
 
         output = self.__normalize_output_to_dict(
             output,
             model_config.get_minimal_dummy_header(),
+            model_config.get_keys_to_merge(),
             recipe_serializer.serialize(recipe),
             buffer_size_per_file // threads,
+            save_dtype,
         )
 
         progress = tqdm(total=len(model_config.keys()), desc="Merging recipe")
@@ -94,8 +98,10 @@ class RecipeMerger:
         self,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
         merged_header: Dict[str, dict],
+        keys_to_merge: Set[str],
         serialized_recipe: str,
         buffer_size_per_thread: int,
+        dtype: torch.dtype,
     ):
         if isinstance(output, (str, pathlib.Path)):
             if not isinstance(output, pathlib.Path):
@@ -109,8 +115,10 @@ class RecipeMerger:
             output = OutSafetensorsDict(
                 output,
                 merged_header,
+                keys_to_merge,
                 serialized_recipe,
                 buffer_size_per_thread,
+                dtype,
             )
         return output
 

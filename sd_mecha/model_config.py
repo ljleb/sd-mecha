@@ -34,6 +34,9 @@ class ModelConfig:
     def keys(self) -> Iterable[str]:
         return self.get_minimal_dummy_header().keys()
 
+    def get_keys_to_merge(self):
+        return self.__keys_to_merge
+
     def get_shape(self, key: str) -> List[int]:
         return self.get_minimal_dummy_header()[key]["shape"]
 

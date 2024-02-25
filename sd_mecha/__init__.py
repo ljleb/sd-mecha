@@ -1,8 +1,8 @@
 import logging
 import pathlib
 import torch
-import sd_mecha.builtin_model_types
 import sd_mecha.builtin_model_archs
+import sd_mecha.builtin_model_types
 from typing import Optional, Dict
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions

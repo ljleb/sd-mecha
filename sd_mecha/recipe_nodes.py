@@ -34,7 +34,7 @@ class ModelRecipeNode(RecipeNode):
     ):
         self.path = state_dict_path
         self.state_dict = None
-        self.model_type = extensions.model_type.resolve(model_type)
+        self.model_type = extensions.model_type.resolve(model_type, model_arch)
         self.model_arch = extensions.model_arch.resolve(model_arch)
 
     def accept(self, visitor, *args, **kwargs):
