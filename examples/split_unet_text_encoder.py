@@ -3,22 +3,25 @@ sd_mecha.set_log_level()
 
 
 text_encoder_recipe = sd_mecha.add_perpendicular(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-    "pure/v1-5-pruned"
+    "js2prony_v10",
+    "juggernautXL_v9Rundiffusionphoto2",
+    "pure/sdxl_base",
+    alpha=-2.0,
 )
 
 unet_recipe = sd_mecha.weighted_sum(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
+    "js2prony_v10",
+    "juggernautXL_v9Rundiffusionphoto2",
+    alpha=-2.0,
 )
 
 recipe = sd_mecha.weighted_sum(
     text_encoder_recipe,
     unet_recipe,
     alpha=(
-        sd_mecha.sd15_txt_classes(0) |
-        sd_mecha.sd15_unet_classes(1)
+        sd_mecha.sdxl_unet_blocks(in00=-1, in01=-1, in02=-1, in03=-1, default=0) |
+        sd_mecha.sdxl_txt_blocks(0) |
+        sd_mecha.sdxl_txt_g14_blocks(0)
     ),
 )
 

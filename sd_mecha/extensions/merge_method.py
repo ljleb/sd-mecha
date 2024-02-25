@@ -1,8 +1,8 @@
 import functools
+import fuzzywuzzy.process
 import inspect
 import pathlib
 import textwrap
-
 import torch
 from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
@@ -187,18 +187,26 @@ def __convert_to_recipe_impl(
     """), fn_globals, fn_locals)
     res = fn_locals[f.__name__]
     res.__wrapped__ = f
-    methods_registry[f.__name__] = res
+    _merge_methods_registry[f.__name__] = res
     return res
 
 
-methods_registry = {}
+_merge_methods_registry = {}
+
+
+def resolve(identifier: str) -> MergeMethod:
+    try:
+        return _merge_methods_registry[identifier]
+    except KeyError as e:
+        suggestion = fuzzywuzzy.process.extractOne(str(e), _merge_methods_registry.keys())[0]
+        raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
 
 
 @functools.cache
-def path_to_node(a: RecipeNodeOrPath) -> RecipeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        return ModelRecipeNode(a)
-    return a
+def path_to_node(node_or_path: RecipeNodeOrPath) -> RecipeNode:
+    if isinstance(node_or_path, (str, pathlib.Path)):
+        return ModelRecipeNode(node_or_path)
+    return node_or_path
 
 
 def clear_model_paths_cache():

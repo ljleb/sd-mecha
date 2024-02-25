@@ -29,18 +29,20 @@ class RecipeMerger:
         self.__default_dtype = default_dtype
 
     def merge_and_save(
-        self, recipe: extensions.RecipeNodeOrPath, *,
+        self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
         fallback_model: Optional[Mapping[str, torch.Tensor] | pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
     ):
-        recipe = extensions.path_to_node(recipe)
+        recipe = extensions.merge_method.path_to_node(recipe)
+        if recipe.merge_space != recipe_nodes.MergeSpace.BASE:
+            raise ValueError(f"Recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
         if isinstance(fallback_model, (str, pathlib.Path)):
-            fallback_model = extensions.path_to_node(fallback_model)
+            fallback_model = extensions.merge_method.path_to_node(fallback_model)
         fallback_in_recipe = fallback_model is not None and fallback_model in recipe
-        extensions.clear_model_paths_cache()
+        extensions.merge_method.clear_model_paths_cache()
 
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
@@ -132,9 +134,6 @@ class LoadInputDictsVisitor(RecipeVisitor):
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict = self.__load_dict(node)
 
-    def visit_lora(self, node: recipe_nodes.LoraRecipeNode):
-        node.state_dict = self.__load_dict(node)
-
     def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
         return
 
@@ -144,7 +143,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
     def __load_dict(
         self,
-        node: recipe_nodes.LeafRecipeNode,
+        node: recipe_nodes.ModelRecipeNode,
     ) -> InSafetensorsDict:
         if node.state_dict is not None:
             return node.state_dict

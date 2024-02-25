@@ -24,8 +24,8 @@ def custom_sum(
     # In this code, `a` and `b` must be in the same space, either in MODEL space or DELTA space.
     # The return merge space is exactly the merge space that satisfies `a` and `b` at the same time.
     # For more examples, see /sd_mecha/merge_methods.py
-    a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
-    b: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    a: torch.Tensor | LiftFlag[MergeSpace.BASE],
+    b: torch.Tensor | LiftFlag[MergeSpace.BASE],
     *,
     # hyperparameters go here
     alpha: float = 0.5,  # default arguments are honored
@@ -33,7 +33,7 @@ def custom_sum(
     # `@convert_to_recipe` introduces additional kwargs: `device=` and `dtype=`
     # We must put `**kwargs` to satisfy the type system:
     **kwargs,
-) -> torch.Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> torch.Tensor | LiftFlag[MergeSpace.BASE]:
 
     # to call an existing `@convert_to_recipe` merge method inside another one (i.e. this one),
     #  we use the `__wrapped__` attribute that returns the original unwrapped function

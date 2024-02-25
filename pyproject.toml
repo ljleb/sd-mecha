@@ -25,6 +25,7 @@ dependencies = [
 [tool.setuptools]
 packages = [
     "sd_mecha",
+    "sd_mecha.extensions",
     "sd_mecha.hypers",
 ]
 package-data = {"sd_mecha.lora"=["*.json"]}

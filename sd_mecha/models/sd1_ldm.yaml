@@ -1,0 +1,36 @@
+passthrough:
+- first_stage_model
+- cond_stage_model.transformer.text_model.embeddings.position_ids
+- posterior_log_variance_clipped
+- posterior_mean_coef1
+- posterior_mean_coef2
+- posterior_variance
+- sqrt_alphas_cumprod
+- sqrt_one_minus_alphas_cumprod
+- sqrt_recip_alphas_cumprod
+- sqrt_recipm1_alphas_cumprod
+- log_one_minus_alphas_cumprod
+- alphas_cumprod
+- alphas_cumprod_prev
+- betas
+
+merge:
+  txt:
+    prefix: cond_stage_model.transformer.text_model
+    blocks:
+      "encoder.layers.0 embeddings": in0
+      encoder.layers.11 final_layer_norm: in11
+      encoder.layers.*: in*
+  unet:
+    prefix: model.diffusion_model
+    blocks:
+      input_blocks.0.#: in0
+      input_blocks.3.#: in3
+      input_blocks.6.#: in6
+      input_blocks.9.#: in9
+      middle_block.# time_embed: mid
+      output_blocks.11.# time_embed out: out11
+      input_blocks.*.# time_embed: in*
+      output_blocks.*.# time_embed: out*
+
+keys: sd1_ldm_keys.txt

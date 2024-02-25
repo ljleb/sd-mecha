@@ -1,30 +1,29 @@
 import abc
 import dataclasses
 import functools
-import json
 import pathlib
 import torch
-from typing import Iterable, Dict, List, Mapping, Callable, Tuple, Optional, Set
+from typing import Iterable, Dict, List, Mapping, Callable, Tuple, Optional
+from sd_mecha.extensions.model_version import ModelVersion
 from sd_mecha.hypers import get_hyper
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode, ParameterRecipeNode, MergeRecipeNode, DepthRecipeVisitor, RecipeVisitor
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, MergeRecipeNode, DepthRecipeVisitor, RecipeVisitor
 
 
 @dataclasses.dataclass
 class ModelConfig:
     __minimal_dummy_header: Dict[str, Dict[str, str | List[int]]]
-    __input_paths: Set[str | pathlib.Path]
-    __keys_to_forward: Set[str] = dataclasses.field(init=False, default_factory=set)
-    __keys_to_merge: Set[str] = dataclasses.field(init=False, default_factory=set)
+    __input_paths: List[str | pathlib.Path]
+    __model_version: ModelVersion
 
     def __post_init__(self):
         self.__keys_to_forward = set(
             k for k in self.__minimal_dummy_header
-            if self.__is_passthrough_key(k)
+            if k in self.__model_version.keys_to_forward
         )
         self.__keys_to_merge = set(
             k for k in self.__minimal_dummy_header
             if k not in self.__keys_to_forward
-            and self.__is_merge_key(k)
+            and k in self.__model_version.keys_to_merge
         )
         self.__minimal_dummy_header = {
             k: v
@@ -41,19 +40,23 @@ class ModelConfig:
     def get_minimal_dummy_header(self) -> Dict[str, Dict[str, str | List[int]]]:
         return self.__minimal_dummy_header
 
-    def get_input_paths(self) -> Set[str | pathlib.Path]:
+    def get_input_paths(self) -> List[str | pathlib.Path]:
         return self.__input_paths
 
-    def is_sdxl(self) -> bool:
-        return any(
-            k.startswith("conditioner.")
-            for k in self.get_minimal_dummy_header()
-        )
-
     def intersect(self, other):
+        if self.__model_version is not other.__model_version:
+            self_paths = ', '.join(str(p) for p in self.__input_paths)
+            other_paths = ', '.join(str(p) for p in other.__input_paths)
+            raise ValueError(
+                "Found incompatible model versions: "
+                f"{len(self.__input_paths)} {self.__model_version} models ({self_paths}) vs "
+                f"{len(other.__input_paths)} {other.__model_version} models ({other_paths})"
+            )
+
         return ModelConfig(
             self.__minimal_dummy_header | other.__minimal_dummy_header,
-            self.__keys_to_merge | other.__keys_to_merge,
+            self.__input_paths + other.__input_paths,
+            self.__model_version,
         )
 
     def get_key_merger(
@@ -75,40 +78,19 @@ class ModelConfig:
         else:
             return functools.partial(key_merger.merge_and_save, key)
 
-    def __is_passthrough_key(self, key: str):
-        if key == "__metadata__":
-            return False
-
-        is_vae = key.startswith("first_stage_model.")
-        is_position_ids = key == "cond_stage_model.transformer.text_model.embeddings.position_ids"
-
-        # sdxl only
-        is_label_embed = key.startswith("model.diffusion_model.label_emb.")
-        is_position_ids = is_position_ids or key == "conditioner.embedders.0.transformer.text_model.embeddings.position_ids"
-
-        return is_vae or is_position_ids or is_label_embed or self.get_shape(key) == [1000]
-
-    def __is_merge_key(self, key: str):
-        is_unet = key.startswith("model.diffusion_model.")
-        is_text_encoder = key.startswith("cond_stage_model.")
-
-        # sdxl only
-        is_text_encoder = is_text_encoder or key.startswith("conditioner.embedders.")
-
-        return is_unet or is_text_encoder
-
 
 class DetermineConfigVisitor(RecipeVisitor):
-    def visit_model(self, node: ModelRecipeNode) -> Optional[ModelConfig]:
-        return ModelConfig(node.state_dict.header, {node.path})
+    def visit_model(self, node: ModelRecipeNode) -> ModelConfig:
+        return ModelConfig(
+            node.model_type.convert_header(node.state_dict.header, node.model_version),
+            [node.state_dict.file_path],
+            node.model_version,
+        )
 
-    def visit_lora(self, node: LoraRecipeNode) -> Optional[ModelConfig]:
-        return ModelConfig(node.state_dict.header, {node.path})
-
-    def visit_parameter(self, node: ParameterRecipeNode) -> Optional[ModelConfig]:
+    def visit_parameter(self, node: ParameterRecipeNode) -> ModelConfig:
         raise TypeError("Recipe parameters do not have configuration")
 
-    def visit_merge(self, node: MergeRecipeNode) -> Optional[ModelConfig]:
+    def visit_merge(self, node: MergeRecipeNode) -> ModelConfig:
         configs = [
             model.accept(self)
             for model in node.models
@@ -116,25 +98,6 @@ class DetermineConfigVisitor(RecipeVisitor):
         if configs:
             return functools.reduce(ModelConfig.intersect, configs)
         raise ValueError("No input models")
-
-
-@dataclasses.dataclass
-class GatherCombinedHeaderVisitor(RecipeVisitor):
-    def visit_model(self, node: ModelRecipeNode) -> Dict[str, dict]:
-        return node.state_dict.header.items()
-
-    def visit_lora(self, node: LoraRecipeNode):
-        return node.state_dict.header.items()
-
-    def visit_parameter(self, _node: ParameterRecipeNode):
-        return {}
-
-    def visit_merge(self, node: MergeRecipeNode):
-        return {
-            k: v
-            for model in node.models
-            for k, v in model.accept(self)
-        }
 
 
 @dataclasses.dataclass
@@ -184,25 +147,7 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
     _default_dtype: torch.dtype
 
     def visit_model(self, node: ModelRecipeNode) -> torch.Tensor:
-        return node.state_dict[self._key]
-
-    def visit_lora(self, node: LoraRecipeNode) -> torch.Tensor:
-        lora_key = SD15_LORA_KEY_MAP.get(self._key)
-        if lora_key is None:
-            raise KeyError(f"No lora key mapping found for target key: {self._key}")
-
-        up_weight = node.state_dict[f"{lora_key}.lora_up.weight"].to(torch.float64)
-        down_weight = node.state_dict[f"{lora_key}.lora_down.weight"].to(torch.float64)
-        alpha = node.state_dict[f"{lora_key}.alpha"].to(torch.float64)
-        dim = down_weight.size()[0]
-
-        if len(down_weight.size()) == 2:  # linear
-            res = up_weight @ down_weight
-        elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
-            res = (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3)
-        else:  # conv2d 3x3
-            res = torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3)
-        return res * (alpha / dim)
+        return node.model_type.get(node.state_dict, self._key)
 
     def visit_parameter(self, node: ParameterRecipeNode) -> torch.Tensor:
         raise NotImplementedError(f"Interactive arguments are not yet implemented: parameter '{node.name}' has no value.")
@@ -212,16 +157,12 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
         pass
 
 
-with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
-    SD15_LORA_KEY_MAP = json.load(f)
-
-
 @dataclasses.dataclass
 class KeyMergeVisitor(KeyVisitor):
     def visit_merge(self, node: MergeRecipeNode) -> torch.Tensor:
         return node.merge_method(
             self.__visit_deeper_first(node.models),
-            {k: get_hyper(v, self._key) for k, v in node.hypers.items()} | node.volatile_hypers,
+            {k: get_hyper(v, self._key, node.model_version) for k, v in node.hypers.items()} | node.volatile_hypers,
             self._key,
             node.device if node.device is not None else self._default_device,
             node.dtype if node.dtype is not None else self._default_dtype,
@@ -253,34 +194,3 @@ class KeyPassthroughVisitor(KeyVisitor):
                 continue
 
         raise KeyError(f"No model has key '{self._key}'")
-
-
-def validate_compatibility(configs: List[ModelConfig]):
-    are_sdxl = [
-        config.is_sdxl()
-        for config in configs
-    ]
-    if all(are_sdxl) or not any(are_sdxl):
-        return
-
-    sdxl_count = are_sdxl.count(True)
-    sd15_count = are_sdxl.count(False)
-    if sdxl_count < sd15_count:
-        bad_count, good_count = sdxl_count, sd15_count
-        bad_version, good_version = "SDXL", "SD1.5"
-        bad_models = ', '.join(
-            input_path
-            for is_sdxl, config in zip(are_sdxl, configs)
-            for input_path in config.get_input_paths()
-            if is_sdxl
-        )
-    else:
-        bad_count, good_count = sd15_count, sdxl_count
-        bad_version, good_version = "SD1.5", "SDXL"
-        bad_models = ', '.join(
-            input_path
-            for is_sdxl, config in zip(are_sdxl, configs)
-            for input_path in config.get_input_paths()
-            if not is_sdxl
-        )
-    raise ValueError(f"Input models are not all the same version. Found {good_count} {good_version} vs {bad_count} {bad_version} models ({bad_models})")

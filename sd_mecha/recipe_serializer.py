@@ -2,7 +2,7 @@ import pathlib
 import fuzzywuzzy.process
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, LoraRecipeNode, MergeSpace, ParameterRecipeNode
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeSpace, ParameterRecipeNode, RecipeVisitor
 
 
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
@@ -39,18 +39,12 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
             results.append(dict(*positional_args, **named_args))
         elif command == "model":
             results.append(ModelRecipeNode(*positional_args, **named_args))
-        elif command == "lora":
-            results.append(LoraRecipeNode(*positional_args, **named_args))
         elif command == "parameter":
             merge_space = MergeSpace[positional_args[1]]
             results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
         elif command == "call":
             method, *positional_args = positional_args
-            try:
-                method = extensions.methods_registry[method]
-            except KeyError as e:
-                suggestion = fuzzywuzzy.process.extractOne(str(e), extensions.methods_registry.keys())[0]
-                raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
+            method = extensions.merge_method.resolve(method)
             results.append(method(*positional_args, **named_args))
         else:
             raise ValueError(f"unknown command: {command}")
@@ -123,20 +117,16 @@ def serialize(recipe: RecipeNode) -> str:
     return "\n".join(serializer.instructions)
 
 
-class SerializerVisitor:
+class SerializerVisitor(RecipeVisitor):
     def __init__(self, instructions: Optional[List[str]] = None):
         self.instructions = instructions if instructions is not None else []
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.path}"'
-        return self.__add_instruction(line)
-
-    def visit_lora(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'lora "{node.path}"'
+        line = f'model "{node.path}" "{node.model_type.identifier}"'
         return self.__add_instruction(line)
 
     def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
-        merge_space = str(MergeSpace.MODEL).split(".")[1]
+        merge_space = str(MergeSpace.BASE).split(".")[1]
         line = f'parameter "{node.name}" "{merge_space}"'
         return self.__add_instruction(line)
 

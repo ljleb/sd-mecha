@@ -1,40 +1,110 @@
+import functools
+import operator
+import re
 from typing import Dict
 import fuzzywuzzy.process
-from .sd15 import SD15_HYPERS, sd15_txt_blocks, sd15_txt_classes, sd15_unet_blocks, sd15_unet_classes
-from .sdxl import SDXL_HYPERS, sdxl_txt_blocks, sdxl_txt_classes, sdxl_txt_g14_classes, sdxl_txt_g14_blocks, sdxl_unet_blocks, sdxl_unet_classes
+
+from sd_mecha import extensions
+from sd_mecha.extensions.model_version import ModelVersion
+
+
 Hyper = float | Dict[str, float]
 
 
-def get_hyper(hyper: Hyper, key: str) -> float:
+def get_hyper(hyper: Hyper, key: str, model_version: ModelVersion) -> float:
     if isinstance(hyper, float):
         return hyper
     elif isinstance(hyper, dict):
-        all_hypers = SDXL_HYPERS if any(key.startswith(("g14_txt_", "sdxl_unet_")) for key in hyper.keys()) else SD15_HYPERS
+        result = 0.0
+        total = 0
+        for hyper_id in model_version.classes[key] | model_version.blocks[key]:
+            value = hyper.get(hyper_id)
+            if value is not None:
+                result += value
+                total += 1
 
-        hypers = []
-        default = 0.0
-        for key_identifier, weight in hyper.items():
-            partial_key = all_hypers.get(key_identifier, key_identifier)
-            if partial_key[0] != "." and key.startswith(partial_key) or partial_key in key:
-                hypers.append(weight)
-            elif key_identifier.endswith("_default"):
-                default = weight
-        if hypers:
-            return sum(hypers) / len(hypers)
-        return default
+        return result / total if total > 0 else hyper.get("default", 0.0)
     else:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
 
 
-def validate_hyper(hyper: Hyper) -> Hyper:
+def validate_hyper(hyper: Hyper, model_version: ModelVersion) -> Hyper:
     if isinstance(hyper, dict):
-        all_hypers = SDXL_HYPERS if any(key.startswith(("g14_txt_", "sdxl_unet_")) for key in hyper.keys()) else SD15_HYPERS
-
+        user_keys = model_version.user_keys()
         for key in hyper.keys():
-            if key not in all_hypers and not key.endswith("_default"):
-                suggestion = fuzzywuzzy.process.extractOne(key, all_hypers.keys())[0]
+            if key not in user_keys and not key.endswith("_default"):
+                suggestion = fuzzywuzzy.process.extractOne(key, user_keys)[0]
                 raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
     elif isinstance(hyper, float):
         return hyper
     else:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
+
+
+def blocks(model_version: str | ModelVersion, model_component: str, *args, **kwargs) -> Hyper:
+    """
+    Generate block hyperparameters for a model version.
+    Either positional arguments or keyword arguments can be used, but not both at the same time.
+    If positional blocks are used, they must all be specified.
+    The CLI has a command to help determine the names of the blocks without guessing:
+
+    ```
+    python -m sd_mecha info <model_version> blocks
+    ```
+
+    where `<model_version>` is the version identifier of the model used. (i.e. "sd1", "sdxl", etc.)
+
+    :param model_version: the version of the model for which to generate block hyperparameters
+    :param model_component: the model component for which the block-wise hyperparameters are intended for (i.e. "unet", "txt", "txt2", etc.)
+    :param args: block hyperparameters by value
+    :param kwargs: block hyperparameters by name
+    :return: block-wise hyperparameters
+    """
+    if isinstance(model_version, str):
+        model_version = extensions.model_version.resolve(model_version)
+
+    if args and kwargs:
+        raise ValueError("`args` and `kwargs` cannot be used at the same time. Either use positional or keyword arguments, but not both.")
+    if args:
+        identifiers = list(
+            k for k in model_version.user_keys()
+            if "_" + model_component + "_block_" in k
+        )
+        if len(args) != len(identifiers):
+            raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few. (i.e. 'in0=1, out3=0.5, ...')")
+
+        identifiers.sort(key=natural_sort_key)
+        return dict(zip(identifiers, args))
+    return {
+        model_version.identifier + "_" + model_component + "_block_" + k: v
+        for k, v in kwargs.items()
+    }
+
+
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
+
+
+def classes(model_version: str | ModelVersion, model_component: str, **kwargs) -> Hyper:
+    """
+    Generate class hyperparameters for a model version.
+    The CLI has a command to help determine the names of the classes for a given model version without guessing:
+
+    ```
+    python -m sd_mecha info <model_version> classes
+    ```
+
+    where `<model_version>` is the version identifier of the model used. (i.e. "sd1", "sdxl", etc.)
+
+    :param model_version: the version of the model for which to generate class hyperparameters
+    :param model_component: the model component for which the class-wise hyperparameters are intended for (i.e. "unet", "txt", "txt2", etc.)
+    :param kwargs: class hyperparameters by name
+    :return: class-wise hyperparameters
+    """
+    if isinstance(model_version, str):
+        model_version = extensions.model_version.resolve(model_version)
+
+    return {
+        model_version.identifier + "_" + model_component + "_class_" + k: v
+        for k, v in kwargs.items()
+    }

@@ -4,11 +4,14 @@ import operator
 import torch
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
-from sd_mecha.extensions import MergeSpace, LiftFlag, convert_to_recipe
+
+from sd_mecha.hypers import Hyper
+from sd_mecha.merge_space import MergeSpace
+from sd_mecha.extensions.merge_method import LiftFlag, convert_to_recipe
 
 
 EPSILON = 1e-10
-SameMergeSpace = TypeVar("SameMergeSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
+SameMergeSpace = TypeVar("SameMergeSpace", bound=LiftFlag[MergeSpace.BASE | MergeSpace.DELTA])
 
 
 @convert_to_recipe
@@ -16,7 +19,7 @@ def weighted_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: float = 0.5,
+    alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     return (1 - alpha) * a + alpha * b
@@ -27,7 +30,7 @@ def slerp(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: float = 0.5,
+    alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_normalized = a / a.norm()
@@ -50,7 +53,7 @@ def add_difference(
     a: Tensor | SameMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: float = 0.5,
+    alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     return a + alpha * b
@@ -58,8 +61,8 @@ def add_difference(
 
 @convert_to_recipe
 def subtract(
-    a: Tensor | LiftFlag[MergeSpace.MODEL],
-    b: Tensor | LiftFlag[MergeSpace.MODEL],
+    a: Tensor | LiftFlag[MergeSpace.BASE],
+    b: Tensor | LiftFlag[MergeSpace.BASE],
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     return a - b
@@ -83,7 +86,7 @@ def geometric_sum(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: float,
+    alpha: Hyper,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     a = torch.complex(a, torch.zeros_like(a))
@@ -97,8 +100,8 @@ def similarity_add_difference(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: float,
-    similarity_scale: float = 1.0,
+    alpha: Hyper,
+    similarity_scale: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     threshold = torch.maximum(torch.abs(a), torch.abs(b))
@@ -112,12 +115,12 @@ def similarity_add_difference(
 
 @convert_to_recipe
 def normalized_similarity_sum(  # aka add_cosine_a
-    a: Tensor | LiftFlag[MergeSpace.MODEL],
-    b: Tensor | LiftFlag[MergeSpace.MODEL],
+    a: Tensor | LiftFlag[MergeSpace.BASE],
+    b: Tensor | LiftFlag[MergeSpace.BASE],
     *,
-    alpha: float,
+    alpha: Hyper,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> Tensor | LiftFlag[MergeSpace.BASE]:
     a_norm = torch.nn.functional.normalize(a, dim=0)
     b_norm = torch.nn.functional.normalize(b, dim=0)
     similarity = torch.nn.functional.cosine_similarity(a_norm, b_norm, dim=0)
@@ -126,12 +129,12 @@ def normalized_similarity_sum(  # aka add_cosine_a
 
 @convert_to_recipe
 def similarity_sum(  # aka add_cosine_b
-    a: Tensor | LiftFlag[MergeSpace.MODEL],
-    b: Tensor | LiftFlag[MergeSpace.MODEL],
+    a: Tensor | LiftFlag[MergeSpace.BASE],
+    b: Tensor | LiftFlag[MergeSpace.BASE],
     *,
-    alpha: float,
+    alpha: Hyper,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> Tensor | LiftFlag[MergeSpace.BASE]:
     similarity = torch.nn.functional.cosine_similarity(a, b, dim=0)
     dot_product = torch.sum(a * b)
     magnitude_similarity = dot_product / (torch.norm(a) * torch.norm(b))
@@ -147,8 +150,8 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
-    alpha: float,
-    k: float = 0.2,
+    alpha: Hyper,
+    k: Hyper = 0.2,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     deltas = []
@@ -179,10 +182,15 @@ def copy_region(  # aka tensor_sum
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: float,
-    offset: float,
+    width: Hyper,
+    offset: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
+    if a.shape == ():
+        if width > 0.5:
+            return b
+        return a
+
     start_i, end_i, region_is_inverted = ratio_to_region(width, offset, a.size(0))
     if region_is_inverted:
         b[start_i:end_i] = a[start_i:end_i]
@@ -197,8 +205,8 @@ def copy_top_k(  # aka top_k_tensor_sum
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: float,
-    offset: float,
+    width: Hyper,
+    offset: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
@@ -278,8 +286,8 @@ def distribution_crossover(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    mean: float,
-    tilt: float,
+    mean: Hyper,
+    tilt: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if mean == 0:
@@ -307,8 +315,8 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    mean: float,
-    tilt: float,
+    mean: Hyper,
+    tilt: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if mean == 0:
@@ -381,32 +389,29 @@ def rotate(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: float,
-    beta: float,
+    alpha: Hyper,
+    beta: Hyper,
     cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if alpha == 0 and beta == 0:
         return a
 
-    is_conv = len(a.shape) == 4 and a.shape[-1] != 1
-    if len(a.shape) == 0 or is_conv or torch.allclose(a.half(), b.half()):
+    if len(a.shape) < 2 or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=beta)
 
-    if len(a.shape) == 4:
+    is_conv = len(a.shape) == 4 and a.shape[-1] != 1
+    if is_conv:
+        shape_2d = (-1, functools.reduce(operator.mul, a.shape[2:]))
+    elif len(a.shape) == 4:
         shape_2d = (-1, functools.reduce(operator.mul, a.shape[1:]))
     else:
         shape_2d = (-1, a.shape[-1])
 
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)
-
     a_centroid = a_neurons.mean(0)
     b_centroid = b_neurons.mean(0)
-    new_centroid = weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alpha)
-    if len(a.shape) == 1 or len(a.shape) == 2 and a.shape[0] == 1:
-        return new_centroid.reshape_as(a)
-
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
@@ -421,25 +426,7 @@ def rotate(
     if cache is not None and "rotation" in cache:
         rotation = transform = cache["rotation"].to(a.device, a.dtype)
     else:
-        svd_driver = "gesvd" if a.is_cuda else None
-        u, _, v_t = torch.linalg.svd(a_neurons.T @ b_neurons, driver=svd_driver)
-
-        if alpha_is_float:
-            # cancel reflection. without this, eigenvalues often have a complex component
-            #   and then we can't obtain a valid dtype for the merge
-            u[:, -1] /= torch.det(u) * torch.det(v_t)
-
-        rotation = transform = u @ v_t
-        if not torch.isfinite(u).all():
-            raise ValueError(
-                f"determinant error: {torch.det(rotation)}. "
-                'This can happen when merging on the CPU with the "rotate" method. '
-                "Consider merging on a cuda device, "
-                "or try setting alpha to 1 for the problematic blocks. "
-                "See this related discussion for more info: "
-                "https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"
-            )
-
+        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alpha_is_float)
         if cache is not None:
             cache["rotation"] = rotation.to("cpu", torch.float16)
 
@@ -459,11 +446,32 @@ def rotate(
         a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, alpha=beta)
 
     a_neurons @= transform
-    a_neurons += new_centroid
+    a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alpha)
     return a_neurons.reshape_as(a)
 
 
-def fractional_matrix_power(matrix: Tensor, power: float, cache: Dict[str, Tensor]):
+def orthogonal_procrustes(a, b, cancel_reflection: bool = True):
+    svd_driver = "gesvd" if a.is_cuda else None
+    u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
+
+    if cancel_reflection:
+        u[:, -1] /= torch.det(u) * torch.det(v_t)
+
+    transform = u @ v_t
+    if not torch.isfinite(u).all():
+        raise ValueError(
+            f"determinant error: {torch.det(transform)}. "
+            'This can happen when merging on the CPU with the "rotate" method. '
+            "Consider merging on a cuda device, "
+            "or try setting alpha to 1 for the problematic blocks. "
+            "See this related discussion for more info: "
+            "https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"
+        )
+
+    return transform
+
+
+def fractional_matrix_power(matrix: Tensor, power: float, cache: Optional[Dict[str, Tensor]] = None):
     if cache is not None and "eigenvalues" in cache:
         complex_dtype = torch_complex_dtype_map[matrix.dtype]
         eigenvalues = cache["eigenvalues"].to(matrix.device, complex_dtype)
@@ -494,7 +502,7 @@ torch_complex_dtype_map = {
 def clip(
     a: Tensor | SameMergeSpace,
     *bounds: Tensor | SameMergeSpace,
-    stiffness: float = 0.0,
+    stiffness: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
