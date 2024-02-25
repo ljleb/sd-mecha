@@ -269,9 +269,9 @@ def supermario(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    ab_diff = subtract(a, b, device=device, dtype=dtype)
-    ab_mario_delta = merge_methods.supermario_delta(ab_diff, p=p, device=device, dtype=dtype)
-    return add_difference(a, ab_mario_delta, alpha=l)
+    ba_diff = subtract(b, a, device=device, dtype=dtype)
+    ba_mario_delta = merge_methods.supermario_delta(ba_diff, p=p, device=device, dtype=dtype)
+    return add_difference(a, ba_mario_delta, alpha=l)
 
 
 def model(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1", model_type: Optional[str] = "base"):
