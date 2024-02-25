@@ -267,7 +267,7 @@ def model(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1", 
 
 
 def lora(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1"):
-    return recipe_nodes.ModelRecipeNode(state_dict, "lora", model_version)
+    return recipe_nodes.ModelRecipeNode(state_dict, model_version, "lora")
 
 
 def parameter(name: str, merge_space: MergeSpace):

@@ -147,7 +147,7 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
     _default_dtype: torch.dtype
 
     def visit_model(self, node: ModelRecipeNode) -> torch.Tensor:
-        return node.model_type.get(node.state_dict, self._key)
+        return node.model_type.get_tensor(node.state_dict, self._key)
 
     def visit_parameter(self, node: ParameterRecipeNode) -> torch.Tensor:
         raise NotImplementedError(f"Interactive arguments are not yet implemented: parameter '{node.name}' has no value.")

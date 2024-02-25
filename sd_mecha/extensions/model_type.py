@@ -20,7 +20,7 @@ class ModelType:
     merge_space: MergeSpace
     location: str
 
-    def get(self, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+    def get_tensor(self, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return self.__f(state_dict, key)
 
     def convert_header(self, header: Mapping[str, Mapping[str, str | List[int]]], model_version: ModelVersion):
@@ -38,7 +38,7 @@ class ModelType:
             converted_state_dict = {}
             for k in model_version.keys:
                 try:
-                    converted_state_dict[k] = self.get(fake_state_dict, k)
+                    converted_state_dict[k] = self.get_tensor(fake_state_dict, k)
                 except KeyError:
                     continue
 
