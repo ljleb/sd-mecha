@@ -1,6 +1,8 @@
 import functools
 import math
 import operator
+
+import numpy as np
 import torch
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
@@ -450,7 +452,7 @@ def rotate(
     return a_neurons.reshape_as(a)
 
 
-def orthogonal_procrustes(a, b, cancel_reflection: bool = True):
+def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     svd_driver = "gesvd" if a.is_cuda else None
     u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
 
@@ -521,3 +523,15 @@ def clip(
         minimums = weighted_sum.__wrapped__(minimums, largest_negative, alpha=stiffness)
 
     return torch.minimum(torch.maximum(a, minimums), maximums)
+
+
+@convert_to_recipe
+def supermario_delta(
+    a: Tensor | LiftFlag[MergeSpace.DELTA],
+    *,
+    p: Hyper,
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    m = torch.from_numpy(np.random.binomial(1, p, a.shape)).to(a.dtype)
+    delta_tilde = m * a
+    return delta_tilde / (1 - p)
