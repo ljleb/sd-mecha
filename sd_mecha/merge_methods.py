@@ -532,6 +532,4 @@ def supermario_delta(
     p: Hyper,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    m = torch.from_numpy(np.random.binomial(1, p, a.shape)).to(a.dtype)
-    delta_tilde = m * a
-    return delta_tilde / (1 - p)
+    return torch.from_numpy(np.random.binomial(1, p, a.shape)).to(a.dtype) * a / (1 - p)
