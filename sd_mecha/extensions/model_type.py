@@ -55,10 +55,9 @@ class ModelType:
 
 
 def register_model_type(
-    f: Optional[ModelTypeCallback] = None,
     *,
+    merge_space: MergeSpace,
     identifier: Optional[str] = None,
-    merge_space: MergeSpace = MergeSpace.DELTA,
 ):
     stack_frame = traceback.extract_stack(None, 2)[0]
     partial = functools.partial(
@@ -67,9 +66,7 @@ def register_model_type(
         merge_space=merge_space,
         stack_frame=stack_frame,
     )
-    if f is None:
-        return partial
-    return partial(f)
+    return partial
 
 
 def __register_model_type_impl(

@@ -11,4 +11,4 @@ merger = sd_mecha.RecipeMerger(
     models_dir=r"E:\sd\models\Stable-diffusion",
 )
 
-merger.merge_and_save(recipe, output=r"D:\src\stable-diffusion-webui-forge\models\Stable-diffusion\test_a.fp16.safetensors")
+merger.merge_and_save(recipe, output="test_a")

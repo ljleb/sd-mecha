@@ -1,6 +1,5 @@
 import click
 import pathlib
-import torch
 import safetensors.torch
 import safetensors
 
@@ -14,15 +13,19 @@ def main(input_path: pathlib.Path, output_path: pathlib.Path):
         exit(1)
 
     print("loading model...")
-    ckpt = torch.load(input_path)
-    print("pruning keys...")
-    ckpt = {
-        k: v
-        for k, v in ckpt["state_dict"].items()
-        if k.startswith(("model.diffusion_model", "first_stage_model.", "cond_stage_model.") or v.shape == [1000])
-    }
+    ckpt = {}
+    with safetensors.safe_open(input_path, "pt") as f:
+        for k in f.keys():
+            ckpt[k] = f.get_tensor(k)
+
+    print(len(ckpt))
+    with safetensors.safe_open(r"E:\sd\models\Stable-diffusion\pure\sdxl_base.safetensors", "pt") as f:
+        for k in f.keys():
+            if k not in ckpt:
+                ckpt[k] = f.get_tensor(k)
+
+    print(len(ckpt))
     print("saving...")
-    safetensors.torch.save_file(ckpt, output_path)
 
 
 if __name__ == "__main__":

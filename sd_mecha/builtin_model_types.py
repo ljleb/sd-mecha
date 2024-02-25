@@ -11,7 +11,7 @@ def base(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
     return state_dict[key]
 
 
-@register_model_type
+@register_model_type(merge_space=MergeSpace.DELTA)
 def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
     lora_key = SD1_MODEL_TO_LORA_KEYS[key]
     up_weight = state_dict[f"{lora_key}.lora_up.weight"].to(torch.float64)

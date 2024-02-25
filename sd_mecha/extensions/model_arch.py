@@ -33,7 +33,7 @@ def discover_block_prefixes(keys: Set[str], config: dict, version_id: str):
                     if block_shorthand not in discovered_blocks:
                         discovered_blocks[block_shorthand] = {
                             "patterns": [re.compile(p) for p in sorted((
-                                re.escape(f"{prefix}.{p.replace(WILDCARD, block_id)}.").replace(re.escape(PADDING), r'\w+')
+                                (re.escape(f"{prefix}.{p.replace(WILDCARD, block_id)}") + r"(?:\.|$)").replace(re.escape(PADDING), r'\w+')
                                 for p in patterns
                             ), key=lambda s: len(s.split(".")), reverse=True)],
                             "module": module,

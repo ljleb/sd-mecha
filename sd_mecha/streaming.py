@@ -17,9 +17,9 @@ class InSafetensorsDict:
 
         self.default_buffer_size = buffer_size
         self.file_path = file_path
-        self.file = open(file_path, 'rb')
+        self.file = open(file_path, mode='rb', buffering=0)
         self.header_size, self.header = self._read_header()
-        self.buffer = self.file.read(self.default_buffer_size)
+        self.buffer = bytearray()
         self.buffer_start_offset = 8 + self.header_size
         self.lock = threading.Lock()
 
@@ -68,9 +68,13 @@ class InSafetensorsDict:
     def _ensure_buffer(self, start_pos, length):
         if start_pos < self.buffer_start_offset or start_pos + length > self.buffer_start_offset + len(self.buffer):
             self.file.seek(start_pos)
-            del self.buffer
             necessary_buffer_size = max(self.default_buffer_size, length)
-            self.buffer = self.file.read(necessary_buffer_size)
+            if len(self.buffer) < necessary_buffer_size:
+                self.buffer = bytearray(necessary_buffer_size)
+            else:
+                self.buffer = self.buffer[:necessary_buffer_size]
+
+            self.file.readinto(self.buffer)
             self.buffer_start_offset = start_pos
 
     def _load_tensor(self, tensor_name):
@@ -103,7 +107,7 @@ class OutSafetensorsDict:
         self.header = {
             "__metadata__": {"mecha_recipe": mecha_recipe}
         }
-        self.file = file_path.open("wb")
+        self.file = file_path.open("wb", buffering=0)
         self.file_path = file_path
         self.flushed_size = 0
         self.minimum_buffer_size = minimum_buffer_size
@@ -174,8 +178,10 @@ class OutSafetensorsDict:
 
         if next_tensor_size is not None:
             required_buffer_size = max(self.minimum_buffer_size, next_tensor_size)
-            if required_buffer_size != len(state.buffer):
+            if len(state.buffer) < required_buffer_size:
                 state.buffer = bytearray(required_buffer_size)
+            else:
+                state.buffer = state.buffer[:required_buffer_size]
 
         global_sub_header = {
             k: {

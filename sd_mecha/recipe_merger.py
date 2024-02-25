@@ -34,7 +34,7 @@ class RecipeMerger:
         fallback_model: Optional[Mapping[str, torch.Tensor] | pathlib.Path | str] = None,
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
-        total_buffer_size: int = 2**28,
+        total_buffer_size: int = 2**29,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
         if recipe.merge_space != recipe_nodes.MergeSpace.BASE:
@@ -42,12 +42,13 @@ class RecipeMerger:
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
         extensions.merge_method.clear_model_paths_cache()
+        is_custom_fallback = isinstance(fallback_model, recipe_nodes.RecipeNode)
         fallback_in_recipe = fallback_model is not None and fallback_model in recipe
 
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
             int(isinstance(output, (str, pathlib.Path))) +
-            int(isinstance(fallback_model, recipe_nodes.ModelRecipeNode) and not fallback_in_recipe)
+            int(is_custom_fallback and not fallback_in_recipe)
         )
         buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
@@ -58,11 +59,14 @@ class RecipeMerger:
             buffer_size_per_file,
         )
         recipe.accept(load_input_dicts_visitor)
-        if isinstance(fallback_model, recipe_nodes.ModelRecipeNode):
+        if is_custom_fallback:
             fallback_model.accept(load_input_dicts_visitor)
-            fallback_model = fallback_model.state_dict
 
         model_config = recipe.accept(DetermineConfigVisitor())
+        if is_custom_fallback:
+            model_config = model_config.intersect(fallback_model.accept(DetermineConfigVisitor()))
+            fallback_model = fallback_model.state_dict
+
         output = self.__normalize_output_to_dict(
             output,
             model_config.get_minimal_dummy_header(),
