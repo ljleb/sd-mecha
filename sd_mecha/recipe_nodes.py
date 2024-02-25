@@ -29,8 +29,8 @@ class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
         state_dict_path: str | pathlib.Path,
-        model_type: str = "base",
         model_version: str = "sd1",
+        model_type: str = "base",
     ):
         self.path = state_dict_path
         self.state_dict = None

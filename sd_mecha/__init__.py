@@ -8,7 +8,7 @@ from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.hypers import Hyper, classes, blocks
+from sd_mecha.hypers import Hyper, classes, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 
 
@@ -262,8 +262,8 @@ def rotate(
 clip = merge_methods.clip
 
 
-def model(state_dict: str | pathlib.Path, model_type: Optional[str] = "base", model_version: Optional[str] = "sd1"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_type, model_version)
+def model(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1", model_type: Optional[str] = "base"):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_version, model_type)
 
 
 def lora(state_dict: str | pathlib.Path, model_version: Optional[str] = "sd1"):

@@ -3,15 +3,15 @@ sd_mecha.set_log_level()
 
 
 text_encoder_recipe = sd_mecha.add_perpendicular(
-    "js2prony_v10",
-    "juggernautXL_v9Rundiffusionphoto2",
-    "pure/sdxl_base",
+    sd_mecha.model("js2prony_v10", "sdxl"),
+    sd_mecha.model("juggernautXL_v9Rundiffusionphoto2", "sdxl"),
+    sd_mecha.model("pure/sdxl_base", "sdxl"),
     alpha=-2.0,
 )
 
 unet_recipe = sd_mecha.weighted_sum(
-    "js2prony_v10",
-    "juggernautXL_v9Rundiffusionphoto2",
+    sd_mecha.model("js2prony_v10", "sdxl"),
+    sd_mecha.model("juggernautXL_v9Rundiffusionphoto2", "sdxl"),
     alpha=-2.0,
 )
 
@@ -19,9 +19,9 @@ recipe = sd_mecha.weighted_sum(
     text_encoder_recipe,
     unet_recipe,
     alpha=(
-        sd_mecha.sdxl_unet_blocks(in00=-1, in01=-1, in02=-1, in03=-1, default=0) |
-        sd_mecha.sdxl_txt_blocks(0) |
-        sd_mecha.sdxl_txt_g14_blocks(0)
+        sd_mecha.blocks("sdxl", "txt") |
+        sd_mecha.blocks("sdxl", "txt2") |
+        sd_mecha.default("sdxl", "unet", 1)
     ),
 )
 

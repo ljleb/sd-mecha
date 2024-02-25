@@ -61,6 +61,7 @@ def discover_blocks(keys, discovered_block_prefixes, version_id):
 @dataclasses.dataclass
 class ModelVersion:
     identifier: str
+    components: Set[str]
     keys: Set[str]
     keys_to_forward: Set[str]
     keys_to_merge: Set[str]
@@ -101,9 +102,10 @@ def register_model_version(
     keys_to_merge = set(key for key in keys if key not in keys_to_forward)
     block_prefixes = discover_block_prefixes(keys_to_merge, config, identifier)
     blocks, classes = discover_blocks(keys_to_merge, block_prefixes, identifier)
+    components = set(config["merge"].keys())
 
     location = f"{stack_frame.filename}:{stack_frame.lineno}"
-    _model_versions_registry[identifier] = ModelVersion(identifier, keys, keys_to_forward, keys_to_merge, blocks, classes, location)
+    _model_versions_registry[identifier] = ModelVersion(identifier, components, keys, keys_to_forward, keys_to_merge, blocks, classes, location)
 
 
 _model_versions_registry = {}

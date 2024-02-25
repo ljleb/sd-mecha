@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sd-mecha"
-version = "0.0.4"
+version = "0.0.5"
 description = "Stable Diffusion recipe merger"
 readme = "README.md"
 authors = [{ name = "ljleb" }]
@@ -26,9 +26,8 @@ dependencies = [
 packages = [
     "sd_mecha",
     "sd_mecha.extensions",
-    "sd_mecha.hypers",
 ]
-package-data = {"sd_mecha.lora"=["*.json"]}
+package-data = {"sd_mecha.lora"=["*.json"], "sd_mecha.models"=["*.yaml", "*.txt"]}
 
 [project.urls]
 Homepage = "https://github.com/ljleb/sd-mecha"

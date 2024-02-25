@@ -6,7 +6,7 @@ sd_mecha.set_log_level()
 recipe = sd_mecha.weighted_sum(
     "ghostmix_v20Bakedvae",
     "dreamshaper_332BakedVaeClipFix",
-    alpha=sd_mecha.blocks("sd1", "unet", 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+    alpha=sd_mecha.default("sd1", "unet", 1) | sd_mecha.default("sd1", "txt", 0)
 )
 
 # scheduler provides global defaults for methods
