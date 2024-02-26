@@ -118,12 +118,9 @@ class KeyMerger:
             key,
             self.default_device,
             self.default_dtype,
+            self.__get_passthrough_tensor,
         )
-        try:
-            merged = self.recipe.accept(key_merger)
-        except KeyError as e:
-            merged = self.__get_passthrough_tensor(key)
-        return merged
+        return self.recipe.accept(key_merger)
 
     def forward_and_save(
         self,
@@ -162,14 +159,19 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
 
 @dataclasses.dataclass
 class KeyMergeVisitor(KeyVisitor):
+    _passthrough_callback: Callable[[str], torch.Tensor]
+
     def visit_merge(self, node: MergeRecipeNode) -> torch.Tensor:
-        return node.merge_method(
-            self.__visit_deeper_first(node.models),
-            {k: get_hyper(v, self._key, node.model_arch) for k, v in node.hypers.items()} | node.volatile_hypers,
-            self._key,
-            node.device if node.device is not None else self._default_device,
-            node.dtype if node.dtype is not None else self._default_dtype,
-        )
+        try:
+            return node.merge_method(
+                self.__visit_deeper_first(node.models),
+                {k: get_hyper(v, self._key, node.model_arch) for k, v in node.hypers.items()} | node.volatile_hypers,
+                self._key,
+                node.device if node.device is not None else self._default_device,
+                node.dtype if node.dtype is not None else self._default_dtype,
+            )
+        except KeyError as e:
+            return self._passthrough_callback(self._key)
 
     def __visit_deeper_first(self, nodes: Tuple[RecipeNode, ...]) -> list:
         merged: List[Optional[torch.Tensor]] = [None] * len(nodes)

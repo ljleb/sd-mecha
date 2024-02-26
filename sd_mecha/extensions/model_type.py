@@ -105,6 +105,8 @@ def __register_model_type_impl(
     for model_arch in model_archs:
         _model_types_registry[identifier][model_arch] = ModelType(f, identifier, merge_space, location)
 
+    return f
+
 
 _model_types_registry = {}
 
