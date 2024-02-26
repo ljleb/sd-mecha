@@ -42,6 +42,7 @@ def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         lora_key = "lora_te1_" + "_".join(key.split(".")[4:-1])
         return compose_lora_up_down(state_dict, lora_key)
     elif key.startswith("conditioner.embedders.1.model.transformer.resblocks."):
+        # [6:] instead of [6:-1] because `key` can end with either ".weight" or "_weight"
         lora_key = "lora_te2_text_model_encoder_layers_" + "_".join(key.split(".")[6:])
         lora_key = lora_key.replace("_attn_", "_self_attn_")
         lora_key = lora_key.replace("_mlp_c_fc_", "_mlp_fc1_")
