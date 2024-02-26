@@ -262,7 +262,7 @@ def rotate(
 clip = merge_methods.clip
 
 
-def supermario(
+def binomial_dropout(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, *,
     p: Hyper = 0.5,
     l: Hyper = 1.0,
@@ -270,20 +270,20 @@ def supermario(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     ba_diff = subtract(b, a, device=device, dtype=dtype)
-    ba_mario_delta = merge_methods.supermario_delta(ba_diff, p=p, device=device, dtype=dtype)
+    ba_mario_delta = merge_methods.binomial_dropout_delta(ba_diff, p=p, device=device, dtype=dtype)
     return add_difference(a, ba_mario_delta, alpha=l)
 
 
-def model(state_dict: str | pathlib.Path, model_arch: Optional[str] = "sd1", model_type: Optional[str] = "base"):
+def model(state_dict: str | pathlib.Path, model_arch: str = "sd1", model_type: str = "base"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
 
 
-def lora(state_dict: str | pathlib.Path, model_arch: Optional[str] = "sd1"):
+def lora(state_dict: str | pathlib.Path, model_arch: str = "sd1"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, "lora")
 
 
-def parameter(name: str, merge_space: MergeSpace):
-    return recipe_nodes.ParameterRecipeNode(name, merge_space)
+def parameter(name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
+    return recipe_nodes.ParameterRecipeNode(name, merge_space, model_arch)
 
 
 def set_log_level(level: str = "INFO"):

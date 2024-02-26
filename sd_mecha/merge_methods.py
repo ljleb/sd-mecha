@@ -526,7 +526,7 @@ def clip(
 
 
 @convert_to_recipe
-def supermario_delta(
+def binomial_dropout_delta(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
     p: Hyper,

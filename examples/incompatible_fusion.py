@@ -2,9 +2,9 @@ import torch
 import sd_mecha
 sd_mecha.set_log_level()
 
-a = sd_mecha.parameter("a")
-b = sd_mecha.parameter("b")
-c = sd_mecha.parameter("c")
+a = sd_mecha.parameter("a", sd_mecha.MergeSpace.BASE)
+b = sd_mecha.parameter("b", sd_mecha.MergeSpace.BASE)
+c = sd_mecha.parameter("c", sd_mecha.MergeSpace.BASE)
 
 recipe = sd_mecha.rotate(
     sd_mecha.add_perpendicular(a, b, c), a,

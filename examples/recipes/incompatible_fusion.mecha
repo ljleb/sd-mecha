@@ -1,4 +1,4 @@
-parameter "a" "BASE"
+parameter "a" "BASE" "sdxl"
 parameter "c" "BASE"
 merge "subtract" &0 &1
 parameter "b" "BASE"

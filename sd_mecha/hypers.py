@@ -39,13 +39,16 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
 
 
-def validate_hyper(hyper: Hyper, model_arch: ModelArch) -> Hyper:
+def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
     if isinstance(hyper, dict):
+        if model_arch is None:
+            raise ValueError("Abstract recipes (with recipe parameters) cannot specify component-wise hyperparameters")
+
         user_keys = model_arch.user_keys()
         for key in hyper.keys():
             if key not in user_keys and not key.endswith("_default"):
                 suggestion = fuzzywuzzy.process.extractOne(key, user_keys)[0]
-                raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'.")
+                raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'")
     elif isinstance(hyper, (int, float)):
         return hyper
     else:

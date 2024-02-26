@@ -127,7 +127,8 @@ class SerializerVisitor(RecipeVisitor):
 
     def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
         merge_space = str(MergeSpace.BASE).split(".")[1]
-        line = f'parameter "{node.name}" "{merge_space}"'
+        model_arch = f' "{node.model_arch.identifier}"' if node.model_arch else ""
+        line = f'parameter "{node.name}" "{merge_space}"' + model_arch
         return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:

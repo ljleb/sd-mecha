@@ -9,8 +9,6 @@ from sd_mecha.merge_space import MergeSpace
 
 
 class RecipeNode(abc.ABC):
-    model_arch: ModelArch
-
     @abc.abstractmethod
     def accept(self, visitor, *args, **kwargs):
         pass
@@ -18,6 +16,11 @@ class RecipeNode(abc.ABC):
     @property
     @abc.abstractmethod
     def merge_space(self) -> MergeSpace:
+        pass
+
+    @property
+    @abc.abstractmethod
+    def model_arch(self) -> Optional[ModelArch]:
         pass
 
     @abc.abstractmethod
@@ -35,7 +38,7 @@ class ModelRecipeNode(RecipeNode):
         self.path = state_dict_path
         self.state_dict = None
         self.model_type = extensions.model_type.resolve(model_type, model_arch)
-        self.model_arch = extensions.model_arch.resolve(model_arch)
+        self.__model_arch = extensions.model_arch.resolve(model_arch)
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_model(self, *args, **kwargs)
@@ -43,6 +46,10 @@ class ModelRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> MergeSpace:
         return self.model_type.merge_space
+
+    @property
+    def model_arch(self) -> Optional[ModelArch]:
+        return self.__model_arch
 
     def __contains__(self, item):
         if isinstance(item, ModelRecipeNode):
@@ -52,9 +59,12 @@ class ModelRecipeNode(RecipeNode):
 
 
 class ParameterRecipeNode(RecipeNode):
-    def __init__(self, name: str, merge_space: MergeSpace = MergeSpace.BASE):
+    def __init__(self, name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
         self.name = name
         self.__merge_space = merge_space
+        if model_arch is not None:
+            model_arch = extensions.model_arch.resolve(model_arch)
+        self.__model_arch = model_arch
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_parameter(self, *args, **kwargs)
@@ -62,6 +72,10 @@ class ParameterRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
+
+    @property
+    def model_arch(self) -> Optional[ModelArch]:
+        return self.__model_arch
 
     def __contains__(self, item):
         if isinstance(item, ParameterRecipeNode):
@@ -82,7 +96,6 @@ class MergeRecipeNode(RecipeNode):
     ):
         self.merge_method = merge_method
         self.models = models
-        self.model_arch = self.models[0].model_arch
         for hyper_v in hypers.values():
             validate_hyper(hyper_v, self.model_arch)
         self.hypers = hypers
@@ -100,6 +113,17 @@ class MergeRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
+
+    @property
+    def model_arch(self) -> Optional[ModelArch]:
+        if not self.models:
+            return None
+
+        for model in self.models:
+            if (arch := model.model_arch) is None:
+                return None
+
+        return arch
 
     def __contains__(self, item):
         if isinstance(item, MergeRecipeNode):
