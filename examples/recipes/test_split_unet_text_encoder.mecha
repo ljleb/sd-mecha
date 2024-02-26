@@ -1,10 +1,10 @@
-model "ghostmix_v20Bakedvae"
-model "pure/v1-5-pruned"
-call "subtract" &0 &1
-model "dreamshaper_332BakedVaeClipFix"
-call "subtract" &3 &1
-call "perpendicular_component" &2 &4
-call "add_difference" &0 &5 alpha=1.0
-call "weighted_sum" &0 &3 alpha=0.5
-dict txt_class_pos_embed=0 txt_class_token_embed=0 txt_class_final_norm=0 txt_class_layer_norm1=0 txt_class_layer_norm2=0 txt_class_mlp_fc1=0 txt_class_mlp_fc2=0 txt_class_q=0 txt_class_k=0 txt_class_v=0 txt_class_out=0 txt_class_default=0 unet_class_in0=1 unet_class_op=1 unet_class_proj_in=1 unet_class_proj_out=1 unet_class_trans_attn1_q=1 unet_class_trans_attn1_k=1 unet_class_trans_attn1_v=1 unet_class_trans_attn1_out=1 unet_class_trans_attn2_q=1 unet_class_trans_attn2_k=1 unet_class_trans_attn2_v=1 unet_class_trans_attn2_out=1 unet_class_trans_norm1=1 unet_class_trans_norm2=1 unet_class_trans_norm3=1 unet_class_trans_ff_net0_proj=1 unet_class_trans_ff_net2=1 unet_class_emb_layers1=1 unet_class_in_layers0=1 unet_class_in_layers2=1 unet_class_out_layers0=1 unet_class_out_layers3=1 unet_class_norm=1 unet_class_skip_connection=1 unet_class_conv=1 unet_class_out0=1 unet_class_out2=1 unet_class_default=1
-call "weighted_sum" &6 &7 alpha=&8
+model "ghostmix_v20Bakedvae" "sd1" "base"
+model "pure/v1-5-pruned" "sd1" "base"
+merge "subtract" &0 &1
+model "dreamshaper_332BakedVaeClipFix" "sd1" "base"
+merge "subtract" &3 &1
+merge "perpendicular_component" &2 &4
+merge "add_difference" &0 &5 alpha=1.0
+merge "weighted_sum" &0 &3 alpha=0.5
+dict sd1_txt_default=0 sd1_unet_default=1
+merge "weighted_sum" &6 &7 alpha=&8

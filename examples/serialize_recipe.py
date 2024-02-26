@@ -17,8 +17,8 @@ recipe = sd_mecha.weighted_sum(
     text_encoder_recipe,
     unet_recipe,
     alpha=(
-        sd_mecha.sd15_txt_classes(0) |
-        sd_mecha.sd15_unet_classes(1)
+        sd_mecha.default("sd1", "txt", 0) |
+        sd_mecha.default("sd1", "unet", 1)
     ),
 )
 

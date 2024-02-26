@@ -42,7 +42,7 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
         elif command == "parameter":
             merge_space = MergeSpace[positional_args[1]]
             results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
-        elif command == "call":
+        elif command == "merge":
             method, *positional_args = positional_args
             method = extensions.merge_method.resolve(method)
             results.append(method(*positional_args, **named_args))
@@ -122,7 +122,7 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.path}" "{node.model_type.identifier}"'
+        line = f'model "{node.path}" "{node.model_arch.identifier}" "{node.model_type.identifier}"'
         return self.__add_instruction(line)
 
     def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
@@ -143,7 +143,7 @@ class SerializerVisitor(RecipeVisitor):
                 hyper_v = f"&{self.__add_instruction(dict_line)}"
             hypers.append(f" {hyper_k}={hyper_v}")
 
-        line = f'call "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
+        line = f'merge "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
         return self.__add_instruction(line)
 
     def __add_instruction(self, instruction: str) -> int:
