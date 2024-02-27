@@ -267,8 +267,9 @@ clip = merge_methods.clip
 def bernoulli_dropout(
     a: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
-    p: Hyper = 0.9,
-    l: Hyper = 0.5,
+    probability: Hyper = 0.9,
+    alpha: Hyper = 0.5,
+    overlap: Hyper = 0.0,
     seed: Optional[Hyper] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -277,8 +278,8 @@ def bernoulli_dropout(
         subtract(model, a)
         for model in models
     ]
-    ba_bernoulli_delta = merge_methods.bernoulli_dropout_delta(*deltas, p=p, seed=seed, device=device, dtype=dtype)
-    return sd_mecha.add_difference(a, ba_bernoulli_delta, alpha=l, device=device, dtype=dtype)
+    ba_bernoulli_delta = merge_methods.bernoulli_dropout_delta(*deltas, probability=probability, overlap=overlap, seed=seed, device=device, dtype=dtype)
+    return sd_mecha.add_difference(a, ba_bernoulli_delta, alpha=alpha, device=device, dtype=dtype)
 
 
 def model(state_dict: str | pathlib.Path, model_arch: str = "sd1", model_type: str = "base"):

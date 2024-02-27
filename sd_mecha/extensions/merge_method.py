@@ -55,6 +55,10 @@ class MergeMethod:
         else:
             to_args = device, dtype
 
+        for k in hypers:
+            if k not in self.get_hyper_names():
+                raise ValueError(f"method {self.__name} does not have a hyperparameter '{k}'")
+
         merge_method_args = tuple(
             v.to(*to_args)
             for v in inputs

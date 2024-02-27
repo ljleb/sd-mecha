@@ -530,17 +530,37 @@ def bernoulli_dropout_delta(  # aka n-supermario
     delta0: Tensor | LiftFlag[MergeSpace.DELTA],
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
+    overlap: Hyper = 0.0,
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    deltas = (delta0,) + deltas
-    keep_probability = 1 - probability
-
     rng = np.random.default_rng(seed)
-    mask = torch.from_numpy(rng.binomial(1, keep_probability, delta0.shape)).to(delta0.device, delta0.dtype)
-    mask = torch.where(mask == 1, torch.from_numpy(rng.integers(1, len(deltas) + 1, delta0.shape)).to(delta0.device, delta0.dtype), torch.zeros_like(mask))
+    deltas = (delta0,) + deltas
+
+    ks = np.arange(0, 2 ** len(deltas))
+    pmf = overlapping_sets_pmf(len(deltas), probability, overlap)
+    masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
+    masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
 
     final_delta = torch.zeros_like(delta0)
-    for i, delta in enumerate(deltas, start=1):
-        final_delta += delta * (i == mask).float()
-    return final_delta / keep_probability
+    for mask, delta in zip(masks, deltas):
+        final_delta[mask] += delta[mask]
+    return final_delta / masks.sum(0).clamp(1) / (1 - probability)
+
+
+def overlapping_sets_pmf(n, p, overlap):
+    if np.isclose(overlap, int(overlap)):
+        if overlap % 2 == 0:
+            return np.array([p] + [(1-p)*float(bin(i).count("1") == 1) for i in range(1, 2**n)])
+        else:
+            return np.array([p] + [0 for _ in range(1, 2**n - 1)] + [1-p])
+
+    tan_overlap = np.tan(np.pi * (overlap - 0.5))
+    weights = np.zeros(2**n - 1)
+
+    for i in range(1, 2 ** n):
+        num_sets = bin(i).count("1")
+        weights[i-1] = tan_overlap*(num_sets - n/2)
+
+    probabilities = np.exp(weights) / np.sum(np.exp(weights))
+    return np.concatenate([[p], probabilities * (1 - p)])
