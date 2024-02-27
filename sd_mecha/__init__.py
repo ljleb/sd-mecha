@@ -264,12 +264,13 @@ def rotate(
 clip = merge_methods.clip
 
 
-def bernoulli_dropout(
+def dropout(
     a: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
     probability: Hyper = 0.9,
     alpha: Hyper = 0.5,
     overlap: Hyper = 0.0,
+    overlap_emphasis: Hyper = 0.0,
     seed: Optional[Hyper] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -278,8 +279,8 @@ def bernoulli_dropout(
         subtract(model, a)
         for model in models
     ]
-    ba_bernoulli_delta = merge_methods.bernoulli_dropout_delta(*deltas, probability=probability, overlap=overlap, seed=seed, device=device, dtype=dtype)
-    return sd_mecha.add_difference(a, ba_bernoulli_delta, alpha=alpha, device=device, dtype=dtype)
+    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
+    return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
 
 def model(state_dict: str | pathlib.Path, model_arch: str = "sd1", model_type: str = "base"):

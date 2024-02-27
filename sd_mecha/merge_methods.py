@@ -4,6 +4,7 @@ import operator
 
 import numpy as np
 import torch
+from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
 
@@ -526,11 +527,12 @@ def clip(
 
 
 @convert_to_recipe
-def bernoulli_dropout_delta(  # aka n-supermario
+def dropout(  # aka n-supermario
     delta0: Tensor | LiftFlag[MergeSpace.DELTA],
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
     overlap: Hyper = 0.0,
+    overlap_emphasis: Hyper = 0.0,
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
@@ -538,7 +540,7 @@ def bernoulli_dropout_delta(  # aka n-supermario
     deltas = (delta0,) + deltas
 
     ks = np.arange(0, 2 ** len(deltas))
-    pmf = overlapping_sets_pmf(len(deltas), probability, overlap)
+    pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
     masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
     masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
 
@@ -548,19 +550,42 @@ def bernoulli_dropout_delta(  # aka n-supermario
     return final_delta / masks.sum(0).clamp(1) / (1 - probability)
 
 
-def overlapping_sets_pmf(n, p, overlap):
+def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, int(overlap)):
         if overlap % 2 == 0:
-            return np.array([p] + [(1-p)*float(bin(i).count("1") == 1) for i in range(1, 2**n)])
+            pmf = np.array([1/n*float(bin(i).count("1") == 1) for i in range(1, 2**n)])
         else:
-            return np.array([p] + [0 for _ in range(1, 2**n - 1)] + [1-p])
+            pmf = np.array([0 for _ in range(1, 2**n - 1)] + [1])
+    else:
+        if math.floor(overlap) % 2 == 1:
+            overlap = -overlap
 
-    tan_overlap = np.tan(np.pi * (overlap - 0.5))
-    weights = np.zeros(2**n - 1)
+        tan_overlap = np.tan(np.pi * (overlap - 0.5))
+        pmf = np.zeros(2 ** n - 1)
+        for i in range(1, 2 ** n):
+            num_sets = bin(i).count("1")
+            pmf[i-1] = tan_overlap*(num_sets - n/2)
+        pmf = np.exp(pmf) / np.sum(np.exp(pmf))
 
+    binomial_pmf = binom.pmf(np.arange(1, n + 1), n, p)
+    expanded_binomial_pmf = np.zeros(2 ** n - 1)
     for i in range(1, 2 ** n):
         num_sets = bin(i).count("1")
-        weights[i-1] = tan_overlap*(num_sets - n/2)
+        expanded_binomial_pmf[i-1] = binomial_pmf[num_sets-1] / binomial_coefficient_np(n, num_sets)
+    expanded_binomial_pmf /= expanded_binomial_pmf.sum()
 
-    probabilities = np.exp(weights) / np.sum(np.exp(weights))
-    return np.concatenate([[p], probabilities * (1 - p)])
+    pmf = weighted_sum.__wrapped__(
+        pmf,
+        weighted_sum.__wrapped__(pmf, expanded_binomial_pmf, alpha=1-abs(2*overlap-1)),
+        alpha=overlap_emphasis,
+    )
+    return np.concatenate([[p], pmf * (1 - p)])
+
+
+def binomial_coefficient_np(n, k):
+    if k > n - k:
+        k = n - k
+    result = np.int64(1)
+    for i in range(1, k+1):
+        result = result * (n - i + 1) // i
+    return result
