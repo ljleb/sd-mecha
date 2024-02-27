@@ -33,7 +33,7 @@ class MergeMethod:
 
         for volatile_hyper in self.__volatile_hypers:
             if volatile_hyper not in spec.kwonlydefaults:
-                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it missing or does not have a default value")
+                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it is missing or does not have a default value")
 
         if spec.varkw is None:
             raise TypeError(f"**kwargs must be included in the function parameters")

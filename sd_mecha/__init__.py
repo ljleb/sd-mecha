@@ -1,5 +1,7 @@
 import logging
 import pathlib
+
+import numpy as np
 import torch
 import sd_mecha.builtin_model_archs
 import sd_mecha.builtin_model_types
@@ -262,16 +264,21 @@ def rotate(
 clip = merge_methods.clip
 
 
-def binomial_dropout(
-    a: RecipeNodeOrPath, b: RecipeNodeOrPath, *,
-    p: Hyper = 0.5,
-    l: Hyper = 1.0,
+def bernoulli_dropout(
+    a: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,
+    p: Hyper = 0.9,
+    l: Hyper = 0.5,
+    seed: Optional[Hyper] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    ba_diff = subtract(b, a, device=device, dtype=dtype)
-    ba_mario_delta = merge_methods.binomial_dropout_delta(ba_diff, p=p, device=device, dtype=dtype)
-    return add_difference(a, ba_mario_delta, alpha=l)
+    deltas = [
+        subtract(model, a)
+        for model in models
+    ]
+    ba_bernoulli_delta = merge_methods.bernoulli_dropout_delta(*deltas, p=p, seed=seed, device=device, dtype=dtype)
+    return sd_mecha.add_difference(a, ba_bernoulli_delta, alpha=l, device=device, dtype=dtype)
 
 
 def model(state_dict: str | pathlib.Path, model_arch: str = "sd1", model_type: str = "base"):

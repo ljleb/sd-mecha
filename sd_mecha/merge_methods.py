@@ -526,10 +526,21 @@ def clip(
 
 
 @convert_to_recipe
-def binomial_dropout_delta(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    *,
-    p: Hyper,
+def bernoulli_dropout_delta(  # aka n-supermario
+    delta0: Tensor | LiftFlag[MergeSpace.DELTA],
+    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    probability: Hyper = 0.9,
+    seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    return torch.from_numpy(np.random.binomial(1, p, a.shape)).to(a.dtype) * a / (1 - p)
+    deltas = (delta0,) + deltas
+    keep_probability = 1 - probability
+
+    rng = np.random.default_rng(seed)
+    mask = torch.from_numpy(rng.binomial(1, keep_probability, delta0.shape)).to(delta0.device, delta0.dtype)
+    mask = torch.where(mask == 1, torch.from_numpy(rng.integers(1, len(deltas) + 1, delta0.shape)).to(delta0.device, delta0.dtype), torch.zeros_like(mask))
+
+    final_delta = torch.zeros_like(delta0)
+    for i, delta in enumerate(deltas, start=1):
+        final_delta += delta * (i == mask).float()
+    return final_delta / keep_probability
