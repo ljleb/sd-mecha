@@ -6,13 +6,11 @@ text_encoder_recipe = sd_mecha.add_perpendicular(
     sd_mecha.model("js2prony_v10", "sdxl"),
     sd_mecha.model("juggernautXL_v9Rundiffusionphoto2", "sdxl"),
     sd_mecha.model("pure/sdxl_base", "sdxl"),
-    alpha=-2.0,
 )
 
 unet_recipe = sd_mecha.weighted_sum(
     sd_mecha.model("js2prony_v10", "sdxl"),
     sd_mecha.model("juggernautXL_v9Rundiffusionphoto2", "sdxl"),
-    alpha=-2.0,
 )
 
 recipe = sd_mecha.weighted_sum(
