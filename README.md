@@ -7,12 +7,14 @@ sd-mecha is a memory-efficient general-purpose model merger. It can merge any mo
 - Memory efficient model merging -- merge a very large number of models at the same time
 - Mecha recipes as a textual and interpretable format (.mecha)
 - Extension API through python:
-    - add new architectures (i.e. Stable Cascade, Stable Diffusion 3, etc.)
-    - add new model types (i.e. OFT networks, LoKr, etc.)
-    - add new merge methods
+  - add new architectures (i.e. Stable Cascade, Stable Diffusion 3, etc.)
+  - add new model types (i.e. OFT networks, LoKr, etc.)
+  - add new merge methods
 - Recipe variables for general recipe templates
 - Compose recipe templates to create mega recipes
-- SD1.5 and SDXL supported
+- Builtin support for popular model architectures:
+  - SD1.5
+  - SDXL
 - Merge loras together and to checkpoints
 - Block-wise hyperparameters for precise control of blocks
 - Class-wise hyperparameters for precise control of layer types
