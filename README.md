@@ -1,5 +1,7 @@
 # sd-mecha
 
+[![PyPI version](https://badge.fury.io/py/sd-mecha.svg)](https://badge.fury.io/py/sd-mecha)
+
 sd-mecha is a memory-efficient general-purpose model merger. It can merge any model architecture given appropriate configuration. (i.e. diffusion models, LLMs, Depth models, etc.)
 
 ## Features
@@ -21,7 +23,9 @@ sd-mecha is a memory-efficient general-purpose model merger. It can merge any mo
 
 Coming soon:
 
-- Save lora from delta space model
+- Support arbitrary model types and versions using the `sd_mecha.extensions` module
+- Merge SDXL LoRAs to models and with other LoRAs
+- Save LoRA from delta merge space
 
 ## Install
 
@@ -190,8 +194,8 @@ python -m sd_mecha compose examples/recipes/incompatible_fusion.mecha \
 
 For more information:
 
-```commandline
-python -m sd_mecha merge --help
+```shell
+python -m sd_mecha compose --help
 ```
 
 ## Motivation
