@@ -1,14 +1,14 @@
 import contextlib
 import dataclasses
+import functools
 import json
+import operator
 import pathlib
 import struct
 import threading
-from typing import Optional, Set
 import torch
 import warnings
-
-from torch._subclasses import FakeTensorMode
+from typing import Optional, Set
 from tqdm import tqdm
 
 
@@ -154,32 +154,29 @@ class OutSafetensorsDict:
         return len(self.header)
 
     def _init_buffer(self, template_header: dict, keys_to_merge: Set[str], save_dtype: torch.dtype) -> int:
-        fake_mode = FakeTensorMode()
+        def get_dtype(k):
+            return DTYPE_REVERSE_MAPPING[save_dtype][0] if k in keys_to_merge else template_header[k]["dtype"]
 
-        def _create_fake_tensor(*shape, dtype):
-            return fake_mode.from_tensor(torch.empty(shape, dtype=dtype))
+        def get_dtype_size(k):
+            return DTYPE_REVERSE_MAPPING[save_dtype][1] if k in keys_to_merge else DTYPE_MAPPING[template_header[k]["dtype"]][1]
 
-        with fake_mode:
-            fake_state_dict = {
-                k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
-                for k, h in template_header.items()
-                if k != "__metadata__"
+        def get_width(k):
+            return functools.reduce(operator.mul, template_header[k]["shape"], 1) * get_dtype_size(k)
+
+        keys = sorted(
+            list(k for k in template_header.keys() if k != "__metadata__"),
+            key=get_width,
+            reverse=True,  # maximize space taken
+        )
+        data_offset = 0
+        dummy_header = {
+            k: {
+                "dtype": get_dtype(k),
+                "shape": template_header[k]["shape"],
+                "data_offsets": [data_offset, (data_offset := data_offset + get_width(k))],
             }
-            fake_state_dict = dict(sorted(
-                fake_state_dict.items(),
-                key=lambda x: x[1].numel() * x[1].element_size(),
-                reverse=True,
-            ))
-
-            data_offset = 0
-            dummy_header = {
-                k: {
-                    "dtype": DTYPE_REVERSE_MAPPING[save_dtype][0] if k in keys_to_merge else DTYPE_REVERSE_MAPPING[t.dtype][0],
-                    "shape": list(t.shape),
-                    "data_offsets": [data_offset, (data_offset := data_offset + t.numel() * t.element_size())],
-                }
-                for k, t in fake_state_dict.items()
-            }
+            for k in keys
+        }
 
         dummy_header["__metadata__"] = self.header["__metadata__"]
         header_json = json.dumps(dummy_header, separators=(',', ':')).encode('utf-8')
