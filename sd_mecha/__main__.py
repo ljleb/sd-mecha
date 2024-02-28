@@ -1,8 +1,11 @@
 import click
 import functools
 import pathlib
+import re
 import torch
 import traceback
+import yaml
+from sd_mecha import extensions
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha.recipe_nodes import ParameterResolverVisitor
 from sd_mecha.recipe_serializer import deserialize, deserialize_path, serialize
@@ -78,7 +81,7 @@ def merge(
     )
     scheduler.merge_and_save(
         recipe,
-        output_path=output,
+        output=output,
         save_dtype=DTYPE_MAPPING[save_dtype],
         threads=threads
     )
@@ -112,8 +115,81 @@ def compose(
         f.write(composed_recipe)
 
 
+@click.command(help="Show the available blocks and classes of model architectures")
+@click.argument("model_arch", type=click.Choice(extensions.model_arch.get_all() + [""], case_sensitive=False), default="")
+@click.option("--verbose", "-v", is_flag=True)
+@click.option("--debug", is_flag=True, help="Print the stacktrace when an error occurs.")
+@except_fallback
+def info(
+    model_arch: str,
+    verbose: bool,
+    debug: bool,
+):
+    if not model_arch:
+        print(yaml.dump({
+            "Available architectures": [
+                arch
+                if not verbose else
+                f"{arch} (registered at {extensions.model_arch.resolve(arch).location})"
+                for arch in extensions.model_arch.get_all()
+            ]
+        }))
+        return
+
+    model_arch = extensions.model_arch.resolve(model_arch)
+    print(yaml.dump({
+        f'Component "{component}"': {
+            "Blocks":
+                sorted(list({
+                    b.split("_", 3)[3]
+                    for bs in model_arch.blocks.values()
+                    for b in bs
+                    if f"_{component}_block_" in b
+                }), key=natural_sort_key)
+                if not verbose else
+                dict(sorted([
+                    (b.split("_", 3)[3], sorted([
+                        k for k in model_arch.blocks
+                        if b in model_arch.blocks[k]
+                    ], key=natural_sort_key))
+                    for bs in model_arch.blocks.values()
+                    for b in bs
+                    if f"_{component}_block_" in b
+                ], key=lambda t: natural_sort_key(t[0]))),
+            "Classes":
+                sorted(list({
+                    c.split("_", 3)[3]
+                    for cs in model_arch.classes.values()
+                    for c in cs
+                    if f"_{component}_class_" in c
+                }), key=natural_sort_key)
+                if not verbose else
+                dict(sorted([
+                    (c.split("_", 3)[3], sorted([
+                        k for k in model_arch.classes
+                        if c in model_arch.classes[k]
+                    ], key=natural_sort_key))
+                    for cs in model_arch.classes.values()
+                    for c in cs
+                    if f"_{component}_class_" in c
+                ], key=lambda t: natural_sort_key(t[0]))),
+        }
+        for component in model_arch.components
+    }, sort_keys=False))
+
+
+def natural_sort_key(s):
+    return [
+        int(text)
+        if text.isdigit()
+        else text.lower()
+        for text in re.split('([0-9]+)', s)
+    ]
+
+
 main.add_command(merge)
 main.add_command(compose)
+main.add_command(info)
 
 
 if __name__ == "__main__":

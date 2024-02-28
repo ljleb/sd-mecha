@@ -3,22 +3,23 @@ sd_mecha.set_log_level()
 
 
 text_encoder_recipe = sd_mecha.add_perpendicular(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-    "pure/v1-5-pruned"
+    sd_mecha.model("js2prony_v10", "sdxl"),
+    sd_mecha.model("juggernautXL_v9Rundiffusionphoto2", "sdxl"),
+    sd_mecha.model("pure/sdxl_base", "sdxl"),
 )
 
 unet_recipe = sd_mecha.weighted_sum(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
+    sd_mecha.model("js2prony_v10", "sdxl"),
+    sd_mecha.model("juggernautXL_v9Rundiffusionphoto2", "sdxl"),
 )
 
 recipe = sd_mecha.weighted_sum(
     text_encoder_recipe,
     unet_recipe,
     alpha=(
-        sd_mecha.sd15_txt_classes(0) |
-        sd_mecha.sd15_unet_classes(1)
+        sd_mecha.blocks("sdxl", "txt") |
+        sd_mecha.blocks("sdxl", "txt2") |
+        sd_mecha.default("sdxl", "unet", 1)
     ),
 )
 
@@ -26,4 +27,4 @@ merger = sd_mecha.RecipeMerger(
     models_dir=r"E:\sd\models\Stable-diffusion",
 )
 
-merger.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output="basic_merge")

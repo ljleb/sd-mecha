@@ -1,0 +1,57 @@
+passthrough:
+- conditioner.embedders.0.transformer.text_model.embeddings.position_ids
+- first_stage_model
+
+merge:
+  unet:
+    prefix: model.diffusion_model
+    blocks:
+      in0: input_blocks.0.#
+      in3: input_blocks.3.#
+      in6:
+      - input_blocks.6.#
+      - input_blocks.6.#.transformer_blocks.#
+      mid:
+      - middle_block.#
+      - middle_block.#.transformer_blocks.#
+      - time_embed
+      out11:
+      - output_blocks.11.#
+      - output_blocks.11.#.transformer_blocks.#
+      - time_embed
+      - out
+      in*:
+      - input_blocks.*.#
+      - input_blocks.*.#.transformer_blocks.#
+      - time_embed
+      out*:
+      - output_blocks.*.#
+      - output_blocks.*.#.transformer_blocks.#
+      - time_embed
+
+  txt:
+    prefix: conditioner.embedders.0.transformer.text_model
+    blocks:
+      in0:
+      - encoder.layers.0
+      - embeddings
+      in11:
+      - encoder.layers.11
+      - final_layer_norm
+      in*: encoder.layers.*
+
+  txt2:
+    prefix: conditioner.embedders.1.model
+    blocks:
+      in0:
+      - transformer.resblocks.0
+      - positional_embedding
+      - text_projection
+      - token_embedding
+      in31:
+      - transformer.resblocks.31
+      - ln_final
+      - logit_scale
+      in*: transformer.resblocks.*
+
+keys: sdxl_sgm_keys.txt

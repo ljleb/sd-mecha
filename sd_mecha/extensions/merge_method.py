@@ -1,8 +1,8 @@
 import functools
+import fuzzywuzzy.process
 import inspect
 import pathlib
 import textwrap
-
 import torch
 from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
@@ -33,7 +33,7 @@ class MergeMethod:
 
         for volatile_hyper in self.__volatile_hypers:
             if volatile_hyper not in spec.kwonlydefaults:
-                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it missing or does not have a default value")
+                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it is missing or does not have a default value")
 
         if spec.varkw is None:
             raise TypeError(f"**kwargs must be included in the function parameters")
@@ -54,6 +54,10 @@ class MergeMethod:
             to_args = device,
         else:
             to_args = device, dtype
+
+        for k in hypers:
+            if k not in self.get_hyper_names():
+                raise ValueError(f"method {self.__name} does not have a hyperparameter '{k}'")
 
         merge_method_args = tuple(
             v.to(*to_args)
@@ -187,18 +191,26 @@ def __convert_to_recipe_impl(
     """), fn_globals, fn_locals)
     res = fn_locals[f.__name__]
     res.__wrapped__ = f
-    methods_registry[f.__name__] = res
+    _merge_methods_registry[f.__name__] = res
     return res
 
 
-methods_registry = {}
+_merge_methods_registry = {}
+
+
+def resolve(identifier: str) -> MergeMethod:
+    try:
+        return _merge_methods_registry[identifier]
+    except KeyError as e:
+        suggestion = fuzzywuzzy.process.extractOne(str(e), _merge_methods_registry.keys())[0]
+        raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
 
 
 @functools.cache
-def path_to_node(a: RecipeNodeOrPath) -> RecipeNode:
-    if isinstance(a, (str, pathlib.Path)):
-        return ModelRecipeNode(a)
-    return a
+def path_to_node(node_or_path: RecipeNodeOrPath) -> RecipeNode:
+    if isinstance(node_or_path, (str, pathlib.Path)):
+        return ModelRecipeNode(node_or_path)
+    return node_or_path
 
 
 def clear_model_paths_cache():

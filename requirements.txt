@@ -1,7 +1,8 @@
-click
+click>=8.1.7
 numpy
-safetensors
-tqdm
+safetensors>=0.4.2
+tqdm>=4.66.2
 scipy
-fuzzywuzzy
+fuzzywuzzy>=0.18.0
 python-Levenshtein
+PyYAML>=6.0.1

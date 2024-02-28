@@ -1,25 +1,27 @@
 import contextlib
 import dataclasses
+import functools
 import json
+import operator
 import pathlib
 import struct
 import threading
-from typing import Optional
 import torch
 import warnings
+from typing import Optional, Set
 from tqdm import tqdm
 
 
-class InModelSafetensorsDict:
+class InSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":
             raise ValueError(f"Model type not supported: {file_path} (only safetensors are supported)")
 
         self.default_buffer_size = buffer_size
         self.file_path = file_path
-        self.file = open(file_path, 'rb')
+        self.file = open(file_path, mode='rb', buffering=0)
         self.header_size, self.header = self._read_header()
-        self.buffer = self.file.read(self.default_buffer_size)
+        self.buffer = bytearray()
         self.buffer_start_offset = 8 + self.header_size
         self.lock = threading.Lock()
 
@@ -55,13 +57,6 @@ class InModelSafetensorsDict:
         for key in self.keys():
             yield key, self[key]
 
-    @property
-    def is_sdxl(self):
-        for key in self.keys():
-            if key.startswith("conditioner"):
-                return True
-        return False
-
     def _read_header(self):
         header_size_bytes = self.file.read(8)
         header_size = struct.unpack('<Q', header_size_bytes)[0]
@@ -75,9 +70,13 @@ class InModelSafetensorsDict:
     def _ensure_buffer(self, start_pos, length):
         if start_pos < self.buffer_start_offset or start_pos + length > self.buffer_start_offset + len(self.buffer):
             self.file.seek(start_pos)
-            del self.buffer
             necessary_buffer_size = max(self.default_buffer_size, length)
-            self.buffer = self.file.read(necessary_buffer_size)
+            if len(self.buffer) < necessary_buffer_size:
+                self.buffer = bytearray(necessary_buffer_size)
+            else:
+                self.buffer = self.buffer[:necessary_buffer_size]
+
+            self.file.readinto(self.buffer)
             self.buffer_start_offset = start_pos
 
     def _load_tensor(self, tensor_name):
@@ -95,80 +94,6 @@ class InModelSafetensorsDict:
                 return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).reshape(shape)
 
 
-class InLoraSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, buffer_size: int):
-        self.safetensors_dict = InModelSafetensorsDict(file_path, buffer_size)
-        with open(pathlib.Path(__file__).parent / "lora" / "sd15_keys.json", 'r') as f:
-            self.key_map = json.load(f)
-
-    def __del__(self):
-        self.close()
-
-    def __getitem__(self, key):
-        if key.startswith("lora_"):
-            raise KeyError("Direct access to 'lora_' keys is not allowed. Use target keys instead.")
-
-        lora_key = self.key_map.get(key)
-        if lora_key is None:
-            raise KeyError(f"No lora key mapping found for target key: {key}")
-
-        return self._convert_lora_to_weight(lora_key)
-
-    def __iter__(self):
-        return iter(self.keys())
-
-    def __len__(self):
-        return len(set(self.key_map.keys()))
-
-    def close(self):
-        self.safetensors_dict.close()
-
-    def keys(self):
-        return (
-            self.key_map[key[:-len(".lora_up.weight")]]
-            for key in self.safetensors_dict.keys()
-            if ".lora_up.weight" in key
-        )
-
-    def values(self):
-        for key in self.keys():
-            yield self[key]
-
-    def items(self):
-        for key in self.keys():
-            yield key, self[key]
-
-    @property
-    def header(self):
-        return self.safetensors_dict.header
-
-    @property
-    def file_path(self):
-        return self.safetensors_dict.file_path
-
-    @property
-    def is_sdxl(self):
-        # sdxl lora not yet supported
-        return False
-
-    def _convert_lora_to_weight(self, lora_key):
-        up_weight = self.safetensors_dict[f"{lora_key}.lora_up.weight"].to(torch.float32)
-        down_weight = self.safetensors_dict[f"{lora_key}.lora_down.weight"].to(torch.float32)
-        alpha = self.safetensors_dict[f"{lora_key}.alpha"].to(torch.float32)
-        dim = down_weight.size()[0]
-        scale = alpha / dim
-
-        if len(down_weight.size()) == 2:  # linear
-            return (up_weight @ down_weight) * scale
-        elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
-            return (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3) * scale
-        else:  # conv2d 3x3
-            return torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3) * scale
-
-
-InSafetensorsDict = InModelSafetensorsDict | InLoraSafetensorsDict
-
-
 @dataclasses.dataclass
 class OutSafetensorsDictThreadState:
     buffer: bytearray
@@ -177,19 +102,27 @@ class OutSafetensorsDictThreadState:
 
 
 class OutSafetensorsDict:
-    def __init__(self, file_path: pathlib.Path, template_header: dict, mecha_recipe: str, minimum_buffer_size: int):
+    def __init__(
+        self,
+        file_path: pathlib.Path,
+        template_header: dict,
+        keys_to_merge: Set[str],
+        mecha_recipe: str,
+        minimum_buffer_size: int,
+        save_dtype: torch.dtype,
+    ):
         self.thread_states = {}
         self.lock = threading.Lock()
 
         self.header = {
             "__metadata__": {"mecha_recipe": mecha_recipe}
         }
-        self.file = file_path.open("wb")
+        self.file = file_path.open("wb", buffering=0)
         self.file_path = file_path
         self.flushed_size = 0
         self.minimum_buffer_size = minimum_buffer_size
 
-        self.max_header_size = self._init_buffer(template_header)
+        self.max_header_size = self._init_buffer(template_header, keys_to_merge, save_dtype)
 
     def __del__(self):
         self.file.close()
@@ -220,21 +153,31 @@ class OutSafetensorsDict:
     def __len__(self):
         return len(self.header)
 
-    def _init_buffer(self, template_header) -> int:
-        # pretend the variable sections of the header take all the space they possibly can
-        # this should be mostly the "data_offsets" tuples
-        # we assume they take at least 10 digits, in case they are missing in the template
-        max_digits = max(
-            len(str(offset))
-            for tensor_info in template_header.values()
-            for offset in tensor_info.get('data_offsets', [0, 0])
-        )
-        dummy_number = 10 ** max(max_digits, 10) - 1
+    def _init_buffer(self, template_header: dict, keys_to_merge: Set[str], save_dtype: torch.dtype) -> int:
+        def get_dtype(k):
+            return DTYPE_REVERSE_MAPPING[save_dtype][0] if k in keys_to_merge else template_header[k]["dtype"]
 
+        def get_dtype_size(k):
+            return DTYPE_REVERSE_MAPPING[save_dtype][1] if k in keys_to_merge else DTYPE_MAPPING[template_header[k]["dtype"]][1]
+
+        def get_width(k):
+            return functools.reduce(operator.mul, template_header[k]["shape"], 1) * get_dtype_size(k)
+
+        keys = sorted(
+            list(k for k in template_header.keys() if k != "__metadata__"),
+            key=get_width,
+            reverse=True,  # simulate worst case: maximize space taken by order
+        )
+        data_offset = 0
         dummy_header = {
-            key: {**value, "data_offsets": [dummy_number, dummy_number]}
-            for key, value in template_header.items()
+            k: {
+                "dtype": get_dtype(k),
+                "shape": template_header[k]["shape"],
+                "data_offsets": [data_offset, (data_offset := data_offset + get_width(k))],
+            }
+            for k in keys
         }
+
         dummy_header["__metadata__"] = self.header["__metadata__"]
         header_json = json.dumps(dummy_header, separators=(',', ':')).encode('utf-8')
         max_header_size = len(header_json)
@@ -255,8 +198,10 @@ class OutSafetensorsDict:
 
         if next_tensor_size is not None:
             required_buffer_size = max(self.minimum_buffer_size, next_tensor_size)
-            if required_buffer_size != len(state.buffer):
+            if len(state.buffer) < required_buffer_size:
                 state.buffer = bytearray(required_buffer_size)
+            else:
+                state.buffer = state.buffer[:required_buffer_size]
 
         global_sub_header = {
             k: {

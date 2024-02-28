@@ -1,6 +1,6 @@
 import sd_mecha
 import torch
-from sd_mecha.extensions import convert_to_recipe, LiftFlag, MergeSpace
+from sd_mecha.extensions.merge_method import convert_to_recipe, LiftFlag, MergeSpace
 sd_mecha.set_log_level()
 
 
@@ -13,7 +13,7 @@ def custom_sum(
     # We use a type system trick to specify the expected merge space of each model: `Tensor | LiftFlag[MergeSpace...]`
     # We can represent complex constraints where multiple models must be in the exact same merge space using a TypeVar:
     #    ```
-    #    SameSpace = TypeVar("SharedSpace", bound=LiftFlag[MergeSpace.MODEL | MergeSpace.DELTA])
+    #    SameSpace = TypeVar("SharedSpace", bound=LiftFlag[MergeSpace.BASE | MergeSpace.DELTA])
     #    ...
     #    def my_method(
     #        a: torch.Tensor | SameSpace,
@@ -21,11 +21,11 @@ def custom_sum(
     #        **kwargs,
     #    ) -> torch.Tensor | SameSpace
     #    ```
-    # In this code, `a` and `b` must be in the same space, either in MODEL space or DELTA space.
+    # In this code, `a` and `b` must be in the same space, either in BASE space or DELTA space.
     # The return merge space is exactly the merge space that satisfies `a` and `b` at the same time.
     # For more examples, see /sd_mecha/merge_methods.py
-    a: torch.Tensor | LiftFlag[MergeSpace.MODEL],
-    b: torch.Tensor | LiftFlag[MergeSpace.MODEL],
+    a: torch.Tensor | LiftFlag[MergeSpace.BASE],
+    b: torch.Tensor | LiftFlag[MergeSpace.BASE],
     *,
     # hyperparameters go here
     alpha: float = 0.5,  # default arguments are honored
@@ -33,7 +33,7 @@ def custom_sum(
     # `@convert_to_recipe` introduces additional kwargs: `device=` and `dtype=`
     # We must put `**kwargs` to satisfy the type system:
     **kwargs,
-) -> torch.Tensor | LiftFlag[MergeSpace.MODEL]:
+) -> torch.Tensor | LiftFlag[MergeSpace.BASE]:
 
     # to call an existing `@convert_to_recipe` merge method inside another one (i.e. this one),
     #  we use the `__wrapped__` attribute that returns the original unwrapped function
@@ -61,4 +61,4 @@ merger = sd_mecha.RecipeMerger(
 )
 
 # perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output_path="basic_merge")
+merger.merge_and_save(recipe, output="basic_merge")

@@ -1,16 +1,16 @@
 import logging
 import pathlib
+
+import numpy as np
 import torch
+import sd_mecha.builtin_model_archs
+import sd_mecha.builtin_model_types
 from typing import Optional, Dict
 from sd_mecha.recipe_merger import RecipeMerger
-from sd_mecha import recipe_nodes, merge_methods
-from sd_mecha.extensions import RecipeNodeOrPath, path_to_node
+from sd_mecha import recipe_nodes, merge_methods, extensions
+from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.hypers import (
-    Hyper,
-    sd15_unet_blocks, sd15_unet_classes, sd15_txt_blocks, sd15_txt_classes,
-    sdxl_unet_blocks, sdxl_unet_classes, sdxl_txt_blocks, sdxl_txt_classes, sdxl_txt_g14_blocks, sdxl_txt_g14_classes,
-)
+from sd_mecha.hypers import Hyper, classes, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 
 
@@ -19,8 +19,8 @@ def merge_and_save(
     models_dir: pathlib.Path,
     output_path: pathlib.Path,
 ):
-    scheduler = RecipeMerger(models_dir=models_dir)
-    scheduler.merge_and_save(recipe, output_path=output_path)
+    merger = RecipeMerger(models_dir=models_dir)
+    merger.merge_and_save(recipe, output=output_path)
 
 
 def serialize_and_save(
@@ -51,12 +51,12 @@ def add_difference(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a: recipe_nodes.RecipeNode = extensions.path_to_node(a)
-    b: recipe_nodes.RecipeNode = extensions.path_to_node(b)
+    a: recipe_nodes.RecipeNode = extensions.merge_method.path_to_node(a)
+    b: recipe_nodes.RecipeNode = extensions.merge_method.path_to_node(b)
     original_b = b
 
     if c is not None:
-        c = extensions.path_to_node(c)
+        c = extensions.merge_method.path_to_node(c)
         b = subtract(
             b, c,
             device=device,
@@ -147,7 +147,7 @@ def add_difference_ties(
     models = tuple(path_to_node(model) for model in models)
     models = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.MODEL else
+        if model.merge_space is MergeSpace.BASE else
         model
         for model in models
     )
@@ -167,11 +167,11 @@ def add_difference_ties(
 
 
 def copy_region(
-    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath], *,
-    width: Hyper = 0.5,
+    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
+    width: Hyper = 1.0,
     offset: Hyper = 0.0,
     top_k: bool = False,
-    device: Optional[str] = None,
+    device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     a = path_to_node(a)
@@ -194,8 +194,8 @@ def copy_region(
     copy_method = [merge_methods.copy_region, merge_methods.copy_top_k][int(top_k)]
     res = copy_method(
         a, b,
-        alpha=width,
-        beta=offset,
+        width=width,
+        offset=offset,
         device=device,
         dtype=dtype,
     )
@@ -221,7 +221,7 @@ def rotate(
     alpha: Hyper = 1.0,
     beta: Hyper = 0.0,
     device: Optional[str] = "cuda",
-    dtype: Optional[torch.dtype] = torch.float64,
+    dtype: Optional[torch.dtype] = None,
     cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = path_to_node(a)
@@ -264,16 +264,35 @@ def rotate(
 clip = merge_methods.clip
 
 
-def model(state_dict: str | pathlib.Path):
-    return recipe_nodes.ModelRecipeNode(state_dict)
+def dropout(
+    a: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,
+    probability: Hyper = 0.9,
+    alpha: Hyper = 0.5,
+    overlap: Hyper = 0.0,
+    overlap_emphasis: Hyper = 0.0,
+    seed: Optional[Hyper] = None,
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> recipe_nodes.RecipeNode:
+    deltas = [
+        subtract(model, a)
+        for model in models
+    ]
+    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
+    return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
 
-def lora(state_dict: str | pathlib.Path):
-    return recipe_nodes.LoraRecipeNode(state_dict)
+def model(state_dict: str | pathlib.Path, model_arch: str = "sd1", model_type: str = "base"):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
 
 
-def parameter(name: str):
-    return recipe_nodes.ParameterRecipeNode(name)
+def lora(state_dict: str | pathlib.Path, model_arch: str = "sd1"):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, "lora")
+
+
+def parameter(name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
+    return recipe_nodes.ParameterRecipeNode(name, merge_space, model_arch)
 
 
 def set_log_level(level: str = "INFO"):

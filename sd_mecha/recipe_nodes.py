@@ -1,16 +1,11 @@
 import abc
-import dataclasses
-import enum
 import pathlib
 import torch
 from typing import Optional, Dict, Any
-from sd_mecha.streaming import InModelSafetensorsDict, InLoraSafetensorsDict
+from sd_mecha import extensions
+from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import validate_hyper, Hyper
-
-
-class MergeSpace(enum.Flag):
-    MODEL = enum.auto()
-    DELTA = enum.auto()
+from sd_mecha.merge_space import MergeSpace
 
 
 class RecipeNode(abc.ABC):
@@ -23,55 +18,53 @@ class RecipeNode(abc.ABC):
     def merge_space(self) -> MergeSpace:
         pass
 
+    @property
+    @abc.abstractmethod
+    def model_arch(self) -> Optional[ModelArch]:
+        pass
 
-class LeafRecipeNode(RecipeNode, abc.ABC):
+    @abc.abstractmethod
+    def __contains__(self, item):
+        pass
+
+
+class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
-        state_dict,
-        dict_class,
+        state_dict_path: str | pathlib.Path,
+        model_arch: str = "sd1",
+        model_type: str = "base",
     ):
-        if isinstance(state_dict, dict_class):
-            self.path = state_dict.file_path
-            self.state_dict = state_dict
-        else:
-            self.path = state_dict
-            self.state_dict = None
-
-
-class ModelRecipeNode(LeafRecipeNode):
-    def __init__(
-        self,
-        state_dict: str | pathlib.Path | InModelSafetensorsDict,
-    ):
-        super().__init__(state_dict, InModelSafetensorsDict)
+        self.path = state_dict_path
+        self.state_dict = None
+        self.model_type = extensions.model_type.resolve(model_type, model_arch)
+        self.__model_arch = extensions.model_arch.resolve(model_arch)
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_model(self, *args, **kwargs)
 
     @property
     def merge_space(self) -> MergeSpace:
-        return MergeSpace.MODEL
-
-
-class LoraRecipeNode(LeafRecipeNode):
-    def __init__(
-        self,
-        state_dict: str | pathlib.Path | InLoraSafetensorsDict,
-    ):
-        super().__init__(state_dict, InLoraSafetensorsDict)
-
-    def accept(self, visitor, *args, **kwargs):
-        return visitor.visit_lora(self, *args, **kwargs)
+        return self.model_type.merge_space
 
     @property
-    def merge_space(self) -> MergeSpace:
-        return MergeSpace.DELTA
+    def model_arch(self) -> Optional[ModelArch]:
+        return self.__model_arch
+
+    def __contains__(self, item):
+        if isinstance(item, ModelRecipeNode):
+            return self.path == item.path
+        else:
+            return False
 
 
 class ParameterRecipeNode(RecipeNode):
-    def __init__(self, name: str, merge_space: MergeSpace = MergeSpace.MODEL):
+    def __init__(self, name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
         self.name = name
         self.__merge_space = merge_space
+        if model_arch is not None:
+            model_arch = extensions.model_arch.resolve(model_arch)
+        self.__model_arch = model_arch
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_parameter(self, *args, **kwargs)
@@ -79,6 +72,16 @@ class ParameterRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
+
+    @property
+    def model_arch(self) -> Optional[ModelArch]:
+        return self.__model_arch
+
+    def __contains__(self, item):
+        if isinstance(item, ParameterRecipeNode):
+            return self.name == item.name and self.merge_space == item.merge_space
+        else:
+            return False
 
 
 class MergeRecipeNode(RecipeNode):
@@ -94,7 +97,7 @@ class MergeRecipeNode(RecipeNode):
         self.merge_method = merge_method
         self.models = models
         for hyper_v in hypers.values():
-            validate_hyper(hyper_v)
+            validate_hyper(hyper_v, self.model_arch)
         self.hypers = hypers
         self.volatile_hypers = volatile_hypers
         self.device = device
@@ -111,15 +114,46 @@ class MergeRecipeNode(RecipeNode):
     def merge_space(self) -> MergeSpace:
         return self.__merge_space
 
+    @property
+    def model_arch(self) -> Optional[ModelArch]:
+        if not self.models:
+            return None
 
-class DepthRecipeVisitor:
+        for model in self.models:
+            if (arch := model.model_arch) is None:
+                return None
+
+        return arch
+
+    def __contains__(self, item):
+        if isinstance(item, MergeRecipeNode):
+            return self is item or any(
+                item in model
+                for model in self.models
+            )
+        else:
+            return False
+
+
+class RecipeVisitor(abc.ABC):
+    @abc.abstractmethod
+    def visit_model(self, node: ModelRecipeNode):
+        pass
+
+    @abc.abstractmethod
+    def visit_parameter(self, node: ParameterRecipeNode):
+        pass
+
+    @abc.abstractmethod
+    def visit_merge(self, node: MergeRecipeNode):
+        pass
+
+
+class DepthRecipeVisitor(RecipeVisitor):
     def visit_model(self, _node: ModelRecipeNode):
         return 1
 
-    def visit_lora(self, _node: LoraRecipeNode):
-        return 1
-
-    def visit_parameter(self, _node: LoraRecipeNode):
+    def visit_parameter(self, _node: ParameterRecipeNode):
         return 0
 
     def visit_merge(self, node: MergeRecipeNode):
@@ -129,16 +163,11 @@ class DepthRecipeVisitor:
         ) + 1
 
 
-class ModelsCountVisitor:
+class ModelsCountVisitor(RecipeVisitor):
     def __init__(self):
         self.__seen_nodes = []
 
     def visit_model(self, node: ModelRecipeNode):
-        seen = node in self.__seen_nodes
-        self.__seen_nodes.append(node)
-        return not seen
-
-    def visit_lora(self, node: LoraRecipeNode):
         seen = node in self.__seen_nodes
         self.__seen_nodes.append(node)
         return not seen
@@ -153,14 +182,11 @@ class ModelsCountVisitor:
         )
 
 
-class ParameterResolverVisitor:
+class ParameterResolverVisitor(RecipeVisitor):
     def __init__(self, arguments: Dict[str, RecipeNode]):
         self.__arguments = arguments
 
     def visit_model(self, node: ModelRecipeNode) -> RecipeNode:
-        return node
-
-    def visit_lora(self, node: LoraRecipeNode) -> RecipeNode:
         return node
 
     def visit_parameter(self, node: ParameterRecipeNode) -> RecipeNode:

@@ -1,5 +1,4 @@
 import sd_mecha
-import torch
 sd_mecha.set_log_level()
 
 
@@ -14,9 +13,7 @@ models = [
 
 recipe = models[0]
 for i, model in enumerate(models[1:], start=2):
-    # dtype to accommodate precision loss by alpha near 1
-    dtype = torch.float16 if i - 2 < 4 else torch.float32 if i - 2 < 16 else torch.float64
-    recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i, dtype=dtype)
+    recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i)
 
 merger = sd_mecha.RecipeMerger(models_dir=r"E:\sd\models\Stable-diffusion")
-merger.merge_and_save(recipe, output_path="n_average")
+merger.merge_and_save(recipe, output="basic_merge")
