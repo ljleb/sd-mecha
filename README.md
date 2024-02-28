@@ -2,7 +2,12 @@
 
 [![PyPI version](https://badge.fury.io/py/sd-mecha.svg)](https://badge.fury.io/py/sd-mecha)
 
-sd-mecha is a memory-efficient general-purpose model merger. It can merge any model architecture given appropriate configuration. (i.e. diffusion models, LLMs, Depth models, etc.)
+sd-mecha is a memory-efficient general-purpose model merger. It can merge any model architecture given appropriate configuration:
+- diffusion models
+- LLMs
+- Depth models
+- Scorers
+- ...
 
 ## Features
 
