@@ -81,6 +81,22 @@ Component "unet":
   ...
 ```
 
+Given this information, it is possible to set i.e. the value of block `in2` in the `txt` component specifically:
+
+```python
+import sd_mecha
+recipe = sd_mecha.weighted_sum(
+    "ghostmix_v20Bakedvae",
+    "dreamshaper_332BakedVaeClipFix",
+    alpha=(
+      sd_mecha.default("sd1", "txt", 0.33) |
+      sd_mecha.blocks("sd1", "txt", in2=0.75)
+    ),
+)
+```
+
+See the merging code API section below for more info.
+
 If run as verbose, it also shows the keys that are associated with each block/class:
 
 ```commandline
