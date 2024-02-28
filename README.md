@@ -39,7 +39,7 @@ The pypi package does not ship with `torch` so that you can install the appropri
 
 ### Get Model-Specific Information
 
-The interface for merge hyperparameters requires prior knowledge of the blocks and classes of the architecture being merged.
+The interface for block/class hyperparameters requires prior knowledge of the blocks and classes of the architecture being merged.
 The command `info` was made to discover the names of the blocks and/or classes to use.
 
 To show the registered model architectures:
