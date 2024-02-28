@@ -50,8 +50,11 @@ def discover_blocks(keys, discovered_block_prefixes, version_id):
             if any((match := prefix.match(key)) for prefix in prefixes["patterns"]):
                 blocks.setdefault(key, set()).add(block)
                 clazz = key[len(match.group(0)):]
-                while clazz in ["weight", "bias"] or clazz[:1].isnumeric():
-                    part = key[:-len(clazz)-1].split(".")[-1]
+                while not clazz or clazz in ["weight", "bias"] or clazz[:1].isnumeric():
+                    if clazz:
+                        part = key[:-len(clazz)-1].split(".")[-1]
+                    else:
+                        part = match.group(0).split(".")[-1]
                     clazz = part + "." + clazz
                 clazz = clazz.replace(".weight", "").replace(".bias", "").replace(".", "_")
                 classes[key] = {version_id + "_" + prefixes["module"] + "_class_" + clazz}
