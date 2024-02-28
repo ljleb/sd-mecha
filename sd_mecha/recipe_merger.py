@@ -4,7 +4,7 @@ import logging
 import pathlib
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from sd_mecha.model_config import DetermineConfigVisitor
+from sd_mecha.model_detection import DetermineConfigVisitor
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
