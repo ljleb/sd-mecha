@@ -26,8 +26,13 @@ dependencies = [
 packages = [
     "sd_mecha",
     "sd_mecha.extensions",
+    "sd_mecha.lora",
+    "sd_mecha.models",
 ]
-package-data = {"sd_mecha.lora"=["*.json"], "sd_mecha.models"=["*.yaml", "*.txt"]}
+
+[tool.setuptools.package-data]
+"sd_mecha.lora" = ["*.json"]
+"sd_mecha.models" = ["*.yaml", "*.txt"]
 
 [project.urls]
 Homepage = "https://github.com/ljleb/sd-mecha"

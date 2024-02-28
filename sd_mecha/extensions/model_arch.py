@@ -7,7 +7,7 @@ import pathlib
 import re
 import traceback
 import yaml
-from typing import Set, Dict
+from typing import Set, Dict, List
 
 WILDCARD = "*"
 PADDING = "#"
@@ -119,3 +119,7 @@ def resolve(identifier: str) -> ModelArch:
     except KeyError as e:
         suggestion = fuzzywuzzy.process.extractOne(str(e), _model_archs_registry.keys())[0]
         raise ValueError(f"unknown model architecture: {e}. Nearest match is '{suggestion}'")
+
+
+def get_all() -> List[str]:
+    return list(_model_archs_registry.keys())

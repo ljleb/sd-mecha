@@ -63,7 +63,7 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, **kwargs) -
     The CLI has a command to help determine the names of the blocks without guessing:
 
     ```
-    python -m sd_mecha info <model_arch> blocks
+    python -m sd_mecha info <model_arch>
     ```
 
     where `<model_arch>` is the version identifier of the model used. (i.e. "sd1", "sdxl", etc.)
@@ -105,7 +105,7 @@ def classes(model_arch: str | ModelArch, model_component: str, **kwargs) -> Hype
     The CLI has a command to help determine the names of the classes for a given model version without guessing:
 
     ```
-    python -m sd_mecha info <model_arch> classes
+    python -m sd_mecha info <model_arch>
     ```
 
     where `<model_arch>` is the version identifier of the model used. (i.e. "sd1", "sdxl", etc.)
