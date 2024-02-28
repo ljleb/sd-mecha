@@ -166,7 +166,7 @@ class OutSafetensorsDict:
         keys = sorted(
             list(k for k in template_header.keys() if k != "__metadata__"),
             key=get_width,
-            reverse=True,  # maximize space taken
+            reverse=True,  # simulate worst case: maximize space taken by order
         )
         data_offset = 0
         dummy_header = {
