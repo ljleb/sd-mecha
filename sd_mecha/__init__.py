@@ -3,9 +3,11 @@ import pathlib
 
 import numpy as np
 import torch
+from torch import Tensor
+
 import sd_mecha.builtin_model_archs
 import sd_mecha.builtin_model_types
-from typing import Optional, Dict
+from typing import Optional, Dict, Mapping
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
@@ -128,10 +130,9 @@ def add_perpendicular(
 
 
 geometric_sum = merge_methods.geometric_sum
-copy_difference = train_difference = merge_methods.copy_difference
-similarity_add_difference = merge_methods.similarity_add_difference
-normalized_similarity_sum = cosine_add_a = merge_methods.normalized_similarity_sum
-similarity_sum = cosine_add_b = merge_methods.similarity_sum
+train_difference = merge_methods.train_difference
+cosine_add_a = merge_methods.add_cosine_a
+cosine_add_b = merge_methods.add_cosine_b
 ties_sum = merge_methods.ties_sum
 
 
@@ -191,7 +192,7 @@ def copy_region(
             dtype=dtype,
         )
 
-    copy_method = [merge_methods.copy_region, merge_methods.copy_top_k][int(top_k)]
+    copy_method = [merge_methods.tensor_sum, merge_methods.top_k_tensor_sum][int(top_k)]
     res = copy_method(
         a, b,
         width=width,
@@ -243,8 +244,8 @@ def rotate(
 
     res = merge_methods.rotate(
         a, b,
-        alpha=alpha,
-        beta=beta,
+        alignment=alpha,
+        alpha=beta,
         cache=cache,
         device=device,
         dtype=dtype,
@@ -283,7 +284,7 @@ def dropout(
     return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
 
-def model(state_dict: str | pathlib.Path, model_arch: str = "sd1", model_type: str = "base"):
+def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1", model_type: str = "base"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
 
 

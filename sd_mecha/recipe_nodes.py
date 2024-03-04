@@ -1,7 +1,10 @@
 import abc
 import pathlib
 import torch
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Mapping
+
+from torch import Tensor
+
 from sd_mecha import extensions
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import validate_hyper, Hyper
@@ -31,12 +34,16 @@ class RecipeNode(abc.ABC):
 class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
-        state_dict_path: str | pathlib.Path,
+        state_dict: str | pathlib.Path | Mapping[str, Tensor],
         model_arch: str = "sd1",
         model_type: str = "base",
     ):
-        self.path = state_dict_path
-        self.state_dict = None
+        if isinstance(state_dict, Mapping):
+            self.path = None
+            self.state_dict = state_dict
+        else:
+            self.path = state_dict
+            self.state_dict = None
         self.model_type = extensions.model_type.resolve(model_type, model_arch)
         self.__model_arch = extensions.model_arch.resolve(model_arch)
 

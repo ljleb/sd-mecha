@@ -19,6 +19,8 @@ class LiftFlag(Generic[T]):
 
 
 class MergeMethod:
+    create_recipe: Callable
+
     def __init__(self, f: Callable, volatile_hypers: Iterable[str]):
         self.__f = f
         self.__name = f.__name__
@@ -89,13 +91,32 @@ class MergeMethod:
                 elif merge_space_arg & merge_space_param:
                     resolved_input_spaces[key] = merge_space_arg
                 else:
-                    raise TypeError(f"parameter '{param}' expects {merge_space_param} but got {merge_space_arg}")
+                    raise TypeError(f"parameter '{param}' of method {self.__name} expects {merge_space_param} but got {merge_space_arg}")
 
         merge_space_param, key = self.__extract_lift_flag(type_hints.get("return"), None)
         if key in resolved_input_spaces:
             return resolved_input_spaces[key]
         else:
             return merge_space_param
+
+    def get_input_merge_spaces(self) -> Tuple[List[MergeSpace], Optional[MergeSpace]]:
+        type_hints = get_type_hints(self.__f)
+        model_names = self.get_model_names()
+        merge_spaces = []
+        for param in model_names:
+            annotation = type_hints.get(param)
+            if annotation:
+                merge_space, _ = self.__extract_lift_flag(annotation, param)
+                merge_spaces.append(merge_space)
+
+        varargs_name = self.get_model_varargs_name()
+        varargs_merge_space = None
+        if varargs_name:
+            annotation = type_hints.get(varargs_name)
+            if annotation:
+                varargs_merge_space, _ = self.__extract_lift_flag(annotation, varargs_name)
+
+        return merge_spaces, varargs_merge_space
 
     def __extract_lift_flag(self, annotation, param) -> Tuple[MergeSpace, object]:
         if get_origin(annotation) is Union:
@@ -191,11 +212,13 @@ def __convert_to_recipe_impl(
     """), fn_globals, fn_locals)
     res = fn_locals[f.__name__]
     res.__wrapped__ = f
-    _merge_methods_registry[f.__name__] = res
+    merge_method.create_recipe = res
+    _merge_methods_registry[f.__name__] = merge_method
     return res
 
 
 _merge_methods_registry = {}
+_recipes_registry = {}
 
 
 def resolve(identifier: str) -> MergeMethod:

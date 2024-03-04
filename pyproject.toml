@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sd-mecha"
-version = "0.0.5"
+version = "0.0.6"
 description = "Stable Diffusion recipe merger"
 readme = "README.md"
 authors = [{ name = "ljleb" }]

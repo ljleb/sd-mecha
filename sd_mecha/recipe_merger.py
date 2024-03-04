@@ -9,21 +9,27 @@ from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
-from typing import Optional, Mapping, MutableMapping, Dict, Set
+from typing import Optional, Mapping, MutableMapping, Dict, Set, List
 
 
 class RecipeMerger:
     def __init__(
         self, *,
-        models_dir: Optional[pathlib.Path | str] = None,
+        models_dir: Optional[pathlib.Path | str | List[pathlib.Path | str]] = None,
         default_device: str = "cpu",
         default_dtype: Optional[torch.dtype] = torch.float64,
     ):
-        if isinstance(models_dir, str):
-            models_dir = pathlib.Path(models_dir)
-        if models_dir is not None:
-            models_dir = models_dir.absolute()
-        self.__base_dir = models_dir
+        if models_dir is None:
+            models_dir = []
+        if not isinstance(models_dir, List):
+            models_dir = [models_dir]
+        for i in range(len(models_dir)):
+            if isinstance(models_dir[i], str):
+                models_dir[i] = pathlib.Path(models_dir[i])
+            if models_dir[i] is not None:
+                models_dir[i] = models_dir[i].absolute()
+
+        self.__base_dirs = models_dir
 
         self.__default_device = default_device
         self.__default_dtype = default_dtype
@@ -32,6 +38,7 @@ class RecipeMerger:
         self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
         fallback_model: Optional[Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
+        save_device: Optional[str] = "cpu",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
@@ -57,7 +64,7 @@ class RecipeMerger:
             threads = total_files_open
 
         load_input_dicts_visitor = LoadInputDictsVisitor(
-            self.__base_dir,
+            self.__base_dirs,
             buffer_size_per_file,
         )
         recipe.accept(load_input_dicts_visitor)
@@ -83,7 +90,7 @@ class RecipeMerger:
             futures = []
             for key in model_config.keys():
                 key_merger = model_config.get_key_merger(key, recipe, fallback_model, self.__default_device, self.__default_dtype)
-                key_merger = self.__track_output(key_merger, output, key, save_dtype or self.__default_dtype)
+                key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
                 key_merger = self.__track_progress(key_merger, key, model_config.get_shape(key), progress)
                 futures.append(executor.submit(key_merger))
 
@@ -107,7 +114,7 @@ class RecipeMerger:
             if not isinstance(output, pathlib.Path):
                 output = pathlib.Path(output)
             if not output.is_absolute():
-                output = self.__base_dir / output
+                output = self.__base_dirs[0] / output
             if not output.suffix:
                 output = output.with_suffix(".safetensors")
             logging.info(f"Saving to {output}")
@@ -131,16 +138,27 @@ class RecipeMerger:
             return res
         return track_progress
 
-    def __track_output(self, f, output, key, save_dtype):
+    def __track_output(self, f, output, key, save_dtype, save_device):
+        if save_dtype is None:
+            save_dtype = self.__default_dtype
+
+        if save_device is None:
+            to_kwargs = {"device": save_device},
+        else:
+            to_kwargs = {"dtype": save_dtype, "device": save_device}
+
         @functools.wraps(f)
         def track_output(*args, **kwargs):
-            output[key] = f(*args, **kwargs).to(save_dtype)
+            try:
+                output[key] = f(*args, **kwargs).to(**to_kwargs)
+            except KeyError as e:
+                logging.warning(e)
         return track_output
 
 
 @dataclasses.dataclass
 class LoadInputDictsVisitor(RecipeVisitor):
-    __base_dir: pathlib.Path
+    __base_dirs: List[pathlib.Path]
     __buffer_size_per_dict: int
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
@@ -164,7 +182,12 @@ class LoadInputDictsVisitor(RecipeVisitor):
         if not isinstance(path, pathlib.Path):
             path = pathlib.Path(path)
         if not path.is_absolute():
-            path = self.__base_dir / path
-        if not path.suffix:
-            path = path.with_suffix(".safetensors")
+            for base_dir in self.__base_dirs:
+                path_attempt = base_dir / path
+                if not path_attempt.suffix:
+                    path_attempt = path_attempt.with_suffix(".safetensors")
+                if path_attempt.exists():
+                    path = path_attempt
+                    break
+
         return InSafetensorsDict(path, self.__buffer_size_per_dict)
