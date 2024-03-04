@@ -87,7 +87,7 @@ def geometric_sum(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: Hyper,
+    alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     a = torch.complex(a, torch.zeros_like(a))
@@ -165,8 +165,8 @@ def tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Hyper,
-    offset: Hyper,
+    width: Hyper = 0.5,
+    offset: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if a.shape == ():
@@ -188,8 +188,8 @@ def top_k_tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Hyper,
-    offset: Hyper,
+    width: Hyper = 0.5,
+    offset: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
@@ -265,7 +265,7 @@ def multiply_quotient(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper,
+    alpha: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     ac_log = torch.log(a.abs()) - torch.log(c.abs())
@@ -320,7 +320,7 @@ def crossover(
     b: Tensor | SameMergeSpace,
     *,
     mean: Hyper = 0.5,
-    tilt: Hyper = 0,
+    tilt: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if mean == 0:
@@ -393,8 +393,8 @@ def rotate(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alignment: Hyper,
-    alpha: Hyper,
+    alignment: Hyper = 1.0,
+    alpha: Hyper = 0.0,
     cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
