@@ -86,7 +86,7 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: boo
             if "_" + model_component + "_block_" in k
         )
         if strict and len(args) != len(identifiers):
-            raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few. (i.e. 'in0=1, out3=0.5, ...') or pass strict=False")
+            raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few (i.e. 'in0=1, out3=0.5, ...') or pass strict=False.")
 
         identifiers.sort(key=natural_sort_key)
         return dict(zip(identifiers, args))
