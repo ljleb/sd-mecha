@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import gc
 import logging
 import pathlib
 import torch
@@ -97,6 +98,10 @@ class RecipeMerger:
                 futures.append(executor.submit(key_merger))
 
             for future in as_completed(futures):
+                if future.exception() is not None:
+                    for future_to_cancel in futures:
+                        future_to_cancel.cancel()
+                    raise future.exception()
                 future.result()
 
         progress.close()
@@ -151,10 +156,7 @@ class RecipeMerger:
 
         @functools.wraps(f)
         def track_output(*args, **kwargs):
-            try:
-                output[key] = f(*args, **kwargs).to(**to_kwargs)
-            except KeyError as e:
-                logging.warning(e)
+            output[key] = f(*args, **kwargs).to(**to_kwargs)
         return track_output
 
 

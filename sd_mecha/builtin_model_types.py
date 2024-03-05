@@ -8,7 +8,7 @@ from sd_mecha.extensions.model_type import register_model_type
 from typing import Mapping
 
 
-@register_model_type(merge_space=MergeSpace.BASE)
+@register_model_type(merge_space=MergeSpace.BASE, needs_header_conversion=False)
 def base(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
     return state_dict[key]
 
