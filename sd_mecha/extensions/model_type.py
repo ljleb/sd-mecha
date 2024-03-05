@@ -6,7 +6,7 @@ import torch
 from sd_mecha import extensions
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_arch import ModelArch
-from sd_mecha.streaming import DTYPE_REVERSE_MAPPING, DTYPE_MAPPING
+from sd_mecha.streaming import DTYPE_REVERSE_MAPPING, DTYPE_MAPPING, InSafetensorsDict
 from torch._subclasses.fake_tensor import FakeTensorMode
 from typing import Callable, Mapping, Optional, List, Iterable
 
@@ -19,40 +19,51 @@ class ModelType:
     __f: ModelTypeCallback
     identifier: str
     merge_space: MergeSpace
+    needs_header_conversion: bool
     location: str
 
     def get_tensor(self, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return self.__f(state_dict, key)
 
-    def convert_header(self, header: Mapping[str, Mapping[str, str | List[int]]], model_arch: ModelArch):
-        fake_mode = FakeTensorMode()
-
-        def _create_fake_tensor(*shape, dtype):
-            return fake_mode.from_tensor(torch.empty(shape, dtype=dtype))
-
-        with fake_mode:
-            fake_state_dict = {
-                k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
-                for k, h in header.items()
-                if k != "__metadata__"
-            }
-            converted_state_dict = {}
-            for k in model_arch.keys:
-                try:
-                    converted_state_dict[k] = self.get_tensor(fake_state_dict, k)
-                except KeyError:
-                    continue
-
+    def convert_header(self, state_dict: InSafetensorsDict | Mapping[str, torch.Tensor], model_arch: ModelArch):
+        def _create_header(fake_state_dict):
             data_offsets = 0
-            converted_header = {
+            return {
                 k: {
                     "dtype": DTYPE_REVERSE_MAPPING[t.dtype][0],
                     "shape": list(t.shape),
                     "data_offsets": [data_offsets, (data_offsets := data_offsets + t.numel() * t.element_size())],
                 }
-                for k, t in converted_state_dict.items()
+                for k, t in fake_state_dict.items()
             }
-        return converted_header
+
+        if isinstance(state_dict, InSafetensorsDict):
+            if not self.needs_header_conversion:
+                return {
+                    k: v
+                    for k, v in state_dict.header.items()
+                    if k != "__metadata__"
+                }
+
+            def _create_fake_tensor(*shape, dtype):
+                return torch.empty(shape, dtype=dtype)
+
+            with FakeTensorMode():
+                fake_state_dict = {
+                    k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
+                    for k, h in state_dict.header.items()
+                    if k != "__metadata__"
+                }
+                converted_state_dict = {}
+                for k in model_arch.keys:
+                    try:
+                        converted_state_dict[k] = self.get_tensor(fake_state_dict, k)
+                    except KeyError:
+                        continue
+
+                return _create_header(converted_state_dict)
+        else:
+            return _create_header(state_dict)
 
 
 def register_model_type(
@@ -60,6 +71,7 @@ def register_model_type(
     merge_space: MergeSpace,
     identifier: Optional[str] = None,
     model_archs: str | Iterable[str] = ("__default__",),
+    needs_header_conversion: bool = True,
 ):
     stack_frame = traceback.extract_stack(None, 2)[0]
     partial = functools.partial(
@@ -67,6 +79,7 @@ def register_model_type(
         identifier=identifier,
         merge_space=merge_space,
         model_archs=model_archs,
+        needs_header_conversion=needs_header_conversion,
         stack_frame=stack_frame,
     )
     return partial
@@ -78,6 +91,7 @@ def __register_model_type_impl(
     identifier: Optional[str],
     merge_space: MergeSpace,
     model_archs: str | Iterable[str],
+    needs_header_conversion: bool,
     stack_frame: traceback.FrameSummary,
 ):
     if identifier is None:
@@ -103,7 +117,7 @@ def __register_model_type_impl(
     if identifier not in _model_types_registry:
         _model_types_registry[identifier] = {}
     for model_arch in model_archs:
-        _model_types_registry[identifier][model_arch] = ModelType(f, identifier, merge_space, location)
+        _model_types_registry[identifier][model_arch] = ModelType(f, identifier, merge_space, needs_header_conversion, location)
 
     return f
 

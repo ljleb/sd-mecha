@@ -7,6 +7,7 @@ from typing import Iterable, Dict, List, Mapping, Callable, Tuple, Optional
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import get_hyper
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, MergeRecipeNode, DepthRecipeVisitor, RecipeVisitor
+from sd_mecha.streaming import InSafetensorsDict
 
 
 @dataclasses.dataclass
@@ -51,8 +52,8 @@ class ModelConfig:
             self_paths = ', '.join(str(p) for p in self.__input_paths)
             other_paths = ', '.join(str(p) for p in other.__input_paths)
             raise ValueError(
-                "Found incompatible model versions: "
-                f"{len(self.__input_paths)} {self.__model_arch} models ({self_paths}) vs "
+                "Found incompatible model architectures: "
+                f"{len(self.__input_paths)} {self.__model_arch} models ({self_paths}) and "
                 f"{len(other.__input_paths)} {other.__model_arch} models ({other_paths})"
             )
 
@@ -85,8 +86,8 @@ class ModelConfig:
 class DetermineConfigVisitor(RecipeVisitor):
     def visit_model(self, node: ModelRecipeNode) -> ModelConfig:
         return ModelConfig(
-            node.model_type.convert_header(node.state_dict.header, node.model_arch),
-            [node.state_dict.file_path],
+            node.model_type.convert_header(node.state_dict, node.model_arch),
+            [getattr(node.state_dict, "file_path", "<memory>")],
             node.model_arch,
         )
 
@@ -150,7 +151,7 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
         return node.model_type.get_tensor(node.state_dict, self._key)
 
     def visit_parameter(self, node: ParameterRecipeNode) -> torch.Tensor:
-        raise NotImplementedError(f"Interactive arguments are not yet implemented: parameter '{node.name}' has no value.")
+        raise NotImplementedError(f"Interactive arguments are not yet implemented. Recipe is abstract: parameter '{node.name}' has no value.")
 
     @abc.abstractmethod
     def visit_merge(self, node: MergeRecipeNode) -> torch.Tensor:

@@ -36,7 +36,7 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
 
         return 0
     else:
-        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
+        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
 def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
@@ -52,10 +52,10 @@ def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
     elif isinstance(hyper, (int, float)):
         return hyper
     else:
-        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
+        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
-def blocks(model_arch: str | ModelArch, model_component: str, *args, **kwargs) -> Hyper:
+def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: bool = True, **kwargs) -> Hyper:
     """
     Generate block hyperparameters for a model version.
     Either positional arguments or keyword arguments can be used, but not both at the same time.
@@ -70,8 +70,9 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, **kwargs) -
 
     :param model_arch: the architecture of the model for which to generate block hyperparameters
     :param model_component: the model component for which the block-wise hyperparameters are intended for (i.e. "unet", "txt", "txt2", etc.)
-    :param args: block hyperparameters by value
-    :param kwargs: block hyperparameters by name
+    :param strict: if blocks are passed through *args, determines whether the number of blocks must match exactly the maximum number of blocks for the selected model component
+    :param args: positional block hyperparameters
+    :param kwargs: keyword block hyperparameters
     :return: block-wise hyperparameters
     """
     if isinstance(model_arch, str):
@@ -84,8 +85,8 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, **kwargs) -
             k for k in model_arch.user_keys()
             if "_" + model_component + "_block_" in k
         )
-        if len(args) != len(identifiers):
-            raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few. (i.e. 'in0=1, out3=0.5, ...')")
+        if strict and len(args) != len(identifiers):
+            raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few (i.e. 'in0=1, out3=0.5, ...') or pass strict=False.")
 
         identifiers.sort(key=natural_sort_key)
         return dict(zip(identifiers, args))

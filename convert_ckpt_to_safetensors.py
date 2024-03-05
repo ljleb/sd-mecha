@@ -15,6 +15,10 @@ def main(input_path: pathlib.Path, output_path: pathlib.Path):
 
     print("loading model...")
     ckpt = torch.load(input_path)
+    ckpt = ckpt.get("state_dict", ckpt)
+    if "state_dict" in ckpt:
+        del ckpt["state_dict"]
+
     print("saving...")
     safetensors.torch.save_file(ckpt, output_path)
 

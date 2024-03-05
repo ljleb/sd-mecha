@@ -1,13 +1,11 @@
 import functools
 import math
 import operator
-
 import numpy as np
 import torch
 from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
-
 from sd_mecha.hypers import Hyper
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.merge_method import LiftFlag, convert_to_recipe
@@ -89,7 +87,7 @@ def geometric_sum(
     a: Tensor | LiftFlag[MergeSpace.DELTA],
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: Hyper,
+    alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     a = torch.complex(a, torch.zeros_like(a))
@@ -99,25 +97,7 @@ def geometric_sum(
 
 
 @convert_to_recipe
-def similarity_add_difference(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
-    *,
-    alpha: Hyper,
-    similarity_scale: Hyper = 1.0,
-    **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    threshold = torch.maximum(torch.abs(a), torch.abs(b))
-    similarity = (a * b / threshold**2 + 1) / 2
-    similarity = torch.nan_to_num(similarity * similarity_scale, nan=similarity_scale)
-
-    ab_diff = add_difference.__wrapped__(a, b, alpha=alpha)
-    ab_sum = weighted_sum.__wrapped__(a, b, alpha=alpha / 2)
-    return (1 - similarity) * ab_diff + similarity * ab_sum
-
-
-@convert_to_recipe
-def normalized_similarity_sum(  # aka add_cosine_a
+def add_cosine_a(
     a: Tensor | LiftFlag[MergeSpace.BASE],
     b: Tensor | LiftFlag[MergeSpace.BASE],
     *,
@@ -131,7 +111,7 @@ def normalized_similarity_sum(  # aka add_cosine_a
 
 
 @convert_to_recipe
-def similarity_sum(  # aka add_cosine_b
+def add_cosine_b(
     a: Tensor | LiftFlag[MergeSpace.BASE],
     b: Tensor | LiftFlag[MergeSpace.BASE],
     *,
@@ -181,12 +161,12 @@ def filter_top_k(a: Tensor, k: float):
 
 
 @convert_to_recipe
-def copy_region(  # aka tensor_sum
+def tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Hyper,
-    offset: Hyper,
+    width: Hyper = 0.5,
+    offset: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if a.shape == ():
@@ -204,12 +184,12 @@ def copy_region(  # aka tensor_sum
 
 
 @convert_to_recipe
-def copy_top_k(  # aka top_k_tensor_sum
+def top_k_tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Hyper,
-    offset: Hyper,
+    width: Hyper = 0.5,
+    offset: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
@@ -221,7 +201,7 @@ def copy_top_k(  # aka top_k_tensor_sum
     start_top_k = kth_abs_value(a_dist, start_i)
     end_top_k = kth_abs_value(a_dist, end_i)
 
-    indices_mask = (start_top_k < torch.abs(a_dist)) & (torch.abs(a_dist) <= end_top_k)
+    indices_mask = (start_top_k <= torch.abs(a_dist)) & (torch.abs(a_dist) <= end_top_k)
     if region_is_inverted:
         indices_mask = ~indices_mask
     indices_mask = torch.gather(indices_mask.float(), 0, redist_indices)
@@ -261,26 +241,48 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
 
 
 @convert_to_recipe
-def copy_difference(  # aka train_difference
+def train_difference(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
+    *,
+    alpha: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    ab_diff = a - b
-    bc_dist = torch.abs(b - c)
-    ba_dist = torch.abs(b - a)
+    threshold = torch.maximum(torch.abs(a - c), torch.abs(b - c))
+    dissimilarity = (1 - (a - c) * (b - c) / threshold**2) / 2
+    dissimilarity = torch.nan_to_num(dissimilarity, nan=0)
 
-    sum_distances = bc_dist + ba_dist
-    scale = torch.where(
-        sum_distances != 0,
-        ba_dist / sum_distances,
-        torch.tensor(0.0, dtype=a.dtype, device=a.device)
+    return add_difference.__wrapped__(
+        a, b - c,
+        alpha=alpha * dissimilarity
     )
-    sign_scale = torch.sign(b - c)
-    scale = sign_scale * torch.abs(scale)
-    new_diff = scale * torch.abs(ab_diff)
-    return new_diff * 1.8
+
+
+@convert_to_recipe
+def multiply_quotient(
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
+    c: Tensor | SameMergeSpace,
+    *,
+    alpha: Hyper = 1.0,
+    **kwargs,
+) -> Tensor | SameMergeSpace:
+    ac_log = torch.log(a.abs()) - torch.log(c.abs())
+    bc_log = torch.log(b.abs()) - torch.log(c.abs())
+
+    b = torch.complex(b, torch.zeros_like(b))
+    c = torch.complex(c, torch.zeros_like(c))
+
+    alpha *= torch.nan_to_num(
+        (1 - ac_log * bc_log / torch.maximum(torch.abs(ac_log), torch.abs(bc_log))**2) / 2,
+        nan=0,
+    )
+
+    res = a * (b / c)**alpha
+    res = torch.where(torch.isnan(res), a, res)
+    del a, b, c
+    return res.abs() * torch.cos(res.angle())
 
 
 @convert_to_recipe
@@ -318,8 +320,8 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    mean: Hyper,
-    tilt: Hyper,
+    mean: Hyper = 0.5,
+    tilt: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if mean == 0:
@@ -392,16 +394,16 @@ def rotate(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper,
-    beta: Hyper,
+    alignment: Hyper = 1.0,
+    alpha: Hyper = 0.0,
     cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if alpha == 0 and beta == 0:
+    if alignment == 0 and alpha == 0:
         return a
 
     if len(a.shape) < 2 or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, alpha=beta)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     is_conv = len(a.shape) == 4 and a.shape[-1] != 1
     if is_conv:
@@ -418,7 +420,7 @@ def rotate(
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
-    alpha_is_float = alpha != round(alpha)
+    alignment_is_float = alignment != round(alignment)
 
     if cache is not None:
         key = kwargs["key"]
@@ -429,27 +431,27 @@ def rotate(
     if cache is not None and "rotation" in cache:
         rotation = transform = cache["rotation"].to(a.device, a.dtype)
     else:
-        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alpha_is_float)
+        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
         if cache is not None:
             cache["rotation"] = rotation.to("cpu", torch.float16)
 
-    if alpha_is_float:
-        transform = fractional_matrix_power(transform, alpha, cache)
-    elif alpha == 0:
+    if alignment_is_float:
+        transform = fractional_matrix_power(transform, alignment, cache)
+    elif alignment == 0:
         transform = torch.eye(
             len(transform),
             dtype=transform.dtype,
             device=transform.device,
         )
-    elif alpha != 1:
-        transform = torch.linalg.matrix_power(transform, round(alpha))
+    elif alignment != 1:
+        transform = torch.linalg.matrix_power(transform, round(alignment))
 
-    if beta != 0:
+    if alpha != 0:
         # interpolate the relationship between the neurons
-        a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, alpha=beta)
+        a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, alpha=alpha)
 
     a_neurons @= transform
-    a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alpha)
+    a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
     return a_neurons.reshape_as(a)
 
 
