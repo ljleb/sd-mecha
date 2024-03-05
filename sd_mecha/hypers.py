@@ -36,7 +36,7 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
 
         return 0
     else:
-        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
+        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
 def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
@@ -52,7 +52,7 @@ def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
     elif isinstance(hyper, (int, float)):
         return hyper
     else:
-        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper)}")
+        raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
 def blocks(model_arch: str | ModelArch, model_component: str, *args, **kwargs) -> Hyper:
