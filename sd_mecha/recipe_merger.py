@@ -18,6 +18,7 @@ class RecipeMerger:
         models_dir: Optional[pathlib.Path | str | List[pathlib.Path | str]] = None,
         default_device: str = "cpu",
         default_dtype: Optional[torch.dtype] = torch.float64,
+        tqdm: type = tqdm,
     ):
         if models_dir is None:
             models_dir = []
@@ -33,6 +34,7 @@ class RecipeMerger:
 
         self.__default_device = default_device
         self.__default_dtype = default_dtype
+        self.__tqdm = tqdm
 
     def merge_and_save(
         self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
@@ -85,7 +87,7 @@ class RecipeMerger:
             save_dtype,
         )
 
-        progress = tqdm(total=len(model_config.keys()), desc="Merging recipe")
+        progress = self.__tqdm(total=len(model_config.keys()), desc="Merging recipe")
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
             for key in model_config.keys():

@@ -279,7 +279,8 @@ def multiply_quotient(
         nan=0,
     )
 
-    res = torch.nan_to_num(a * (b / c)**alpha, neginf=-1, nan=0, posinf=1)
+    res = a * (b / c)**alpha
+    res = torch.where(torch.isnan(res), a, res)
     del a, b, c
     return res.abs() * torch.cos(res.angle())
 
