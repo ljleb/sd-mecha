@@ -25,12 +25,8 @@ sd-mecha is a memory-efficient general-purpose model merger. It can merge any mo
 - Merge LoRAs together and to checkpoints
 - Block-wise hyperparameters for precise control of blocks
 - Class-wise hyperparameters for precise control of layer types
-
-Coming soon:
-
-- Support arbitrary model types and versions using the `sd_mecha.extensions` module
+- Support arbitrary model architectures and types using the `sd_mecha.extensions` module
 - Merge SDXL LoRAs to models and with other LoRAs
-- Save LoRA from delta merge space
 
 ## Install
 
