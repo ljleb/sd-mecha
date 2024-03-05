@@ -218,7 +218,6 @@ def __convert_to_recipe_impl(
 
 
 _merge_methods_registry = {}
-_recipes_registry = {}
 
 
 def resolve(identifier: str) -> MergeMethod:
