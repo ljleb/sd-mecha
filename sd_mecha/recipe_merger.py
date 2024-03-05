@@ -1,6 +1,5 @@
 import dataclasses
 import functools
-import gc
 import logging
 import pathlib
 import torch
