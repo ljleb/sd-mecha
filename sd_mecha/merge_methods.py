@@ -250,13 +250,9 @@ def train_difference(
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     threshold = torch.maximum(torch.abs(a - c), torch.abs(b - c))
-    dissimilarity = (1 - (a - c) * (b - c) / threshold**2) / 2
-    dissimilarity = torch.nan_to_num(dissimilarity, nan=0)
+    dissimilarity = torch.clamp(torch.nan_to_num((c - a) * (b - c) / threshold**2, nan=0), 0)
 
-    return add_difference.__wrapped__(
-        a, b - c,
-        alpha=alpha * dissimilarity
-    )
+    return a + (b - c) * alpha * dissimilarity
 
 
 @convert_to_recipe
@@ -274,10 +270,8 @@ def multiply_quotient(
     b = torch.complex(b, torch.zeros_like(b))
     c = torch.complex(c, torch.zeros_like(c))
 
-    alpha *= torch.nan_to_num(
-        (1 - ac_log * bc_log / torch.maximum(torch.abs(ac_log), torch.abs(bc_log))**2) / 2,
-        nan=0,
-    )
+    threshold = torch.maximum(torch.abs(ac_log), torch.abs(bc_log))
+    alpha *= torch.clamp(-torch.nan_to_num(ac_log * bc_log / threshold**2, nan=0), 0)
 
     res = a * (b / c)**alpha
     res = torch.where(torch.isnan(res), a, res)

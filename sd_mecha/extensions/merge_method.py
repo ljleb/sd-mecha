@@ -148,15 +148,17 @@ class MergeMethod:
 def convert_to_recipe(
     f: Optional[Callable] = None, *,
     volatile_hypers: Iterable[str] = (),
+    register: bool = True,
 ):
     if f is None:
-        return lambda f: __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers)
-    return __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers)
+        return lambda f: __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers, register=register)
+    return __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers, register=register)
 
 
 def __convert_to_recipe_impl(
     f: Callable, *,
     volatile_hypers: Iterable[str],
+    register: bool,
 ):
     merge_method = MergeMethod(f, volatile_hypers)
     default_hypers = merge_method.get_default_hypers()
@@ -212,8 +214,10 @@ def __convert_to_recipe_impl(
     """), fn_globals, fn_locals)
     res = fn_locals[f.__name__]
     res.__wrapped__ = f
+    res.__wrapped_method__ = merge_method
     merge_method.create_recipe = res
-    _merge_methods_registry[f.__name__] = merge_method
+    if register:
+        _merge_methods_registry[f.__name__] = merge_method
     return res
 
 
