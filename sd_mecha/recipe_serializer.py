@@ -45,7 +45,7 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
         elif command == "merge":
             method, *positional_args = positional_args
             method = extensions.merge_method.resolve(method)
-            results.append(method(*positional_args, **named_args))
+            results.append(method.create_recipe(*positional_args, **named_args))
         else:
             raise ValueError(f"unknown command: {command}")
 

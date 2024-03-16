@@ -93,7 +93,7 @@ def geometric_sum(
     a = torch.complex(a, torch.zeros_like(a))
     b = torch.complex(b, torch.zeros_like(b))
     res = a ** (1 - alpha) * b ** alpha
-    return res.abs() * torch.cos(res.angle())
+    return res.real
 
 
 @convert_to_recipe
@@ -276,7 +276,7 @@ def multiply_quotient(
     res = a * (b / c)**alpha
     res = torch.where(torch.isnan(res), a, res)
     del a, b, c
-    return res.abs() * torch.cos(res.angle())
+    return res.real
 
 
 @convert_to_recipe
