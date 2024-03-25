@@ -15,9 +15,9 @@ merge:
       - middle_block.#
       - middle_block.#.transformer_blocks.#
       - time_embed
-      out11:
-      - output_blocks.11.#
-      - output_blocks.11.#.transformer_blocks.#
+      out8:
+      - output_blocks.8.#
+      - output_blocks.8.#.transformer_blocks.#
       - time_embed
       - out
       in*:
