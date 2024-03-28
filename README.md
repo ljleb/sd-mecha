@@ -42,6 +42,57 @@ The pypi package does not ship with `torch` so that you can install the appropri
 
 ## Usage
 
+### Merge models
+
+To merge models, mecha needs a recipe as input. There are multiple ways to provide a recipe:
+- using the python merging API
+- using the CLI with .mecha recipes
+
+#### Using the python merging API
+
+Here's an example simple sum-twice merge setup:
+
+```python
+import sd_mecha
+
+# create a simple weighted sum recipe
+# all builtin merge methods are direct properties of the `sd_mecha` package for convenience
+recipe = sd_mecha.weighted_sum(
+    sd_mecha.weighted_sum(
+        "ghostmix_v20Bakedvae",
+        "deliberate_v2",
+        alpha=0.5,
+    ),
+    "dreamshaper_332BakedVaeClipFix",
+    alpha=0.33,
+)
+
+# merger contains default parameters
+merger = sd_mecha.RecipeMerger(
+    models_dir=r"E:\sd\models\Stable-diffusion",
+)
+
+# perform the entire merge plan and save to output path
+merger.merge_and_save(recipe, output="basic_merge")
+```
+
+See the [examples](/examples) directory for more examples.
+
+#### Using the CLI with .mecha recipes
+
+It is alternatively possible to merge recipes previously serialized to `.mecha`.
+This is only possible if the recipe is concrete. (i.e. all potential parameters have been replaced with actual models)
+
+```commandline
+python -m sd_mecha merge path/to/recipe.mecha
+```
+
+For more information:
+
+```commandline
+python -m sd_mecha merge --help
+```
+
 ### Get Model-Specific Information
 
 The interface for block/class hyperparameters requires prior knowledge of the blocks and classes of the architecture being merged.
@@ -121,57 +172,6 @@ Component "txt":
     ...
   ...
 ...
-```
-
-### Merge models
-
-To merge models, mecha needs a recipe as input. There are multiple ways to provide a recipe:
-- using the python merging API
-- using the CLI with .mecha recipes
-
-#### Using the python merging API
-
-Here's an example simple sum-twice merge setup:
-
-```python
-import sd_mecha
-
-# create a simple weighted sum recipe
-# all builtin merge methods are direct properties of the `sd_mecha` package for convenience
-recipe = sd_mecha.weighted_sum(
-    sd_mecha.weighted_sum(
-        "ghostmix_v20Bakedvae",
-        "deliberate_v2",
-        alpha=0.5,
-    ),
-    "dreamshaper_332BakedVaeClipFix",
-    alpha=0.33,
-)
-
-# merger contains default parameters
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-)
-
-# perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output="basic_merge")
-```
-
-See the [examples](/examples) directory for more examples.
-
-#### Using the CLI with .mecha recipes
-
-It is alternatively possible to merge recipes previously serialized to `.mecha`.
-This is only possible if the recipe is concrete. (i.e. all potential parameters have been replaced with actual models)
-
-```commandline
-python -m sd_mecha merge path/to/recipe.mecha
-```
-
-For more information:
-
-```commandline
-python -m sd_mecha merge --help
 ```
 
 ### Compose recipes
