@@ -151,7 +151,7 @@ recipe = sd_mecha.weighted_sum(
 )
 ```
 
-See the [merging API section](#using-the-python-merging-api) below for more info.
+See the [merging API section](#using-the-python-merging-api) above for more info.
 
 If run as verbose, it also shows the keys that are associated with each block/class:
 
