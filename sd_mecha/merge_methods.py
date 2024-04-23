@@ -43,8 +43,8 @@ def slerp(
         return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     omega = torch.arccos(ab_dot)
-    a_contrib = a * torch.sin((1-alpha)*omega)
-    b_contrib = b * torch.sin(alpha*omega)
+    a_contrib = a_normalized * torch.sin((1-alpha)*omega)
+    b_contrib = b_normalized * torch.sin(alpha*omega)
     res = (a_contrib + b_contrib) / torch.sin(omega)
     return res * weighted_sum.__wrapped__(a.norm(), b.norm(), alpha=alpha)
 
@@ -144,8 +144,9 @@ def ties_sum(  # aka add_difference_ties
         signs.append(torch.sign(deltas[-1]))
 
     signs = torch.stack(signs, dim=0)
-    final_sign = torch.sign(torch.sum(signs, dim=0))
     deltas = torch.stack(deltas, dim=0)
+
+    final_sign = torch.sign(torch.sum(deltas, dim=0))
     delta_filters = (signs == final_sign).float()
     filtered_delta = (deltas * delta_filters).sum(dim=0)
 
