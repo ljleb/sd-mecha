@@ -134,7 +134,7 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
     alpha: Hyper,
-    k: Hyper = 0.2,
+    k: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     deltas = []
@@ -144,8 +144,9 @@ def ties_sum(  # aka add_difference_ties
         signs.append(torch.sign(deltas[-1]))
 
     signs = torch.stack(signs, dim=0)
-    final_sign = torch.sign(torch.sum(signs, dim=0))
     deltas = torch.stack(deltas, dim=0)
+
+    final_sign = torch.sign(torch.sum(deltas, dim=0))
     delta_filters = (signs == final_sign).float()
     filtered_delta = (deltas * delta_filters).sum(dim=0)
 
@@ -154,6 +155,14 @@ def ties_sum(  # aka add_difference_ties
 
 
 def filter_top_k(a: Tensor, k: float):
+    """
+    :param a: the tensor to filter
+    :param k: float between 0.0 (top 0%) and 1.0 (top 100%)
+    :return: top k params of `a`, preserving the input shape
+    """
+    if k >= 1.0:
+        return a
+
     k = max(int((1 - k) * torch.numel(a)), 1)
     k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
     top_k_filter = (torch.abs(a) >= k_value).float()
@@ -266,9 +275,6 @@ def multiply_quotient(
 ) -> Tensor | SameMergeSpace:
     ac_log = torch.log(a.abs()) - torch.log(c.abs())
     bc_log = torch.log(b.abs()) - torch.log(c.abs())
-
-    b = torch.complex(b, torch.zeros_like(b))
-    c = torch.complex(c, torch.zeros_like(c))
 
     threshold = torch.maximum(torch.abs(ac_log), torch.abs(bc_log))
     alpha *= torch.clamp(-torch.nan_to_num(ac_log * bc_log / threshold**2, nan=0), 0)
@@ -501,23 +507,10 @@ torch_complex_dtype_map = {
 def clip(
     a: Tensor | SameMergeSpace,
     *bounds: Tensor | SameMergeSpace,
-    stiffness: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
-    centers = (maximums + minimums) / 2
-
-    if stiffness:
-        smallest_positive = maximums
-        largest_negative = minimums
-
-        for i, bound in enumerate(bounds):
-            smallest_positive = torch.where((smallest_positive >= bound) & (bound >= centers), bound, smallest_positive)
-            largest_negative = torch.where((largest_negative <= bound) & (bound <= centers), bound, largest_negative)
-
-        maximums = weighted_sum.__wrapped__(maximums, smallest_positive, alpha=stiffness)
-        minimums = weighted_sum.__wrapped__(minimums, largest_negative, alpha=stiffness)
 
     return torch.minimum(torch.maximum(a, minimums), maximums)
 

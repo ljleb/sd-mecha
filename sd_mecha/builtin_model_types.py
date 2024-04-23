@@ -1,11 +1,10 @@
 import json
 import pathlib
-import re
-
+import lycoris
 import torch
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_type import register_model_type
-from typing import Mapping
+from typing import Mapping, Dict
 
 
 @register_model_type(merge_space=MergeSpace.BASE, needs_header_conversion=False)
@@ -78,3 +77,93 @@ def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
     else:  # conv2d 3x3
         res = torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3)
     return res * (alpha / dim)
+
+
+
+
+def merge(tes, unet, lyco_state_dict, scale: float = 1.0, device="cpu"):
+    UNET_TARGET_REPLACE_MODULE = [
+        "Linear",
+        "Conv2d",
+        "LayerNorm",
+        "GroupNorm",
+        "GroupNorm32",
+    ]
+    TEXT_ENCODER_TARGET_REPLACE_MODULE = [
+        "Embedding",
+        "Linear",
+        "Conv2d",
+        "LayerNorm",
+        "GroupNorm",
+        "GroupNorm32",
+        "Embedding",
+    ]
+    LORA_PREFIX_UNET = "lora_unet"
+    LORA_PREFIX_TEXT_ENCODER = "lora_te"
+    merged = 0
+
+    def merge_state_dict(
+        prefix,
+        root_module: torch.nn.Module,
+        lyco_state_dict: Dict[str, torch.Tensor],
+        target_replace_modules,
+    ):
+        nonlocal merged
+        for child_name, child_module in lycoris.utils.tqdm(
+            list(root_module.named_modules()), desc=f"Merging {prefix}"
+        ):
+            if child_module.__class__.__name__ in target_replace_modules:
+                lora_name = prefix + "." + child_name
+                lora_name = lora_name.replace(".", "_")
+
+                result, result_b = lycoris.utils.rebuild_weight(
+                    *lycoris.utils.get_module(lyco_state_dict, lora_name),
+                    getattr(child_module, "weight"),
+                    getattr(child_module, "bias", None),
+                    scale,
+                )
+                if result is not None:
+                    key_dict.pop(lora_name)
+                    merged += 1
+                    child_module.requires_grad_(False)
+                    child_module.weight.copy_(result)
+                if result_b is not None:
+                    child_module.bias.copy_(result_b)
+
+    key_dict = {}
+    for k, v in lycoris.utils.tqdm(list(lyco_state_dict.items()), desc="Converting Dtype and Device"):
+        module, weight_key = k.split(".", 1)
+        convert_key = lycoris.utils.convert_diffusers_name_to_compvis(module)
+        if convert_key != module and len(tes) > 1:
+            # kohya's format for sdxl is as same as SGM, not diffusers
+            del lyco_state_dict[k]
+            key_dict[convert_key] = key_dict.get(convert_key, []) + [k]
+            k = f"{convert_key}.{weight_key}"
+        else:
+            key_dict[module] = key_dict.get(module, []) + [k]
+        if device == "cpu":
+            lyco_state_dict[k] = v.float().cpu()
+        else:
+            lyco_state_dict[k] = v.to(
+                device, dtype=tes[0].parameters().__next__().dtype
+            )
+
+    for idx, te in enumerate(tes):
+        if len(tes) > 1:
+            prefix = LORA_PREFIX_TEXT_ENCODER + str(idx + 1)
+        else:
+            prefix = LORA_PREFIX_TEXT_ENCODER
+        merge_state_dict(
+            prefix,
+            te.to(device),
+            lyco_state_dict,
+            TEXT_ENCODER_TARGET_REPLACE_MODULE,
+        )
+    merge_state_dict(
+        LORA_PREFIX_UNET,
+        unet.to(device),
+        lyco_state_dict,
+        UNET_TARGET_REPLACE_MODULE,
+    )
+    print(f"Unused state dict key: {key_dict}")
+    print(f"{merged} modules were merged")

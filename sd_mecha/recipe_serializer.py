@@ -1,5 +1,4 @@
 import pathlib
-import fuzzywuzzy.process
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeSpace, ParameterRecipeNode, RecipeVisitor

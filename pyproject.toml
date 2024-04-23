@@ -14,12 +14,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "click",
+    "click>=8.1.7",
     "numpy",
-    "tqdm",
+    "safetensors>=0.4.2",
+    "tqdm>=4.66.2",
     "scipy",
-    "fuzzywuzzy",
+    "fuzzywuzzy>=0.18.0",
     "python-Levenshtein",
+    "PyYAML>=6.0.1",
+    "lycoris_lora>=2.2.0.post3",
 ]
 
 [tool.setuptools]

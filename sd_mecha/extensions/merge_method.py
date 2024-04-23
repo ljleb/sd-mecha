@@ -212,13 +212,13 @@ def __convert_to_recipe_impl(
                 dtype=dtype,
             )
     """), fn_globals, fn_locals)
-    res = fn_locals[f.__name__]
-    res.__wrapped__ = f
-    res.__wrapped_method__ = merge_method
-    merge_method.create_recipe = res
+    recipe_factory = fn_locals[f.__name__]
+    recipe_factory.__wrapped__ = f
+    recipe_factory.__wrapped_method__ = merge_method
+    merge_method.create_recipe = recipe_factory
     if register:
         _merge_methods_registry[f.__name__] = merge_method
-    return res
+    return recipe_factory
 
 
 _merge_methods_registry = {}

@@ -72,7 +72,7 @@ class ModelArch:
     keys_to_merge: Set[str]
     blocks: Dict[str, Set[str]]
     classes: Dict[str, Set[str]]
-    location: str
+    definition_location: str
 
     def user_keys(self) -> Set[str]:
         return (
@@ -88,7 +88,7 @@ def register_model_arch(
     stack_frame = traceback.extract_stack(None, 2)[0]
 
     if identifier in _model_archs_registry:
-        existing_location = _model_archs_registry[identifier].location
+        existing_location = _model_archs_registry[identifier].definition_location
         raise ValueError(f"Extension '{identifier}' is already registered at {existing_location}.")
 
     if isinstance(yaml_config_path, str):

@@ -138,3 +138,18 @@ def default(model_arch: str | ModelArch, model_components: Optional[str | List[s
         model_arch.identifier + "_" + model_component + "_default": value
         for model_component in model_components
     }
+
+
+def match(model_arch: str | ModelArch, model_components: Optional[str | List[str]] = None, **kwargs: Dict[str, int | float]) -> Hyper:
+    if isinstance(model_arch, str):
+        model_arch = extensions.model_arch.resolve(model_arch)
+
+    if not model_components:
+        model_components = model_arch.components
+    elif isinstance(model_components, str):
+        model_components = [model_components]
+
+    return {
+        model_arch.identifier + "_" + model_component + "_default": value
+        for model_component in model_components
+    }
