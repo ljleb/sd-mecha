@@ -135,7 +135,15 @@ cosine_add_a = merge_methods.add_cosine_a
 cosine_add_b = merge_methods.add_cosine_b
 ties_sum = merge_methods.ties_sum
 
-
+"""
+- `base`: $$ \theta_{init} $$
+- `*models`: $$ \{\theta_{init}\}_{t=1}^n $$
+- `models` after `subtract`: $$ \tau_t $$
+- `alpha`: $$ \lambda $$
+- `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ )
+- `res`: $$ \lambda * \tau_m $$
+- `return`: $$ \theta_m $$
+"""
 def add_difference_ties(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
@@ -144,14 +152,20 @@ def add_difference_ties(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
+    # $$ \{\theta_{init}\}_{t=1}^n $$
     base = path_to_node(base)
     models = tuple(path_to_node(model) for model in models)
+    
+    # Create task vectors.
+    # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
         if model.merge_space is MergeSpace.BASE else
         model
         for model in models
     )
+
+    # step 1 + step 2 + step 3
     res = ties_sum(
         *models,
         alpha=alpha,
@@ -159,6 +173,8 @@ def add_difference_ties(
         device=device,
         dtype=dtype,
     )
+
+    # Obtain merged checkpoint
     return add_difference(
         base, res,
         alpha=1.0,

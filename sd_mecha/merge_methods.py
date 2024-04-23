@@ -43,8 +43,8 @@ def slerp(
         return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     omega = torch.arccos(ab_dot)
-    a_contrib = a * torch.sin((1-alpha)*omega)
-    b_contrib = b * torch.sin(alpha*omega)
+    a_contrib = a_normalized * torch.sin((1-alpha)*omega)
+    b_contrib = b_normalized * torch.sin(alpha*omega)
     res = (a_contrib + b_contrib) / torch.sin(omega)
     return res * weighted_sum.__wrapped__(a.norm(), b.norm(), alpha=alpha)
 
@@ -130,6 +130,16 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
     return weighted_sum.__wrapped__(a, b, alpha=k)
 
 
+"""
+### ties_sum ###
+- `delta`: $$ \hat{\tau}_t $$
+- `signs`: $$ \gamma_t $$ 
+- `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$ 
+- `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
+- `param_counts`: $$ |A^p| $$
+- `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
+- `return`: $$ \lambda * \tau_m $$
+"""
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -137,22 +147,34 @@ def ties_sum(  # aka add_difference_ties
     k: Hyper = 0.2,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    deltas = []
-    signs = []
-    for m in models:
-        deltas.append(filter_top_k(m, k))
-        signs.append(torch.sign(deltas[-1]))
+    
+    # Step 1: Trim redundant parameters
 
-    signs = torch.stack(signs, dim=0)
-    final_sign = torch.sign(torch.sum(signs, dim=0))
+    # $$ \hat{\tau}_t $$ O(N) in space
+    deltas = [filter_top_k(m, k) for m in models]
     deltas = torch.stack(deltas, dim=0)
+
+    # $$ \gamma_t $$ 
+    signs = torch.sign(deltas)
+
+    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$
+    final_sign = torch.sign(torch.sum(deltas, dim=0)) 
+
+    # Step 3: Disjoint merge.
+
+    # $$ \{ \gamma_t^p = \gamma_m^p \} $$
     delta_filters = (signs == final_sign).float()
+
+    # $$ |A^p| $$
+    param_counts = torch.sum(delta_filters, dim=0)
+
+    # $$ \sum_{t\in{A^P}} \hat{\tau}_t^p $$
     filtered_delta = (deltas * delta_filters).sum(dim=0)
 
-    param_counts = torch.sum(delta_filters, dim=0)
+    # $$ \lambda * \tau_m $$
     return alpha * torch.nan_to_num(filtered_delta / param_counts)
 
-
+# $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
 def filter_top_k(a: Tensor, k: float):
     k = max(int((1 - k) * torch.numel(a)), 1)
     k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
