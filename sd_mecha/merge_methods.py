@@ -130,29 +130,32 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
     return weighted_sum.__wrapped__(a, b, alpha=k)
 
 
-"""
-### ties_sum ###
-- `delta`: $$ \hat{\tau}_t $$
-- `signs`: $$ \gamma_t $$ 
-- `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$ 
-- `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
-- `param_counts`: $$ |A^p| $$
-- `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
-- `return`: $$ \lambda * \tau_m $$
-"""
+# latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
+# - `delta`: $$ \hat{\tau}_t $$
+# - `signs`: $$ \gamma_t $$
+# - `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$
+# - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
+# - `param_counts`: $$ |A^p| $$
+# - `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
+# - `return`: $$ \lambda * \tau_m $$
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
-    alpha: Hyper,
     k: Hyper = 0.2,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    
+
     # Step 1: Trim redundant parameters
 
     # $$ \hat{\tau}_t $$ O(N) in space
-    deltas = [filter_top_k(m, k) for m in models]
+    deltas = [
+        # $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
+        filter_top_k(m, k)
+        for m in models
+    ]
     deltas = torch.stack(deltas, dim=0)
+
+    # Step 2: Elect Final Signs.
 
     # $$ \gamma_t $$ 
     signs = torch.sign(deltas)
@@ -171,10 +174,10 @@ def ties_sum(  # aka add_difference_ties
     # $$ \sum_{t\in{A^P}} \hat{\tau}_t^p $$
     filtered_delta = (deltas * delta_filters).sum(dim=0)
 
-    # $$ \lambda * \tau_m $$
-    return alpha * torch.nan_to_num(filtered_delta / param_counts)
+    # $$ \tau_m $$
+    return torch.nan_to_num(filtered_delta / param_counts)
 
-# $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
+
 def filter_top_k(a: Tensor, k: float):
     k = max(int((1 - k) * torch.numel(a)), 1)
     k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
