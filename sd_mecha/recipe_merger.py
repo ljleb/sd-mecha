@@ -164,9 +164,12 @@ class RecipeMerger:
     def __wrap_thread_context(self, f, ctx):
         @functools.wraps(f)
         def thread_context(*args, **kwargs):
-            if not hasattr(ctx, 'cuda_stream'):
-                ctx.cuda_stream = torch.cuda.Stream()
-            with torch.cuda.stream(ctx.cuda_stream):
+            if torch.cuda.is_available():
+                if not hasattr(ctx, 'cuda_stream'):
+                    ctx.cuda_stream = torch.cuda.Stream()
+                with torch.cuda.stream(ctx.cuda_stream):
+                    return f(*args, **kwargs)
+            else:
                 return f(*args, **kwargs)
 
         return thread_context
