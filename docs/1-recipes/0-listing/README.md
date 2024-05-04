@@ -35,7 +35,15 @@ Input models: $a$, $b$, $c$
 Input hypers: $\alpha$
 
 ```math
-m_{out} = a + \alpha(b - c)
+c(m) = 
+\begin{cases} 
+m & \text{if } \not \text{`clip_to_ab`}, \\
+m & \text{otherwise}.
+\end{cases}
+```
+
+```math
+m_{out} = c(a + \alpha(b - c))
 ```
 
 ### `slerp(a, b, *, alpha: float)`
@@ -117,4 +125,3 @@ Discard parameters of $m_i$ with a different sign from the majority sign.
 The majority sign can be computed
 
 For more information, see the [paper](https://arxiv.org/abs/2306.01708).
-
