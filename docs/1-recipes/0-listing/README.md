@@ -59,3 +59,23 @@ Input hypers: $\alpha$
 ```math
 m = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
 ```
+
+## `geometric_sum(a, b, *, alpha: Hyper)`
+
+Geometric sum of each parameter of $a$ with the corresponding parameter in $b$˙.
+The sum happens on the complex plane in case any of $a$ and $b$ is negative to avoid NaNs, then projected back onto the real axis.
+
+A compelling way of thinking about this method is that it acts as a sort of smooth "AND gate" between $a$ and $b$:
+- if $a = b$, then the output is $a$ (or $b$ since they are equal)
+- if $a = 0$ and $b \neq 0$, or $b = 0$ and $a \neq 0$, then the output is $0$
+- otherwise, the output is some sort of interpolation between the above cases.
+
+Another way to think of this method is that a geometric sum tends to be skewed towards smaller values.
+
+
+Input models: $a$, $b$  
+Input hypers: $\alpha$
+
+```math
+m = \Re(a^{1-\alpha} * b^\alpha)
+```
