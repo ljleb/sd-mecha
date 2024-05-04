@@ -17,7 +17,7 @@ m = a(1 - \alpha) + b\alpha
 
 Add the delta $b$ to $a$ at a rate of $\alpha$.
 
-Input models: $a$, $b$, $c$  
+Input models: $a$, $b$  
 Input hypers: $\alpha$
 
 ```math
