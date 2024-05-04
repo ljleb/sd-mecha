@@ -32,8 +32,10 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 $$
-\Omega = arccos(\frac{a}{|a|} \frac{b}{|b|})  
-m' = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}  
+\Omega = arccos(\frac{a}{|a|} \frac{b}{|b|})
+
+m' = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}
+
 m = (|a|(1-\alpha) + |b|\alpha) m'
 $$
 
@@ -47,7 +49,9 @@ Input models: $a$, $b$, $c$
 Input hypers: $\alpha$
 
 $$
-\Delta_a = a - c  
-\Delta_b = b - c  
+\Delta_a = a - c
+
+\Delta_b = b - c
+
 m = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a^2})
 $$
