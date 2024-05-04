@@ -37,7 +37,7 @@ Input hypers: $\alpha$
 ```math
 c(m) = 
 \begin{cases} 
-m & \text{if } \not \text{`clip_to_ab`}, \\
+m & \text{if } \not \text{$`clip_to_ab`$}, \\
 m & \text{otherwise}.
 \end{cases}
 ```
