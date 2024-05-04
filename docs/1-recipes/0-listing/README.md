@@ -36,8 +36,8 @@ Input hypers: $\alpha$
 
 ```math
 f_{clip}(m) = 
-\begin{cases} 
-min(max(m, min(a, b)), max(a, b)) & \text{if clip to $a$ and $b$}, \\
+\begin{cases}
+clip(m, a, b) & \text{if clip to $a$ and $b$}, \\
 m & \text{otherwise}.
 \end{cases}
 ```
@@ -46,7 +46,7 @@ m & \text{otherwise}.
 m_{out} = f_{clip}(a + \alpha(b - c))
 ```
 
-### `sd_mecha.slerp(a, b, *, alpha: float)`
+### `sd_mecha.slerp(a, b, *, alpha: float = 0.5)`
 
 Circular interpolation between $a$ and $b$.
 
