@@ -48,7 +48,7 @@ For example, you can:
 
 A recipe has a lifecycle. First a recipe is created or deserialized, and then it can be merged or serialized.
 
-Recipes serve as a planning tool for intricate merge scenarios, which we can then methodically merge in the specific way we want later.
+A Recipe is a planning tool for intricate merge scenarios, which we can then methodically merge in the specific way we want later.
 Another benefit of planning recipes in advance is that it allows effective merge code to pick the best timing to load a tensor from disk or merge already loaded tensors.
 
 Next: [Recipes](../1-recipes)
