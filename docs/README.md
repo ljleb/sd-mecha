@@ -20,4 +20,4 @@ It is separated into the following chapters:
 - **Chapter 3**: recipe serialization/deserialization
 - **Chapter 4**: user-defined model architectures
 
-Next: [Introduction](docs/0-introduction)
+Next: [Introduction](0-introduction)
