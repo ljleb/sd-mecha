@@ -28,8 +28,8 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 $\Omega = arccos(\frac{a}{|a|} \frac{b}{|b|})$  
-$n = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}$  
-$m = (|a|(1-\alpha) + |b|\alpha) n$
+$m' = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}$  
+$m = (|a|(1-\alpha) + |b|\alpha) m'$
 
 For more information: https://en.wikipedia.org/wiki/Slerp
 
