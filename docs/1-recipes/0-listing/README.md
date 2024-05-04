@@ -37,7 +37,7 @@ Input hypers: $\alpha$
 ```math
 f_{clip}(m) = 
 \begin{cases} 
-min(max(m, min(a, b)), max(a, b)) & \text{if } (\text{clip to ab}), \\
+min(max(m, min(a, b)), max(a, b)) & \text{if clip to $a$ and $b$}, \\
 m & \text{otherwise}.
 \end{cases}
 ```
