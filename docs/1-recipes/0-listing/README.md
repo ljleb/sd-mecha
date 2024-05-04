@@ -35,7 +35,7 @@ Input models: $a$, $b$, $c$
 Input hypers: $\alpha$
 
 ```math
-c(m) = 
+f_{clip}(m) = 
 \begin{cases} 
 min(max(m, min(a, b), max(a, b))) & \text{if } (\text{clip to ab}), \\
 m & \text{otherwise}.
@@ -43,7 +43,7 @@ m & \text{otherwise}.
 ```
 
 ```math
-m_{out} = c(a + \alpha(b - c))
+m_{out} = f_{clip}(a + \alpha(b - c))
 ```
 
 ### `slerp(a, b, *, alpha: float)`
