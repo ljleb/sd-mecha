@@ -30,3 +30,5 @@ On the other hand, you may be inclined to look for alternatives if you:
 - just want to merge a small number of models using popular merge strategies
 - do not know python programming at all
 - do not need to experiment extensively
+
+Next: [Recipes](../1-recipes)
