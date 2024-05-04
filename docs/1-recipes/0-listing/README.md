@@ -13,7 +13,7 @@ $m = a(1 - \alpha) + b\alpha$
 
 ## `add_difference(a, b, c, *, alpha: Hyper)`
 
-Add the task vector $b - c$ to $a$ at a rate of $\alpha$.
+Add the delta $b - c$ to $a$ at a rate of $\alpha$.
 
 Input models: $a$, $b$, $c$  
 Input hypers: $\alpha$
@@ -33,3 +33,13 @@ $m = (|a|(1-\alpha) + |b|\alpha) m'$
 
 For more information: https://en.wikipedia.org/wiki/Slerp
 
+## `add_perpendicular(a, b, c, *, alpha: Hyper)`
+
+Add orthogonalized delta $b - c$ to $a$ at a rate of $\alpha$.
+
+Input models: $a$, $b$, $c$  
+Input hypers: $\alpha$
+
+$\delta_a = a - c$
+$\delta_b = b - c$
+$m = a + \alpha(\delta_b - \delta_a(\frac{\delta_a \delta_b}{\delta_a^2}))$
