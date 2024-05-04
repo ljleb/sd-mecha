@@ -31,4 +31,23 @@ On the other hand, you may be inclined to look for alternatives if you:
 - do not know python programming at all
 - do not need to experiment extensively
 
+Note that while sd-mecha is a python library without a graphical user interface, there are works in progress that are powered by the library and do not require python knowledge:
+
+- [comfyui nodes](https://github.com/ljleb/comfy-mecha)
+- [invokeai nodes](https://github.com/ljleb/invokeai-mecha)
+
+## Usage and design principles
+
+In sd-mecha, every operation revolves around recipes.
+A recipe is a list of ordered instructions that explain methodically how to complete a merge.
+
+For example, you can:
+- compose recipes together
+- merge a recipe to disk or into an in-memory state dict
+- serialize a recipe to a human-readable format and then deserialize it later
+
+A recipe has a lifecycle. First a recipe is created or deserialized, and then it can be merged or serialized.
+The point of using recipes for everything is that they serve as a planning tool for intricate merge scenarios, which we can then methodically merge in the specific way we want later.
+Planning recipes in advance also allows effective merge code to pick the best timing to load a tensor from disk or merge already loaded tensors.
+
 Next: [Recipes](../1-recipes)
