@@ -57,5 +57,5 @@ Input hypers: $\alpha$
 \Delta_b = b - c
 ```
 ```math
-m = c + \alpha(\Delta_a - \Delta_b \frac{\Delta_b \cdot \Delta_a}{\Delta_b \cdot \Delta_b})
+m = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
 ```
