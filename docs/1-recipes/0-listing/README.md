@@ -40,6 +40,6 @@ Add orthogonalized delta $b - c$ to $a$ at a rate of $\alpha$.
 Input models: $a$, $b$, $c$  
 Input hypers: $\alpha$
 
-$\delta_a = a - c$
-$\delta_b = b - c$
-$m = a + \alpha(\delta_b - \delta_a(\frac{\delta_a \delta_b}{\delta_a^2}))$
+$\Delta_a = a - c$  
+$\Delta_b = b - c$  
+$m = a + \alpha(\Delta_b - \Delta_a(\frac{\Delta_a \Delta_b}{\Delta_a^2}))$
