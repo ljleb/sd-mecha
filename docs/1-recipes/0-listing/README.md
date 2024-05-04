@@ -33,7 +33,9 @@ Input hypers: $\alpha$
 
 ```math
 \Omega = arccos(\frac{a}{|a|} \frac{b}{|b|})
+
 m' = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}
+
 m = (|a|(1-\alpha) + |b|\alpha) m'
 ```
 
@@ -48,6 +50,8 @@ Input hypers: $\alpha$
 
 ```math
 \Delta_a = a - c
+
 \Delta_b = b - c
+
 m = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a^2})
 ```
