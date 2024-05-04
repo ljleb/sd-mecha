@@ -27,6 +27,9 @@ Circular interpolation between $a$ and $b$.
 Input models: $a$, $b$  
 Input hypers: $\alpha$
 
-$\omega = arccos(\frac{a}{|a|} \frac{b}{|b|})$  
-$n = \frac{a}{|a|} \frac{sin((1 - \alpha) \omega)}{sin \omega} + \frac{b}{|b|} \frac{sin \alpha \omega}{sin \omega}$  
+$\Omega = arccos(\frac{a}{|a|} \frac{b}{|b|})$  
+$n = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}$  
 $m = (|a|(1-\alpha) + |b|\alpha) n$
+
+For more information: https://en.wikipedia.org/wiki/Slerp
+
