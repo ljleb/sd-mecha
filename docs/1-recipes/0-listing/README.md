@@ -10,7 +10,7 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 ```math
-m = a(1 - \alpha) + b\alpha
+m_{out} = a(1 - \alpha) + b\alpha
 ```
 
 ### `add_difference(a, b, *, alpha: float = 1.0)`
@@ -21,7 +21,7 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 ```math
-a + b\alpha
+m_{out} = a + b\alpha
 ```
 
 ### `add_difference(a, b, c, *, alpha: float = 1.0, clip_to_ab: bool = True)`
@@ -35,7 +35,7 @@ Input models: $a$, $b$, $c$
 Input hypers: $\alpha$
 
 ```math
-a + \alpha(b - c)
+m_{out} = a + \alpha(b - c)
 ```
 
 ### `slerp(a, b, *, alpha: float)`
@@ -52,7 +52,7 @@ Input hypers: $\alpha$
 m' = \frac{a}{|a|} \frac{sin((1 - \alpha) \Omega)}{sin \Omega} + \frac{b}{|b|} \frac{sin \alpha \Omega}{sin \Omega}
 ```
 ```math
-(|a|(1-\alpha) + |b|\alpha) m'
+m_{out} = (|a|(1-\alpha) + |b|\alpha) m'
 ```
 
 For more information: https://en.wikipedia.org/wiki/Slerp
@@ -71,7 +71,7 @@ Input hypers: $\alpha$
 \Delta_b = b - c
 ```
 ```math
-a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
+m_{out} = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
 ```
 
 ### `geometric_sum(a, b, *, alpha: float)`
@@ -90,7 +90,7 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 ```math
-\Re(a^{1-\alpha} \cdot b^\alpha)
+m_{out} = \Re(a^{1-\alpha} \cdot b^\alpha)
 ```
 
 ### `add_cosine_a(a, b, *, alpha: float)`
