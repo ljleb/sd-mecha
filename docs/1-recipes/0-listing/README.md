@@ -37,7 +37,7 @@ Input hypers: $\alpha$
 ```math
 c(m) = 
 \begin{cases} 
-m & \text{if } \lnot \text{clip to ab}, \\
+min(max(m, min(a, b), max(a, b))) & \text{if } (\text{clip to ab}), \\
 m & \text{otherwise}.
 \end{cases}
 ```
