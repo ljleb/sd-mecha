@@ -42,4 +42,4 @@ Input hypers: $\alpha$
 
 $\Delta_a = a - c$  
 $\Delta_b = b - c$  
-$m = a + \alpha(\Delta_b - \Delta_a(\frac{\Delta_a \Delta_b}{\Delta_a^2}))$
+$m = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \Delta_b}{\Delta_a^2})$
