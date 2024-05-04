@@ -47,7 +47,8 @@ For example, you can:
 - serialize a recipe to a human-readable format and then deserialize it later
 
 A recipe has a lifecycle. First a recipe is created or deserialized, and then it can be merged or serialized.
-The point of using recipes for everything is that they serve as a planning tool for intricate merge scenarios, which we can then methodically merge in the specific way we want later.
-Planning recipes in advance also allows effective merge code to pick the best timing to load a tensor from disk or merge already loaded tensors.
+
+Recipes serve as a planning tool for intricate merge scenarios, which we can then methodically merge in the specific way we want later.
+Another benefit of planning recipes in advance is that it allows effective merge code to pick the best timing to load a tensor from disk or merge already loaded tensors.
 
 Next: [Recipes](../1-recipes)
