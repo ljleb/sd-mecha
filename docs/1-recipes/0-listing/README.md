@@ -2,7 +2,7 @@
 
 Here is a comprehensive list of built-in recipes and a description of what they do.
 
-## `weighted_sum(a, b, *, alpha: Hyper)`
+### `weighted_sum(a, b, *, alpha: Hyper)`
 
 Linear interpolation between $a$ and $b$.
 
@@ -13,7 +13,7 @@ Input hypers: $\alpha$
 m = a(1 - \alpha) + b\alpha
 ```
 
-## `add_difference(a, b, c, *, alpha: Hyper)`
+### `add_difference(a, b, c, *, alpha: Hyper)`
 
 Add the delta $b - c$ to $a$ at a rate of $\alpha$.
 
@@ -24,7 +24,7 @@ Input hypers: $\alpha$
 m = a + \alpha(b - c)
 ```
 
-## `slerp(a, b, *, alpha: Hyper)`
+### `slerp(a, b, *, alpha: Hyper)`
 
 Circular interpolation between $a$ and $b$.
 
@@ -43,7 +43,7 @@ m = (|a|(1-\alpha) + |b|\alpha) m'
 
 For more information: https://en.wikipedia.org/wiki/Slerp
 
-## `add_perpendicular(a, b, c, *, alpha: Hyper)`
+### `add_perpendicular(a, b, c, *, alpha: Hyper)`
 
 Add orthogonalized delta $b - c$ to $a$ at a rate of $\alpha$.
 
@@ -60,10 +60,10 @@ Input hypers: $\alpha$
 m = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
 ```
 
-## `geometric_sum(a, b, *, alpha: Hyper)`
+### `geometric_sum(a, b, *, alpha: Hyper)`
 
 Geometric sum of each parameter of $a$ with the corresponding parameter in $b$˙.
-The sum happens on the complex plane in case any of $a$ and $b$ is negative to avoid NaNs, then projected back onto the real axis.
+The sum is computed on the complex plane in case any parameter of $a$ and $b$ is negative to avoid NaNs, then projected back onto the real line.
 
 A compelling way of thinking about this method is that it acts as a sort of smooth "AND gate" between $a$ and $b$:
 - if $a = b$, then the output is $a$ (or $b$ since they are equal)
@@ -77,5 +77,5 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 ```math
-m = \Re(a^{1-\alpha} * b^\alpha)
+m = \Re(a^{1-\alpha} \cdot b^\alpha)
 ```
