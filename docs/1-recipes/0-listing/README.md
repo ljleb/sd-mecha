@@ -2,7 +2,7 @@
 
 Here is a comprehensive list of built-in recipes and a description of what they do.
 
-### `weighted_sum(a, b, *, alpha: float = 0.5)`
+### `sd_mecha.weighted_sum(a, b, *, alpha: float = 0.5)`
 
 Linear interpolation between $a$ and $b$.
 
@@ -13,7 +13,7 @@ Input hypers: $\alpha$
 m_{out} = a(1 - \alpha) + b\alpha
 ```
 
-### `add_difference(a, b, *, alpha: float = 1.0)`
+### `sd_mecha.add_difference(a, b, *, alpha: float = 1.0)`
 
 Add the delta $b$ to $a$ at a rate of $\alpha$.
 
@@ -24,7 +24,7 @@ Input hypers: $\alpha$
 m_{out} = a + b\alpha
 ```
 
-### `add_difference(a, b, c, *, alpha: float = 1.0, clip_to_ab: bool = True)`
+### `sd_mecha.add_difference(a, b, c, *, alpha: float = 1.0, clip_to_ab: bool = True)`
 
 Add the delta $b - c$ to $a$ at a rate of $\alpha$.
 
@@ -46,7 +46,7 @@ m & \text{otherwise}.
 m_{out} = f_{clip}(a + \alpha(b - c))
 ```
 
-### `slerp(a, b, *, alpha: float)`
+### `sd_mecha.slerp(a, b, *, alpha: float)`
 
 Circular interpolation between $a$ and $b$.
 
@@ -65,7 +65,7 @@ m_{out} = (|a|(1-\alpha) + |b|\alpha) m'
 
 For more information: https://en.wikipedia.org/wiki/Slerp
 
-### `add_perpendicular(a, b, c, *, alpha: float)`
+### `sd_mecha.add_perpendicular(a, b, c, *, alpha: float)`
 
 Add orthogonalized delta $b - c$ to $a$ at a rate of $\alpha$.
 
@@ -82,7 +82,7 @@ Input hypers: $\alpha$
 m_{out} = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
 ```
 
-### `geometric_sum(a, b, *, alpha: float)`
+### `sd_mecha.geometric_sum(a, b, *, alpha: float)`
 
 Geometric sum of each parameter of $a$ with the corresponding parameter in $b$˙.
 The sum is computed on the complex plane in case any parameter of $a$ and $b$ is negative to avoid NaNs, then projected back onto the real line.
@@ -101,7 +101,7 @@ Input hypers: $\alpha$
 m_{out} = \Re(a^{1-\alpha} \cdot b^\alpha)
 ```
 
-### `add_cosine_a(a, b, *, alpha: float)`
+### `sd_mecha.add_cosine_a(a, b, *, alpha: float)`
 
 "Cosine A" method from supermerger. I have not looked deeply into how this method works, so I don't have any useful insight.
 Feel free to contribute to this section by opening a PR or a discussions thread.
@@ -110,7 +110,7 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 
-### `add_cosine_b(a, b, *, alpha: float)`
+### `sd_mecha.add_cosine_b(a, b, *, alpha: float)`
 
 "Cosine B" method from supermerger. I have not looked deeply into how this method works, so I don't have any useful insight.
 Feel free to contribute to this section by opening a PR or a discussions thread.
@@ -118,7 +118,7 @@ Feel free to contribute to this section by opening a PR or a discussions thread.
 Input models: $a$, $b$  
 Input hypers: $\alpha$
 
-### `add_difference_ties(*m, alpha: float, mojority_sign: bool)`
+### `sd_mecha.add_difference_ties(*m, alpha: float, mojority_sign: bool)`
 
 Discard parameters of $m_i$ with a different sign from the majority sign.
 
