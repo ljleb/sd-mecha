@@ -144,11 +144,13 @@ ties_sum = merge_methods.ties_sum
 # - `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ )
 # - `res`: $$ \lambda * \tau_m $$
 # - `return`: $$ \theta_m $$
+# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 def add_difference_ties(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
     alpha: float,
     k: float = 0.2,
+    vote_sgn: float = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -169,6 +171,7 @@ def add_difference_ties(
     res = ties_sum(
         *models,
         k=k,
+        vote_sgn=vote_sgn,
         device=device,
         dtype=dtype,
     )

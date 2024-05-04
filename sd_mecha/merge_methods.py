@@ -138,10 +138,13 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 # - `param_counts`: $$ |A^p| $$
 # - `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
 # - `return`: $$ \lambda * \tau_m $$
+# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+# - `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \gamma_t^p) $$
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
     k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
 
@@ -160,8 +163,9 @@ def ties_sum(  # aka add_difference_ties
     # $$ \gamma_t $$ 
     signs = torch.sign(deltas)
 
-    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$
-    final_sign = torch.sign(torch.sum(deltas, dim=0)) 
+    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
+    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
+    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0)) 
 
     # Step 3: Disjoint merge.
 
