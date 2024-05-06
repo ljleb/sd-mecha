@@ -65,7 +65,7 @@ m_{out} = (|a|(1-\alpha) + |b|\alpha) m'
 
 For more information: https://en.wikipedia.org/wiki/Slerp
 
-### `sd_mecha.add_perpendicular(a, b, c, *, alpha: float)`
+### `sd_mecha.add_perpendicular(a, b, c, *, alpha: float = 1.0)`
 
 Add orthogonalized delta $b - c$ to $a$ at a rate of $\alpha$.
 
@@ -82,10 +82,12 @@ Input hypers: $\alpha$
 m_{out} = a + \alpha(\Delta_b - \Delta_a \frac{\Delta_a \cdot \Delta_b}{\Delta_a \cdot \Delta_a})
 ```
 
-### `sd_mecha.geometric_sum(a, b, *, alpha: float)`
+### `sd_mecha.geometric_sum(a, b, *, alpha: float = 0.5)`
 
 Geometric sum of each parameter of $a$ with the corresponding parameter in $b$˙.
 The sum is computed on the complex plane in case any parameter of $a$ and $b$ is negative to avoid NaNs, then projected back onto the real line.
+
+It is the exact same method as `weighted_sum` but in log space.
 
 A compelling way of thinking about this method is that it acts as a sort of smooth "AND gate" between $a$ and $b$:
 - if $a = b$, then the output is $a$ (or $b$ since they are equal)
@@ -118,10 +120,11 @@ Feel free to contribute to this section by opening a PR or a discussions thread.
 Input models: $a$, $b$  
 Input hypers: $\alpha$
 
-### `sd_mecha.add_difference_ties(*m, alpha: float, mojority_sign: bool)`
+### `sd_mecha.add_difference_ties(base, *m, alpha: float, vote_importance_by_scale: bool)`
 
-Discard parameters of $m_i$ with a different sign from the majority sign.
+Discard parameters of $m_i$ with a sign differing from the majority sign.
 
-The majority sign can be computed
+The majority sign can be computed in two ways:
+- 
 
 For more information, see the [paper](https://arxiv.org/abs/2306.01708).
