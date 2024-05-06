@@ -39,14 +39,14 @@ def slerp(
 
     ab_dot = (a_normalized * b_normalized).sum().clip(-1, 1)
 
-    if 1 - torch.abs(ab_dot) < EPSILON:
-        return weighted_sum.__wrapped__(a, b, alpha=alpha)
-
     omega = torch.arccos(ab_dot)
     a_contrib = a_normalized * torch.sin((1-alpha)*omega)
     b_contrib = b_normalized * torch.sin(alpha*omega)
     res = (a_contrib + b_contrib) / torch.sin(omega)
-    return res * weighted_sum.__wrapped__(a.norm(), b.norm(), alpha=alpha)
+    res *= weighted_sum.__wrapped__(a.norm(), b.norm(), alpha=alpha)
+    if res.isnan().any():
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
+    return res
 
 
 @convert_to_recipe
