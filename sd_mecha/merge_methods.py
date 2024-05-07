@@ -133,13 +133,13 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 # latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
 # - `delta`: $$ \hat{\tau}_t $$
 # - `signs`: $$ \gamma_t $$
-# - `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$
 # - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
 # - `param_counts`: $$ |A^p| $$
-# - `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
+# - `filtered_delta`: $$ \Sigma_{t\in{A^p}} \hat{\tau}_t^p $$
 # - `return`: $$ \lambda * \tau_m $$
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
-# - `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \gamma_t^p) $$
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -163,8 +163,8 @@ def ties_sum(  # aka add_difference_ties
     # $$ \gamma_t $$ 
     signs = torch.sign(deltas)
 
-    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
-    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
     final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0)) 
 
     # Step 3: Disjoint merge.
@@ -175,7 +175,7 @@ def ties_sum(  # aka add_difference_ties
     # $$ |A^p| $$
     param_counts = torch.sum(delta_filters, dim=0)
 
-    # $$ \sum_{t\in{A^P}} \hat{\tau}_t^p $$
+    # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
     filtered_delta = (deltas * delta_filters).sum(dim=0)
 
     # $$ \tau_m $$
@@ -574,6 +574,30 @@ def dropout(  # aka n-supermario
         final_delta[mask] += delta[mask]
     return final_delta / masks.sum(0).clamp(1) / (1 - probability)
 
+# Part of TIES w/ DARE
+# Hyperparameters defauled to values proposed to paper.
+@convert_to_recipe
+def ties_sum_with_dropout(
+    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    probability: Hyper = 0.9,
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    seed: Hyper = None,
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    # Set seed
+    torch.manual_seed(seed)
+
+    # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
+    # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$
+    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability)) for delta in deltas]
+
+    # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
+    deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn)
+
+    # Rescale
+    # $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
+    return deltas / (1 - probability)
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, int(overlap)):

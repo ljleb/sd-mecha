@@ -303,6 +303,51 @@ def dropout(
     ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
     return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
+ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
+
+# latex notes in reference to original implementation: https://arxiv.org/abs/2311.03099
+# Notice that this is "TIES Merging w/ DARE", which is "Prune > Merge (TIES) > Rescale"
+# See https://slgero.medium.com/merge-large-language-models-29897aeb1d1a for details
+# - `base`: $$ \theta_{PRE} $$
+# - `*models`: $$ \theta_{SFT}^{t_k} $$
+# - `deltas`: $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
+# - `probability`: $$ p $$
+# - `res`: $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
+# - `alpha`: $$ \lambda $$
+# - `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ ) in TIES paper
+# - `return`: $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
+# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+def ties_with_dare(
+    base: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,
+    probability: Hyper = 0.9,
+    alpha: Hyper = 0.5,
+    seed: Optional[Hyper] = None,
+    k: float = 0.2,
+    vote_sgn: float = 0.0,
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> recipe_nodes.RecipeNode:
+    # $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
+    deltas = [
+        subtract(model, base)
+        for model in models
+    ]
+
+    # $$ \tilde{\delta}^{t_k} $$
+    res = ties_sum_with_dropout(
+        *deltas, 
+        probability=probability,
+        k=k,
+        vote_sgn=vote_sgn,
+        seed=seed, 
+        device=device, 
+        dtype=dtype
+    )
+
+    # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
+    return sd_mecha.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
+
 
 def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1", model_type: str = "base"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
