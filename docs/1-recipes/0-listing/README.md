@@ -124,7 +124,7 @@ Input hypers: $\alpha$
 
 Discard parameters of $m_i$ when their sign differs from the majority sign.
 The majority sign is calculated parameter-wise as
-$$\text{sign} \left[ \sum_{i}^{n}{m_i - \text{base}} \right]$$
+$$\text{sign} [ \sum_{i}^{n}{(m_i - \text{base})} ]$$
 $\alpha$ controls the rate at which the resolved delta is added to $\text{base}$.
 
 Input models: $\text{base}$, $m_i$ for $i \in 0..n$
