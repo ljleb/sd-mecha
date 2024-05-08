@@ -127,7 +127,7 @@ The majority sign is calculated parameter-wise as
 $$\text{sign} [ \sum_{i}^{n}{(m_i - \text{base})} ]$$
 $\alpha$ controls the rate at which the resolved delta is added to $\text{base}$.
 
-Input models: $\text{base}$, $m_i$ for $i \in 0..n$
+Input models: $\text{base}$, $m_i$ for $i \in 0..n$  
 Input hypers: $\alpha$
 
 For more information, see the [paper](https://arxiv.org/abs/2306.01708).
