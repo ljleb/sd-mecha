@@ -120,11 +120,13 @@ Feel free to contribute to this section by opening a PR or a discussions thread.
 Input models: $a$, $b$  
 Input hypers: $\alpha$
 
-### `sd_mecha.add_difference_ties(base, *m, alpha: float, vote_importance_by_scale: bool)`
+### `sd_mecha.add_difference_ties(base, *m, alpha: float = 1.0)`
 
-Discard parameters of $m_i$ with a sign differing from the majority sign.
+Discard parameters of $m_i$ when their sign differs from the majority sign.
+The majority sign is calculated parameter-wise as $\text{sign}(\sum_i^{n} {m_i - \text{base}})$.
+$\alpha$ controls the rate at which the resolved delta is added to $\text{base}$.
 
-The majority sign can be computed in two ways:
-- 
+Input models: $\text{base}$, $m_i$ for $i \in 0..n$
+Input hypers: $\alpha$
 
 For more information, see the [paper](https://arxiv.org/abs/2306.01708).
