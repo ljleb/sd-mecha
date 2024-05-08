@@ -123,7 +123,7 @@ Input hypers: $\alpha$
 ### `sd_mecha.add_difference_ties(base, *m, alpha: float = 1.0)`
 
 Discard parameters of $m_i$ when their sign differs from the majority sign.
-The majority sign is calculated parameter-wise as $\text{sign}(\sum_i^{n} {m_i - \text{base}})$.
+The majority sign is calculated parameter-wise as $\text{sign}(\sum_{i}^{n}{m_i - \text{base}})$.
 $\alpha$ controls the rate at which the resolved delta is added to $\text{base}$.
 
 Input models: $\text{base}$, $m_i$ for $i \in 0..n$
