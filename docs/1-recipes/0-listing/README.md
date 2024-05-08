@@ -124,10 +124,10 @@ Input hypers: $\alpha$
 
 Discard parameters of $m_i$ when their sign differs from the majority sign.
 The majority sign is calculated parameter-wise as
-$$\text{sign} \Biggl [ \sum_{i}^{n}{(m_i - \text{base})} \Biggr ]$$
+$$\text{sign} \Biggl [ \sum_{i = 1}^{n}{(m_i - \text{base})} \Biggr ]$$
 $\alpha$ controls the rate at which the resolved delta is added to $\text{base}$.
 
-Input models: $\text{base}$, $m_i$ for $i \in 0..n$  
+Input models: $\text{base}$, $m_i$ for $i \in 1..n$  
 Input hypers: $\alpha$
 
 For more information, see the [paper](https://arxiv.org/abs/2306.01708).
