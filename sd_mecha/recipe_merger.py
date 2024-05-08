@@ -2,6 +2,7 @@ import dataclasses
 import functools
 import logging
 import pathlib
+import threading
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.model_detection import DetermineConfigVisitor
@@ -87,6 +88,7 @@ class RecipeMerger:
             save_dtype,
         )
 
+        thread_local_data = threading.local()
         progress = self.__tqdm(total=len(model_config.keys()), desc="Merging recipe")
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
@@ -94,6 +96,7 @@ class RecipeMerger:
                 key_merger = model_config.get_key_merger(key, recipe, fallback_model, self.__default_device, self.__default_dtype)
                 key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
                 key_merger = self.__track_progress(key_merger, key, model_config.get_shape(key), progress)
+                key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
                 futures.append(executor.submit(key_merger))
 
             for future in as_completed(futures):
@@ -157,6 +160,19 @@ class RecipeMerger:
         def track_output(*args, **kwargs):
             output[key] = f(*args, **kwargs).to(**to_kwargs)
         return track_output
+
+    def __wrap_thread_context(self, f, ctx):
+        @functools.wraps(f)
+        def thread_context(*args, **kwargs):
+            if torch.cuda.is_available():
+                if not hasattr(ctx, 'cuda_stream'):
+                    ctx.cuda_stream = torch.cuda.Stream()
+                with torch.cuda.stream(ctx.cuda_stream):
+                    return f(*args, **kwargs)
+            else:
+                return f(*args, **kwargs)
+
+        return thread_context
 
 
 @dataclasses.dataclass
