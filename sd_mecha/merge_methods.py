@@ -576,10 +576,13 @@ def dropout(  # aka n-supermario
 
 # Part of TIES w/ DARE
 # Hyperparameters defauled to values proposed to paper.
+# Special mode "DROP" has been implemented by setting `no_rescale` > 0.0
+# - `return`: $$ \hat{\delta}^t = \tilde{\delta}^t $$
 @convert_to_recipe
 def ties_sum_with_dropout(
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
-    probability: Hyper = 0.9,
+    probability: Hyper = 0.9,    
+    no_rescale: Hyper = 0.0,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
     seed: Hyper = None,
@@ -595,9 +598,17 @@ def ties_sum_with_dropout(
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
     deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn)
 
-    # Rescale
-    # $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
-    return deltas / (1 - probability)
+    if probability == 1.0:
+        # Corner case
+        return deltas * 0.0
+    elif no_rescale <= 0.0:
+        # Rescale
+        # $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
+        return deltas / (1.0 - probability) 
+    else:
+        # No rescale
+        # $$ \hat{\delta}^t = \tilde{\delta}^t $$
+        return deltas
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, int(overlap)):

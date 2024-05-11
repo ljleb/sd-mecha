@@ -148,9 +148,9 @@ ties_sum = merge_methods.ties_sum
 def add_difference_ties(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
-    alpha: float,
-    k: float = 0.2,
-    vote_sgn: float = 0.0,
+    alpha: Hyper,
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -321,23 +321,29 @@ def ties_with_dare(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
     probability: Hyper = 0.9,
+    no_rescale: Hyper = 0.0,
     alpha: Hyper = 0.5,
     seed: Optional[Hyper] = None,
-    k: float = 0.2,
-    vote_sgn: float = 0.0,
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
-    deltas = [
+    base = path_to_node(base)
+    models = tuple(path_to_node(model) for model in models)
+    deltas = tuple(
         subtract(model, base)
+        if model.merge_space is MergeSpace.BASE else
+        model
         for model in models
-    ]
+    )
 
     # $$ \tilde{\delta}^{t_k} $$
     res = ties_sum_with_dropout(
         *deltas, 
         probability=probability,
+        no_rescale=no_rescale,
         k=k,
         vote_sgn=vote_sgn,
         seed=seed, 
