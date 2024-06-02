@@ -29,7 +29,7 @@ def weighted_sum(
 # Instead of running average, this may run faster. 
 @convert_to_recipe
 def n_average(
-    *models: Tensor | LiftFlag[MergeSpace.DELTA],
+    *models: Tensor | SameMergeSpace,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     return torch.mean(torch.stack(models), dim=0)
