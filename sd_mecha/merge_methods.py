@@ -25,6 +25,14 @@ def weighted_sum(
 ) -> Tensor | SameMergeSpace:
     return (1 - alpha) * a + alpha * b
 
+# Isotropic merge / Uniform Soup / Uniform Merge... you name it.
+# Instead of running average, this may run faster. 
+@convert_to_recipe
+def n_average(
+    *models: Tensor | LiftFlag[MergeSpace.DELTA],
+    **kwargs,
+) -> Tensor | SameMergeSpace:
+    return torch.mean(torch.stack(models), dim=0)
 
 @convert_to_recipe
 def slerp(
@@ -140,11 +148,14 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 # - `return`: $$ \lambda * \tau_m $$
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 # - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
+# Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
 
@@ -176,10 +187,15 @@ def ties_sum(  # aka add_difference_ties
     param_counts = torch.sum(delta_filters, dim=0)
 
     # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
-    filtered_delta = (deltas * delta_filters).sum(dim=0)
+    filtered_delta = (deltas * delta_filters)
+
+    # Model Stock
+    t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
+
+    filtered_delta = filtered_delta.sum(dim=0)
 
     # $$ \tau_m $$
-    return torch.nan_to_num(filtered_delta / param_counts)
+    return torch.nan_to_num(filtered_delta * t / param_counts)
 
 
 def filter_top_k(a: Tensor, k: float):
@@ -585,6 +601,8 @@ def ties_sum_with_dropout(
     no_rescale: Hyper = 0.0,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
@@ -596,7 +614,7 @@ def ties_sum_with_dropout(
     deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability)) for delta in deltas]
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
-    deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn)
+    deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps)
 
     if probability == 1.0:
         # Corner case
@@ -641,7 +659,6 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     )
     return np.concatenate([[p], pmf * (1 - p)])
 
-
 def binomial_coefficient_np(n, k):
     if k > n - k:
         k = n - k
@@ -649,3 +666,40 @@ def binomial_coefficient_np(n, k):
     for i in range(1, k+1):
         result = result * (n - i + 1) // i
     return result
+
+# Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
+# https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
+# I will break the functions to be retrivible for other algos like TIES.
+@convert_to_recipe
+def model_stock_for_tensor(
+    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    cos_eps: Hyper = 1e-6,    
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+
+    # This is obvious.
+    w_avg = n_average.__wrapped__(*deltas)
+
+    t = get_model_stock_t(deltas, cos_eps)
+
+    # return w_h. Notice that w_0 is 0 here.
+    return t * w_avg
+
+# The guess from mergekit: Average of cos(theta). Expected value is 0, somehow match with paper.
+# However this may be very unstable, and the range is still -1 to 1.
+def get_model_stock_t(deltas, cos_eps):
+    n = len(deltas)
+
+    # Generator function. Default eps from torch API doc.
+    cos = torch.nn.CosineSimilarity(dim=1, eps=cos_eps)
+
+    # One-liner is all you need. I may make it in running average if it really memory hungry.
+    cos_thetas = [cos(deltas[i], deltas[i + 1]) for i, _ in enumerate(deltas) if (i + 1) < n]
+    
+    # Still a vector.
+    cos_theta = torch.stack(cos_thetas).mean(dim=0)
+
+    # Convert to column vector for multiplication.
+    t = (n * cos_theta / (1 + (n - 1) * cos_theta)).unsqueeze(-1)
+
+    return t

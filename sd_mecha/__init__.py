@@ -43,6 +43,7 @@ def serialize_and_save(
 
 
 weighted_sum = merge_methods.weighted_sum
+n_average = merge_methods.n_average
 slerp = merge_methods.slerp
 
 
@@ -145,12 +146,15 @@ ties_sum = merge_methods.ties_sum
 # - `res`: $$ \lambda * \tau_m $$
 # - `return`: $$ \theta_m $$
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+# Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 def add_difference_ties(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
     alpha: Hyper,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -172,6 +176,8 @@ def add_difference_ties(
         *models,
         k=k,
         vote_sgn=vote_sgn,
+        apply_stock=apply_stock,
+        cos_eps=cos_eps,
         device=device,
         dtype=dtype,
     )
@@ -326,6 +332,8 @@ def ties_with_dare(
     seed: Optional[Hyper] = None,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -347,6 +355,8 @@ def ties_with_dare(
         k=k,
         vote_sgn=vote_sgn,
         seed=seed, 
+        apply_stock = apply_stock,
+        cos_eps = cos_eps,
         device=device, 
         dtype=dtype
     )
@@ -354,6 +364,38 @@ def ties_with_dare(
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return sd_mecha.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
 
+model_stock_for_tensor = merge_methods.model_stock_for_tensor
+
+# Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
+# https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
+def model_stock_n_models(
+    base: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,    
+    cos_eps: Hyper = 1e-6,    
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> recipe_nodes.RecipeNode:
+
+    base = path_to_node(base)
+    models = tuple(path_to_node(model) for model in models)
+    deltas = tuple(
+        subtract(model, base)
+        if model.merge_space is MergeSpace.BASE else
+        model
+        for model in models
+    )
+
+    # This is hacky: Both w_avg and w_h will be calculated there.    
+    # Notice that t and cos_theta is vector instead of single value.
+    # Conceptually it could compatable with TIES, but algorithm should be rewritten.
+    res = model_stock_for_tensor(
+        *deltas,
+        cos_eps=cos_eps,
+        device=device, 
+        dtype=dtype
+    )
+
+    return sd_mecha.add_difference(base, res, alpha=1, device=device, dtype=dtype)
 
 def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1", model_type: str = "base"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
