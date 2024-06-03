@@ -680,10 +680,11 @@ def model_stock_for_tensor(
     # This is obvious.
     w_avg = n_average.__wrapped__(*deltas)
 
+    # t can get inf so handle with care
     t = get_model_stock_t(deltas, cos_eps)
 
     # return w_h. Notice that w_0 is 0 here.
-    return t * w_avg
+    return torch.nan_to_num(t * w_avg)
 
 # The guess from mergekit: Average of cos(theta). Expected value is 0, somehow match with paper.
 # However this may be very unstable, and the range is still -1 to 1.
