@@ -41,6 +41,8 @@ class InSafetensorsDict:
 
     def close(self):
         self.file.close()
+        self.buffer = None
+        self.header = None
 
     def keys(self):
         return (
@@ -126,6 +128,8 @@ class OutSafetensorsDict:
 
     def __del__(self):
         self.file.close()
+        self.thread_states = None
+        self.header = None
 
     def __setitem__(self, key: str, tensor: torch.Tensor):
         tid = threading.current_thread().ident
