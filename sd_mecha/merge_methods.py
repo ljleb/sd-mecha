@@ -351,10 +351,7 @@ def crossover(
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=tilt)
 
-    if a.shape[0] > 40000 or len(a.shape) == 4 and sum(a.shape[2:]) > 2:
-        shape = a.shape[1:]
-    else:
-        shape = a.shape
+    shape = a.shape
 
     a_dft = torch.fft.rfftn(a, s=shape)
     b_dft = torch.fft.rfftn(b, s=shape)
@@ -379,14 +376,18 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, mean: float, tilt: float,
     if not 0 <= mean <= 1:
         raise ValueError("filter mean must be between 0 and 1")
 
-    gradients = [
-        torch.linspace(0, 1, s, device=device)**2
-        for s in shape
-    ]
+    gradients = list(reversed([
+        torch.linspace(0, 1, s, device=device)
+        if i == 0 or s == 1 else
+        torch.cat([torch.linspace(0, s//2 - 1, s//2, device=device), torch.linspace(s//2, 1, s//2, device=device)]) / (s//2)
+        if s % 2 == 0 else
+        torch.cat([torch.linspace(0, s//2, s - s//2, device=device), torch.linspace(s//2, 1, s//2, device=device)]) / (s//2)
+        for i, s in enumerate(reversed(shape))
+    ]))
 
     if len(shape) > 1:
-        grids = torch.meshgrid(*gradients, indexing='ij')
-        mesh = torch.sqrt(torch.sum(torch.stack(grids), dim=0)) / math.sqrt(len(shape))
+        grids = torch.meshgrid(*(g**2 for g in gradients), indexing='ij')
+        mesh = (torch.stack(grids).sum(dim=0) / len(shape)).sqrt()
     else:
         mesh = gradients[0]
 
