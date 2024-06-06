@@ -379,9 +379,8 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, mean: float, tilt: float,
     gradients = list(reversed([
         torch.linspace(0, 1, s, device=device)
         if i == 0 or s == 1 else
-        torch.cat([torch.linspace(0, s//2 - 1, s//2, device=device), torch.linspace(s//2, 1, s//2, device=device)]) / (s//2)
-        if s % 2 == 0 else
-        torch.cat([torch.linspace(0, s//2, s - s//2, device=device), torch.linspace(s//2, 1, s//2, device=device)]) / (s//2)
+        # negative frequencies which are in the second half of the dimension
+        torch.cat([torch.linspace(0, (s - 1) // 2, s - s // 2, device=device), torch.linspace(s // 2, 1, s // 2, device=device)]) / (s // 2)
         for i, s in enumerate(reversed(shape))
     ]))
 
