@@ -109,6 +109,7 @@ class RecipeMerger:
         progress.close()
         if isinstance(output, OutSafetensorsDict):
             output.close()
+        recipe.accept(CloseInputDictsVisitor())
 
     def __normalize_output_to_dict(
         self,
@@ -210,3 +211,18 @@ class LoadInputDictsVisitor(RecipeVisitor):
                     break
 
         return InSafetensorsDict(path, self.__buffer_size_per_dict)
+
+
+@dataclasses.dataclass
+class CloseInputDictsVisitor:
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode):
+        if node.state_dict is not None:
+            node.state_dict.close()
+        node.state_dict = None
+
+    def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
+        return
+
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
+        for model in node.models:
+            model.accept(self)
