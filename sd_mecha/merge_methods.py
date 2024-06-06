@@ -552,18 +552,24 @@ def dropout(  # aka n-supermario
     delta0: Tensor | LiftFlag[MergeSpace.DELTA],
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
-    overlap: Hyper = 0.0,
+    overlap: Hyper = 1.0,
     overlap_emphasis: Hyper = 0.0,
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    deltas = torch.stack((delta0,) + deltas)
     rng = np.random.default_rng(seed)
-    deltas = (delta0,) + deltas
 
-    ks = np.arange(0, 2 ** len(deltas))
-    pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
-    masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
-    masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
+    if overlap % 2 == 1:
+        masks = torch.stack([
+            torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=delta0.shape)).to(device=delta0.device, dtype=torch.bool)
+            for _ in range(len(deltas))
+        ])
+    else:
+        ks = np.arange(2 ** len(deltas))
+        pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
+        masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
+        masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
 
     final_delta = torch.zeros_like(delta0)
     for mask, delta in zip(masks, deltas):
@@ -572,8 +578,8 @@ def dropout(  # aka n-supermario
 
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
-    if np.isclose(overlap, int(overlap)):
-        if overlap % 2 == 0:
+    if np.isclose(overlap, round(overlap)):
+        if round(overlap) % 2 == 0:
             pmf = np.array([1/n*float(bin(i).count("1") == 1) for i in range(1, 2**n)])
         else:
             pmf = np.array([0 for _ in range(1, 2**n - 1)] + [1])
