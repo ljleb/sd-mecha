@@ -692,7 +692,7 @@ def get_model_stock_t(deltas, cos_eps):
     n = len(deltas)
 
     # Generator function. Default eps from torch API doc.
-    cos = torch.nn.CosineSimilarity(dim=1, eps=cos_eps)
+    cos = torch.nn.CosineSimilarity(dim=-1, eps=cos_eps)
 
     # One-liner is all you need. I may make it in running average if it really memory hungry.
     cos_thetas = [cos(deltas[i], deltas[i + 1]) for i, _ in enumerate(deltas) if (i + 1) < n]
@@ -704,3 +704,46 @@ def get_model_stock_t(deltas, cos_eps):
     t = (n * cos_theta / (1 + (n - 1) * cos_theta)).unsqueeze(-1)
 
     return t
+
+# Original sourcecode: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
+# Changed to "List comprehension" and rely on torch API only. It is now fully parallel.
+@convert_to_recipe
+def geometric_median_list_of_array(
+    *models: Tensor | SameMergeSpace,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper =100, 
+    ftol: Hyper =1e-20,
+    **kwargs,
+)-> Tensor | SameMergeSpace:
+    # I think it is impossible to pass this from user space so I hardcode this instead.
+    # Meanwhile I rename "points" as "models"
+    # no_grad part is rare case: Merge algorithm under GPU is never heard.
+    weights = torch.ones(len(models), device=models[0].device)
+
+    # initialize median estimate at mean
+    median = weighted_average(models, weights)
+    new_weights = weights
+    objective_value = geometric_median_objective(median, models, weights)
+
+    # Weiszfeld iterations
+    for _ in range(maxiter):
+        prev_obj_value = objective_value
+        denom = torch.stack([l2distance(p, median) for p in models])
+        new_weights = weights / torch.clamp(denom, min=eps) 
+        median = weighted_average(models, new_weights)
+
+        objective_value = geometric_median_objective(median, models, weights)
+        if abs(prev_obj_value - objective_value) <= ftol * objective_value:
+            break
+        
+    return weighted_average(models, new_weights)
+
+def weighted_average(points, weights):
+    # weighted_average_component is not even required.
+    return torch.sum(torch.stack([p * weights[i] for i, p in enumerate(points)]), dim=0) / weights.sum()
+
+def geometric_median_objective(median, points, weights):
+    return torch.mean(torch.stack([l2distance(point, median) for point in points]) * weights)
+
+def l2distance(p1, p2):
+    return torch.dist(p1, p2, p=2)

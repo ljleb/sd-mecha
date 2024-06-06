@@ -402,7 +402,30 @@ def model_stock_n_models(
         dtype=dtype
     )
 
-    return sd_mecha.add_difference(base, res, alpha=1, device=device, dtype=dtype)
+    return sd_mecha.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
+
+geometric_median_list_of_array = merge_methods.geometric_median_list_of_array
+
+# Like n_average.
+def geom_median(
+    *models: RecipeNodeOrPath,    
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+) -> recipe_nodes.RecipeNode:
+
+    res = geometric_median_list_of_array(
+        *models,
+        eps=eps,    
+        maxiter=maxiter, 
+        ftol=ftol,
+        device=device, 
+        dtype=dtype
+    )
+
+    return res
 
 def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1", model_type: str = "base"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
