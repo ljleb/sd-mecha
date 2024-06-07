@@ -1,5 +1,6 @@
 import dataclasses
 import functools
+import gc
 import logging
 import pathlib
 import threading
@@ -110,6 +111,9 @@ class RecipeMerger:
         if isinstance(output, OutSafetensorsDict):
             output.close()
         recipe.accept(CloseInputDictsVisitor())
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def __normalize_output_to_dict(
         self,

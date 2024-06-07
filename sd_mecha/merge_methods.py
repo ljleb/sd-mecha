@@ -310,14 +310,16 @@ def distribution_crossover(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    mean: Hyper,
+    alpha: Hyper,
     tilt: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if mean == 0:
+    if alpha == 0:
         return a
+    if alpha == 1:
+        return b
     if tilt == 1 or a.shape == ():
-        return weighted_sum.__wrapped__(a, b, alpha=mean)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     c_indices = torch.argsort(torch.flatten(c))
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
@@ -326,7 +328,7 @@ def distribution_crossover(
     a_dft = torch.fft.rfft(a_dist)
     b_dft = torch.fft.rfft(b_dist)
 
-    dft_filter = create_filter((a_dft.numel(),), mean, tilt, device=a.device)
+    dft_filter = create_filter((a_dft.numel(),), alpha, tilt, device=a.device)
 
     x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
     x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
@@ -339,71 +341,69 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    mean: Hyper = 0.5,
+    alpha: Hyper = 0.5,
     tilt: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if mean == 0:
+    if alpha == 0:
         return a
+    if alpha == 1:
+        return b
     if tilt == 1:
-        return weighted_sum.__wrapped__(a, b, alpha=mean)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=tilt)
 
-    if a.shape[0] > 40000 or len(a.shape) == 4 and sum(a.shape[2:]) > 2:
-        shape = a.shape[1:]
-    else:
-        shape = a.shape
+    shape = a.shape
 
     a_dft = torch.fft.rfftn(a, s=shape)
     b_dft = torch.fft.rfftn(b, s=shape)
 
-    dft_filter = create_filter(a_dft.shape, mean, tilt, device=a.device)
+    dft_filter = create_filter(a_dft.shape, alpha, tilt, device=a.device)
 
     x_dft = (1 - dft_filter)*a_dft + dft_filter*b_dft
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, mean: float, tilt: float, steps=100, precision=EPSILON, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float, device=None):
     """
-    Create a crossover filter. The cut is first tilted, then slid along its normal to match the mean.
+    Create a crossover filter. The cut is first tilted around (0, 0), then slid along its normal until it touches the point (alpha, 1 - alpha).
     :param shape: shape of the filter
-    :param mean: the mean of the filter. must be in [0, 1]
-    :param tilt: tilt of the filter. 0 = vertical filter, 0.5 = 45 degrees, 1 = degenerates to a weighted sum with alpha=mean
-    :param steps: maximum number of optimization steps to apply over the mean until the filter converges
-    :param precision: the accepted loss between the requested mean and the effective mean of the filter
+    :param alpha: the ratio between the low frequencies and high frequencies. must be in [0, 1]
+      0 = all 0s, 1 = all 1s, 0s correspond to low frequencies and 1s correspond to high frequencies
+    :param tilt: tilt of the filter. 0 = vertical filter, 0.5 = 45 degrees, 1 = degenerates to a weighted sum with alpha=alpha
     :param device: device of the filter
     :return:
     """
-    if not 0 <= mean <= 1:
-        raise ValueError("filter mean must be between 0 and 1")
+    if not 0 <= alpha <= 1:
+        raise ValueError("alpha must be between 0 and 1")
 
-    gradients = [
-        torch.linspace(0, 1, s, device=device)**2
-        for s in shape
-    ]
+    # normalize tilt to the range [0, 2]
+    tilt -= math.floor(tilt // 2 * 2)
+
+    gradients = list(reversed([
+        torch.linspace(0, 1, s, device=device)
+        if i == 0 or s == 1 else
+        # negative frequencies are in the second half of the dimension
+        torch.cat([
+            torch.linspace(0, (s - 1) // 2, s - s // 2, device=device),
+            torch.linspace(s // 2, 1, s // 2, device=device)
+        ]) / (s // 2)
+        for i, s in enumerate(reversed(shape))
+    ]))
 
     if len(shape) > 1:
-        grids = torch.meshgrid(*gradients, indexing='ij')
-        mesh = torch.sqrt(torch.sum(torch.stack(grids), dim=0)) / math.sqrt(len(shape))
+        grids = torch.meshgrid(*(g**2 for g in gradients), indexing='ij')
+        mesh = (torch.stack(grids).sum(dim=0) / len(shape)).sqrt()
     else:
         mesh = gradients[0]
 
-    # train the offset of the cut to pick the right ratio of parameters
-    trained_offset = mean
-    dft_filter = mesh
-    for step in range(steps):
-        if tilt < EPSILON:
-            dft_filter = (mesh > 1 - trained_offset).float()
-        else:
-            tilt_cot = 1 / math.tan(math.pi * tilt / 2)
-            dft_filter = torch.clamp(mesh*tilt_cot + trained_offset*tilt_cot + trained_offset - tilt_cot, 0, 1)
-        current_mean = dft_filter.mean()
-        loss = mean - current_mean
-        if abs(loss) < precision:
-            break
-        trained_offset += loss
+    if tilt < EPSILON or abs(tilt - 2) < EPSILON:
+        dft_filter = (mesh > 1 - alpha).float()
+    else:
+        tilt_cot = 1 / math.tan(math.pi * tilt / 2)
+        dft_filter = torch.clamp(mesh*tilt_cot + alpha*tilt_cot + alpha - tilt_cot, 0, 1)
 
     return dft_filter
 
@@ -552,18 +552,24 @@ def dropout(  # aka n-supermario
     delta0: Tensor | LiftFlag[MergeSpace.DELTA],
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
-    overlap: Hyper = 0.0,
+    overlap: Hyper = 1.0,
     overlap_emphasis: Hyper = 0.0,
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    deltas = torch.stack((delta0,) + deltas)
     rng = np.random.default_rng(seed)
-    deltas = (delta0,) + deltas
 
-    ks = np.arange(0, 2 ** len(deltas))
-    pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
-    masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
-    masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
+    if overlap % 2 == 1:
+        masks = torch.stack([
+            torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=delta0.shape)).to(device=delta0.device, dtype=torch.bool)
+            for _ in range(len(deltas))
+        ])
+    else:
+        ks = np.arange(2 ** len(deltas))
+        pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
+        masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
+        masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
 
     final_delta = torch.zeros_like(delta0)
     for mask, delta in zip(masks, deltas):
@@ -572,8 +578,8 @@ def dropout(  # aka n-supermario
 
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
-    if np.isclose(overlap, int(overlap)):
-        if overlap % 2 == 0:
+    if np.isclose(overlap, round(overlap)):
+        if round(overlap) % 2 == 0:
             pmf = np.array([1/n*float(bin(i).count("1") == 1) for i in range(1, 2**n)])
         else:
             pmf = np.array([0 for _ in range(1, 2**n - 1)] + [1])
