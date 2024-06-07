@@ -310,16 +310,16 @@ def distribution_crossover(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    cut_ratio: Hyper,
+    alpha: Hyper,
     tilt: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if cut_ratio == 0:
+    if alpha == 0:
         return a
-    if cut_ratio == 1:
+    if alpha == 1:
         return b
     if tilt == 1 or a.shape == ():
-        return weighted_sum.__wrapped__(a, b, alpha=cut_ratio)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     c_indices = torch.argsort(torch.flatten(c))
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
@@ -328,7 +328,7 @@ def distribution_crossover(
     a_dft = torch.fft.rfft(a_dist)
     b_dft = torch.fft.rfft(b_dist)
 
-    dft_filter = create_filter((a_dft.numel(),), cut_ratio, tilt, device=a.device)
+    dft_filter = create_filter((a_dft.numel(),), alpha, tilt, device=a.device)
 
     x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
     x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
@@ -341,16 +341,16 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    cut_ratio: Hyper = 0.5,
+    alpha: Hyper = 0.5,
     tilt: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if cut_ratio == 0:
+    if alpha == 0:
         return a
-    if cut_ratio == 1:
+    if alpha == 1:
         return b
     if tilt == 1:
-        return weighted_sum.__wrapped__(a, b, alpha=cut_ratio)
+        return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=tilt)
@@ -360,25 +360,27 @@ def crossover(
     a_dft = torch.fft.rfftn(a, s=shape)
     b_dft = torch.fft.rfftn(b, s=shape)
 
-    dft_filter = create_filter(a_dft.shape, cut_ratio, tilt, device=a.device)
+    dft_filter = create_filter(a_dft.shape, alpha, tilt, device=a.device)
 
     x_dft = (1 - dft_filter)*a_dft + dft_filter*b_dft
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, cut_ratio: float, tilt: float, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float, device=None):
     """
-    Create a crossover filter. The cut is first tilted, then slid along its normal to match the mean.
+    Create a crossover filter. The cut is first tilted, then slid along its normal until it touches the point (alpha, 1 - alpha).
     :param shape: shape of the filter
-    :param cut_ratio: the frequency of the filter as a ratio, in [0, 1]
-    :param tilt: tilt of the filter. 0 = vertical filter, 0.5 = 45 degrees, 1 = degenerates to a weighted sum with alpha=mean
-    :param steps: maximum number of optimization steps to apply over the mean until the filter converges
-    :param precision: the accepted loss between the requested mean and the effective mean of the filter
+    :param alpha: the ratio between the low frequencies and high frequencies. must be in [0, 1]
+      0 = all 0s, 1 = all 1s, 0s correspond to low frequencies and 1s correspond to high frequencies
+    :param tilt: tilt of the filter. 0 = vertical filter, 0.5 = 45 degrees, 1 = degenerates to a weighted sum with alpha=alpha
     :param device: device of the filter
     :return:
     """
-    if not 0 <= cut_ratio <= 1:
-        raise ValueError("cut_ratio must be between 0 and 1")
+    if not 0 <= alpha <= 1:
+        raise ValueError("alpha must be between 0 and 1")
+
+    # normalize tilt to the range [0, 2]
+    tilt -= math.floor(tilt // 2 * 2)
 
     gradients = list(reversed([
         torch.linspace(0, 1, s, device=device)
@@ -394,11 +396,11 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, cut_ratio: float, tilt: f
     else:
         mesh = gradients[0]
 
-    if tilt < EPSILON:
-        dft_filter = (mesh > 1 - cut_ratio).float()
+    if tilt < EPSILON or abs(tilt - 2) < EPSILON:
+        dft_filter = (mesh > 1 - alpha).float()
     else:
         tilt_cot = 1 / math.tan(math.pi * tilt / 2)
-        dft_filter = torch.clamp(mesh*tilt_cot + cut_ratio*tilt_cot + cut_ratio - tilt_cot, 0, 1)
+        dft_filter = torch.clamp(mesh*tilt_cot + alpha*tilt_cot + alpha - tilt_cot, 0, 1)
 
     return dft_filter
 
