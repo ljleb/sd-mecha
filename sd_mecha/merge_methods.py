@@ -310,14 +310,16 @@ def distribution_crossover(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    mean: Hyper,
+    cut_ratio: Hyper,
     tilt: Hyper,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if mean == 0:
+    if cut_ratio == 0:
         return a
+    if cut_ratio == 1:
+        return b
     if tilt == 1 or a.shape == ():
-        return weighted_sum.__wrapped__(a, b, alpha=mean)
+        return weighted_sum.__wrapped__(a, b, alpha=cut_ratio)
 
     c_indices = torch.argsort(torch.flatten(c))
     a_dist = torch.gather(torch.flatten(a), 0, c_indices)
@@ -326,7 +328,7 @@ def distribution_crossover(
     a_dft = torch.fft.rfft(a_dist)
     b_dft = torch.fft.rfft(b_dist)
 
-    dft_filter = create_filter((a_dft.numel(),), mean, tilt, device=a.device)
+    dft_filter = create_filter((a_dft.numel(),), cut_ratio, tilt, device=a.device)
 
     x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
     x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
@@ -339,14 +341,16 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    mean: Hyper = 0.5,
+    cut_ratio: Hyper = 0.5,
     tilt: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if mean == 0:
+    if cut_ratio == 0:
         return a
+    if cut_ratio == 1:
+        return b
     if tilt == 1:
-        return weighted_sum.__wrapped__(a, b, alpha=mean)
+        return weighted_sum.__wrapped__(a, b, alpha=cut_ratio)
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=tilt)
@@ -356,25 +360,25 @@ def crossover(
     a_dft = torch.fft.rfftn(a, s=shape)
     b_dft = torch.fft.rfftn(b, s=shape)
 
-    dft_filter = create_filter(a_dft.shape, mean, tilt, device=a.device)
+    dft_filter = create_filter(a_dft.shape, cut_ratio, tilt, device=a.device)
 
     x_dft = (1 - dft_filter)*a_dft + dft_filter*b_dft
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, mean: float, tilt: float, steps=100, precision=EPSILON, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, cut_ratio: float, tilt: float, device=None):
     """
     Create a crossover filter. The cut is first tilted, then slid along its normal to match the mean.
     :param shape: shape of the filter
-    :param mean: the mean of the filter. must be in [0, 1]
+    :param cut_ratio: the frequency of the filter as a ratio, in [0, 1]
     :param tilt: tilt of the filter. 0 = vertical filter, 0.5 = 45 degrees, 1 = degenerates to a weighted sum with alpha=mean
     :param steps: maximum number of optimization steps to apply over the mean until the filter converges
     :param precision: the accepted loss between the requested mean and the effective mean of the filter
     :param device: device of the filter
     :return:
     """
-    if not 0 <= mean <= 1:
-        raise ValueError("filter mean must be between 0 and 1")
+    if not 0 <= cut_ratio <= 1:
+        raise ValueError("cut_ratio must be between 0 and 1")
 
     gradients = list(reversed([
         torch.linspace(0, 1, s, device=device)
@@ -390,20 +394,11 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, mean: float, tilt: float,
     else:
         mesh = gradients[0]
 
-    # train the offset of the cut to pick the right ratio of parameters
-    trained_offset = mean
-    dft_filter = mesh
-    for step in range(steps):
-        if tilt < EPSILON:
-            dft_filter = (mesh > 1 - trained_offset).float()
-        else:
-            tilt_cot = 1 / math.tan(math.pi * tilt / 2)
-            dft_filter = torch.clamp(mesh*tilt_cot + trained_offset*tilt_cot + trained_offset - tilt_cot, 0, 1)
-        current_mean = dft_filter.mean()
-        loss = mean - current_mean
-        if abs(loss) < precision:
-            break
-        trained_offset += loss
+    if tilt < EPSILON:
+        dft_filter = (mesh > 1 - cut_ratio).float()
+    else:
+        tilt_cot = 1 / math.tan(math.pi * tilt / 2)
+        dft_filter = torch.clamp(mesh*tilt_cot + cut_ratio*tilt_cot + cut_ratio - tilt_cot, 0, 1)
 
     return dft_filter
 
