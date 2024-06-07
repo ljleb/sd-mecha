@@ -368,7 +368,7 @@ def crossover(
 
 def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float, device=None):
     """
-    Create a crossover filter. The cut is first tilted, then slid along its normal until it touches the point (alpha, 1 - alpha).
+    Create a crossover filter. The cut is first tilted around (0, 0), then slid along its normal until it touches the point (alpha, 1 - alpha).
     :param shape: shape of the filter
     :param alpha: the ratio between the low frequencies and high frequencies. must be in [0, 1]
       0 = all 0s, 1 = all 1s, 0s correspond to low frequencies and 1s correspond to high frequencies
@@ -386,7 +386,10 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
         torch.linspace(0, 1, s, device=device)
         if i == 0 or s == 1 else
         # negative frequencies are in the second half of the dimension
-        torch.cat([torch.linspace(0, (s - 1) // 2, s - s // 2, device=device), torch.linspace(s // 2, 1, s // 2, device=device)]) / (s // 2)
+        torch.cat([
+            torch.linspace(0, (s - 1) // 2, s - s // 2, device=device),
+            torch.linspace(s // 2, 1, s // 2, device=device)
+        ]) / (s // 2)
         for i, s in enumerate(reversed(shape))
     ]))
 
