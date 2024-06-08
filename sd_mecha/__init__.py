@@ -311,7 +311,7 @@ def dropout(
     *models: RecipeNodeOrPath,
     probability: Hyper = 0.9,
     alpha: Hyper = 0.5,
-    overlap: Hyper = 0.0,
+    overlap: Hyper = 1.0,
     overlap_emphasis: Hyper = 0.0,
     seed: Optional[Hyper] = None,
     device: Optional[str] = None,
