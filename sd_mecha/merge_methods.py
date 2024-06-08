@@ -149,6 +149,7 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 # - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
 # Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
+# Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
@@ -156,6 +157,10 @@ def ties_sum(  # aka add_difference_ties
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
     cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
 
@@ -189,13 +194,19 @@ def ties_sum(  # aka add_difference_ties
     # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
     filtered_delta = (deltas * delta_filters)
 
-    # Model Stock
-    t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
+    if apply_median <= 0.0:
+        # Model Stock
+        t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
 
-    filtered_delta = filtered_delta.sum(dim=0)
+        filtered_delta = filtered_delta.sum(dim=0)
 
-    # $$ \tau_m $$
-    return torch.nan_to_num(filtered_delta * t / param_counts)
+        # $$ \tau_m $$
+        return torch.nan_to_num(filtered_delta * t / param_counts)   
+    else:
+        # $$ \tau_m $$, but in geometric median instead of arithmetic mean. Considered to replace model stock.
+        filtered_delta = geometric_median_list_of_array(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
+        
+        return torch.nan_to_num(filtered_delta)
 
 
 def filter_top_k(a: Tensor, k: float):
@@ -603,6 +614,10 @@ def ties_sum_with_dropout(
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
     cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
@@ -614,7 +629,7 @@ def ties_sum_with_dropout(
     deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability)) for delta in deltas]
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
-    deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps)
+    deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
 
     if probability == 1.0:
         # Corner case
@@ -705,16 +720,20 @@ def get_model_stock_t(deltas, cos_eps):
 
     return t
 
-# Original sourcecode: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
-# Changed to "List comprehension" and rely on torch API only. It is now fully parallel.
+# This becomes a wrapper since I want TIES use GM also.
 @convert_to_recipe
-def geometric_median_list_of_array(
+def geometric_median(
     *models: Tensor | SameMergeSpace,
     eps: Hyper = 1e-6,    
-    maxiter: Hyper =100, 
-    ftol: Hyper =1e-20,
+    maxiter: Hyper = 100, 
+    ftol: Hyper = 1e-20,
     **kwargs,
 )-> Tensor | SameMergeSpace:
+    return geometric_median_list_of_array(models, eps, maxiter, ftol)
+
+# Original sourcecode: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
+# Changed to "List comprehension" and rely on torch API only. It is now fully parallel.
+def geometric_median_list_of_array(models, eps, maxiter, ftol):
     # I think it is impossible to pass this from user space so I hardcode this instead.
     # Meanwhile I rename "points" as "models"
     # no_grad part is rare case: Merge algorithm under GPU is never heard.

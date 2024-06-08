@@ -162,6 +162,10 @@ def add_difference_ties(
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
     cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -185,6 +189,10 @@ def add_difference_ties(
         vote_sgn=vote_sgn,
         apply_stock=apply_stock,
         cos_eps=cos_eps,
+        apply_median=apply_median,
+        eps=eps,    
+        maxiter=maxiter, 
+        ftol=ftol,
         device=device,
         dtype=dtype,
     )
@@ -341,6 +349,10 @@ def ties_with_dare(
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
     cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -362,8 +374,12 @@ def ties_with_dare(
         k=k,
         vote_sgn=vote_sgn,
         seed=seed, 
-        apply_stock = apply_stock,
-        cos_eps = cos_eps,
+        apply_stock=apply_stock,
+        cos_eps=cos_eps,
+        apply_median=apply_median,
+        eps=eps,    
+        maxiter=maxiter, 
+        ftol=ftol,
         device=device, 
         dtype=dtype
     )
@@ -404,19 +420,19 @@ def model_stock_n_models(
 
     return sd_mecha.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
 
-geometric_median_list_of_array = merge_methods.geometric_median_list_of_array
+geometric_median = merge_methods.geometric_median
 
 # Like n_average.
 def geom_median(
     *models: RecipeNodeOrPath,    
     eps: Hyper = 1e-6,    
     maxiter: Hyper = 100, 
-    ftol: Hyper =1e-20,
+    ftol: Hyper = 1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
 
-    res = geometric_median_list_of_array(
+    res = geometric_median(
         *models,
         eps=eps,    
         maxiter=maxiter, 
