@@ -1,0 +1,52 @@
+passthrough:
+- first_stage_model
+
+merge:
+  unet:
+    prefix: model.diffusion_model
+    blocks:
+      in0:
+      - joint_blocks.0.#
+      - pos_embed
+      - t_embedder
+      - x_embedder
+      - y_embedder
+      - context_embedder
+      in23:
+      - joint_blocks.23.#
+      - pos_embed
+      - t_embedder
+      - x_embedder
+      - y_embedder
+      - final_layer
+      in*:
+      - joint_blocks.*.#
+      - pos_embed
+      - t_embedder
+      - x_embedder
+      - y_embedder
+
+  txt:
+    prefix: text_encoders.clip_l.transformer
+    blocks:
+      in0:
+      - text_model.encoder.layers.0
+      - text_model.embeddings
+      in11:
+      - text_model.encoder.layers.11
+      - final_layer_norm
+      in*: text_model.encoder.layers.*
+
+  txt2:
+    prefix: text_encoders.clip_g.transformer
+    blocks:
+      in0:
+      - text_model.encoder.layers.0
+      - text_model.embeddings
+      in31:
+      - text_model.encoder.layers.31
+      - final_layer_norm
+      - text_projection
+      in*: text_model.encoder.layers.*
+
+keys: sd3_sgm_keys.txt
