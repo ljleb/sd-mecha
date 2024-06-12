@@ -46,11 +46,11 @@ merge:
       in0:
       - transformer.resblocks.0
       - positional_embedding
-      - text_projection
       - token_embedding
       in31:
       - transformer.resblocks.31
       - ln_final
+      - text_projection
       - logit_scale
       in*: transformer.resblocks.*
 
