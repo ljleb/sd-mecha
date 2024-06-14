@@ -1,7 +1,5 @@
 import logging
 import pathlib
-
-import numpy as np
 import torch
 from torch import Tensor
 
@@ -49,7 +47,7 @@ slerp = merge_methods.slerp
 def add_difference(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     alpha: Hyper = 1.0,
-    clip_to_ab: Optional[bool] = None,
+    clamp_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -75,13 +73,13 @@ def add_difference(
     if a.merge_space == original_b.merge_space:
         b = original_b
 
-    if clip_to_ab is None:
-        clip_to_ab = a.merge_space == b.merge_space
+    if clamp_to_ab is None:
+        clamp_to_ab = a.merge_space == b.merge_space
 
-    if clip_to_ab:
+    if clamp_to_ab:
         if a.merge_space != b.merge_space:
-            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clip the merge.")
-        res = clip(
+            raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clamp the merge.")
+        res = clamp(
             res, a, b,
             device=device,
             dtype=dtype,
@@ -279,7 +277,7 @@ def rotate(
     return res
 
 
-clip = merge_methods.clip
+clamp = merge_methods.clamp
 
 
 def dropout(

@@ -37,7 +37,7 @@ def slerp(
     a_normalized = a / a.norm()
     b_normalized = b / b.norm()
 
-    ab_dot = (a_normalized * b_normalized).sum().clip(-1, 1)
+    ab_dot = (a_normalized * b_normalized).sum().clamp(-1, 1)
 
     omega = torch.arccos(ab_dot)
     a_contrib = a_normalized * torch.sin((1-alpha)*omega)
@@ -523,7 +523,7 @@ torch_complex_dtype_map = {
 
 
 @convert_to_recipe
-def clip(
+def clamp(
     a: Tensor | SameMergeSpace,
     *bounds: Tensor | SameMergeSpace,
     stiffness: Hyper = 0.0,
