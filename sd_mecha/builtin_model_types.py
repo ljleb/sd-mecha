@@ -1,7 +1,5 @@
 import json
 import pathlib
-import re
-
 import torch
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_type import register_model_type

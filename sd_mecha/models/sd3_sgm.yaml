@@ -34,7 +34,7 @@ merge:
       - text_model.embeddings
       in11:
       - text_model.encoder.layers.11
-      - final_layer_norm
+      - text_model.final_layer_norm
       in*: text_model.encoder.layers.*
 
   txt2:
@@ -45,8 +45,20 @@ merge:
       - text_model.embeddings
       in31:
       - text_model.encoder.layers.31
-      - final_layer_norm
+      - text_model.final_layer_norm
       - text_projection
       in*: text_model.encoder.layers.*
+
+  t5xxl:
+    prefix: text_encoders.t5xxl.transformer
+    blocks:
+      in0:
+      - encoder.block.0.#.#
+      - encoder.embed_tokens
+      - shared
+      in23:
+      - encoder.block.23.#.#
+      - encoder.final_layer_norm
+      in*: encoder.block.*.#.#
 
 keys: sd3_sgm_keys.txt
