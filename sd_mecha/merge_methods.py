@@ -54,7 +54,7 @@ def add_difference(
     a: Tensor | SameMergeSpace,
     b: Tensor | LiftFlag[MergeSpace.DELTA],
     *,
-    alpha: Hyper = 0.5,
+    alpha: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     return a + alpha * b

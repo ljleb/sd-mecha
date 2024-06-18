@@ -157,7 +157,7 @@ class RecipeMerger:
             save_dtype = self.__default_dtype
 
         if save_device is None:
-            to_kwargs = {"device": save_device},
+            to_kwargs = {"dtype": save_dtype},
         else:
             to_kwargs = {"dtype": save_dtype, "device": save_device}
 
