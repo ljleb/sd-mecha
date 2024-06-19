@@ -564,13 +564,13 @@ def dropout(  # aka n-supermario
 
     if overlap % 2 == 1:
         masks = torch.stack([
-            torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=deltas[0].shape)).to(device=deltas[0].device, dtype=torch.bool)
+            torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=deltas[0].shape)).to(device=deltas.device, dtype=torch.bool)
             for _ in range(len(deltas))
         ])
     else:
         ks = np.arange(2 ** len(deltas))
         pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
-        masks = torch.from_numpy(rng.choice(ks, size=deltas[0].shape, p=pmf)).to(deltas[0].device)
+        masks = torch.from_numpy(rng.choice(ks, size=deltas[0].shape, p=pmf)).to(deltas.device)
         masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
 
     final_delta = torch.zeros_like(deltas[0])
