@@ -24,6 +24,8 @@ import sd_mecha
 
 _alpha = 0.33
 _k = 0.5
+_use_delta = 0.0
+_use_signs = 1.0
 # Sudoku of 4x4, "top k" should be 2.
 _models = [
     torch.tensor([    
@@ -48,3 +50,6 @@ _expected = torch.tensor([
 
 _actual = sd_mecha.ties_sum.__wrapped__(*_models, k=_k)
 assert torch.allclose(_actual, _expected)
+
+_actual2 = sd_mecha.ties_sum.__wrapped__(*_models, k=_k, vote_sgn=_use_signs)
+assert not torch.allclose(_actual, _actual2)

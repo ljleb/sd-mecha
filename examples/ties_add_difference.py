@@ -13,6 +13,7 @@ models = [
 ]
 
 recipe = sd_mecha.add_difference_ties("pure/v1-5-pruned", *models, alpha=0.5)
+#recipe_ties_soup = sd_mecha.add_difference_ties("pure/v1-5-pruned", *models, alpha=1.0, k=1.0, vote_sgn=1.0)
 
 merger = sd_mecha.RecipeMerger(
     models_dir=r"E:\sd\models\Stable-diffusion",
