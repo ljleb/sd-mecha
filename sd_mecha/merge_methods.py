@@ -84,12 +84,12 @@ def perpendicular_component(
 
 @convert_to_recipe
 def geometric_sum(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: Hyper = 0.5,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | SameMergeSpace:
     a = torch.complex(a, torch.zeros_like(a))
     b = torch.complex(b, torch.zeros_like(b))
     res = a ** (1 - alpha) * b ** alpha
@@ -529,9 +529,10 @@ def clamp(
     stiffness: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
+    bounds = torch.stack(bounds)
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
-    centers = (maximums + minimums) / 2
+    centers = bounds.mean(dim=0)
 
     if stiffness:
         smallest_positive = maximums
