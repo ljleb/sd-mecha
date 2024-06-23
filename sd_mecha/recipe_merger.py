@@ -18,11 +18,11 @@ from typing import Optional, Mapping, MutableMapping, Dict, Set, List, Iterable,
 
 class RecipeMerger:
     def __init__(
-            self, *,
-            models_dir: Optional[pathlib.Path | str | List[pathlib.Path | str]] = None,
-            default_device: str = "cpu",
-            default_dtype: Optional[torch.dtype] = torch.float64,
-            tqdm: type = tqdm,
+        self, *,
+        models_dir: Optional[pathlib.Path | str | List[pathlib.Path | str]] = None,
+        default_device: str = "cpu",
+        default_dtype: Optional[torch.dtype] = torch.float64,
+        tqdm: type = tqdm,
     ):
         if models_dir is None:
             models_dir = []
@@ -41,14 +41,14 @@ class RecipeMerger:
         self.__tqdm = tqdm
 
     def merge_and_save(
-            self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
-            output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
-            fallback_model: Optional[
-                Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
-            save_device: Optional[str] = "cpu",
-            save_dtype: Optional[torch.dtype] = torch.float16,
-            threads: Optional[int] = None,
-            total_buffer_size: int = 2 ** 28,
+        self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
+        fallback_model: Optional[
+            Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
+        save_device: Optional[str] = "cpu",
+        save_dtype: Optional[torch.dtype] = torch.float16,
+        threads: Optional[int] = None,
+        total_buffer_size: int = 2 ** 28,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
         if recipe.merge_space != recipe_nodes.MergeSpace.BASE:
@@ -62,9 +62,9 @@ class RecipeMerger:
         fallback_is_recipe = isinstance(fallback_model, recipe_nodes.ModelRecipeNode)
         fallback_in_recipe = fallback_is_recipe and fallback_model in recipe
         total_files_open = (
-                recipe.accept(recipe_nodes.ModelsCountVisitor()) +
-                int(isinstance(output, (str, pathlib.Path))) +
-                int(fallback_is_recipe and not fallback_in_recipe)
+            recipe.accept(recipe_nodes.ModelsCountVisitor()) +
+            int(isinstance(output, (str, pathlib.Path))) +
+            int(fallback_is_recipe and not fallback_in_recipe)
         )
         buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
@@ -119,16 +119,16 @@ class RecipeMerger:
         torch.cuda.empty_cache()
 
     def merge_and_save_lora(
-            self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
-            output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
-            rank: int = 32,
-            conv_rank: Optional[int] = None,
-            svd_device: Optional[str] = None,
-            svd_dtype: Optional[torch.dtype] = None,
-            save_device: Optional[str] = "cpu",
-            save_dtype: Optional[torch.dtype] = torch.float16,
-            threads: Optional[int] = None,
-            total_buffer_size: int = 2 ** 28,
+        self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
+        rank: int = 32,
+        conv_rank: Optional[int] = None,
+        svd_device: Optional[str] = None,
+        svd_dtype: Optional[torch.dtype] = None,
+        save_device: Optional[str] = "cpu",
+        save_dtype: Optional[torch.dtype] = torch.float16,
+        threads: Optional[int] = None,
+        total_buffer_size: int = 2 ** 28,
     ):
         if recipe.model_arch.identifier not in ["sd1", "sdxl"]:
             raise ValueError("currently, only the sd1 and sdxl architectures are supported for lora extraction")
@@ -142,8 +142,8 @@ class RecipeMerger:
         extensions.merge_method.clear_model_paths_cache()
 
         total_files_open = (
-                recipe.accept(recipe_nodes.ModelsCountVisitor()) +
-                int(isinstance(output, (str, pathlib.Path)))
+            recipe.accept(recipe_nodes.ModelsCountVisitor()) +
+            int(isinstance(output, (str, pathlib.Path)))
         )
         buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
@@ -196,13 +196,13 @@ class RecipeMerger:
         torch.cuda.empty_cache()
 
     def __normalize_output_to_dict(
-            self,
-            output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
-            merged_header: Dict[str, dict],
-            keys_to_merge: Set[str],
-            serialized_recipe: str,
-            buffer_size_per_thread: int,
-            dtype: torch.dtype,
+        self,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
+        merged_header: Dict[str, dict],
+        keys_to_merge: Set[str],
+        serialized_recipe: str,
+        buffer_size_per_thread: int,
+        dtype: torch.dtype,
     ):
         if isinstance(output, (str, pathlib.Path)):
             if not isinstance(output, pathlib.Path):
@@ -394,8 +394,8 @@ class LoadInputDictsVisitor(RecipeVisitor):
             model.accept(self)
 
     def __load_dict(
-            self,
-            node: recipe_nodes.ModelRecipeNode,
+        self,
+        node: recipe_nodes.ModelRecipeNode,
     ) -> InSafetensorsDict:
         if node.state_dict is not None:
             return node.state_dict
