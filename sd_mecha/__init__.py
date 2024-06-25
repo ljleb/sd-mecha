@@ -5,6 +5,8 @@ from torch import Tensor
 
 import sd_mecha.builtin_model_archs
 import sd_mecha.builtin_model_types
+sd_mecha.builtin_model_types.register_builtin_types()
+
 from typing import Optional, Dict, Mapping
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions

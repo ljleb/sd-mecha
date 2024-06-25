@@ -84,12 +84,12 @@ def perpendicular_component(
 
 @convert_to_recipe
 def geometric_sum(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
     *,
     alpha: Hyper = 0.5,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | SameMergeSpace:
     a = torch.complex(a, torch.zeros_like(a))
     b = torch.complex(b, torch.zeros_like(b))
     res = a ** (1 - alpha) * b ** alpha
@@ -529,9 +529,10 @@ def clamp(
     stiffness: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
+    bounds = torch.stack(bounds)
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
-    centers = (maximums + minimums) / 2
+    centers = bounds.mean(dim=0)
 
     if stiffness:
         smallest_positive = maximums
@@ -549,7 +550,6 @@ def clamp(
 
 @convert_to_recipe
 def dropout(  # aka n-supermario
-    delta0: Tensor | LiftFlag[MergeSpace.DELTA],
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
     overlap: Hyper = 1.0,
@@ -557,21 +557,24 @@ def dropout(  # aka n-supermario
     seed: Hyper = None,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    deltas = torch.stack((delta0,) + deltas)
+    if not deltas:
+        return 0
+
+    deltas = torch.stack(deltas)
     rng = np.random.default_rng(seed)
 
     if overlap % 2 == 1:
         masks = torch.stack([
-            torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=delta0.shape)).to(device=delta0.device, dtype=torch.bool)
+            torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=deltas[0].shape)).to(device=deltas.device, dtype=torch.bool)
             for _ in range(len(deltas))
         ])
     else:
         ks = np.arange(2 ** len(deltas))
         pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
-        masks = torch.from_numpy(rng.choice(ks, size=delta0.shape, p=pmf)).to(delta0.device)
+        masks = torch.from_numpy(rng.choice(ks, size=deltas[0].shape, p=pmf)).to(deltas.device)
         masks = torch.stack([masks & 2 ** i != 0 for i in range(len(deltas))])
 
-    final_delta = torch.zeros_like(delta0)
+    final_delta = torch.zeros_like(deltas[0])
     for mask, delta in zip(masks, deltas):
         final_delta[mask] += delta[mask]
     return final_delta / masks.sum(0).clamp(1) / (1 - probability)

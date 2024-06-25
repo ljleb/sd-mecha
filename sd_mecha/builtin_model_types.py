@@ -3,42 +3,54 @@ import pathlib
 import torch
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_type import register_model_type
-from typing import Mapping
-
-
-@register_model_type(merge_space=MergeSpace.BASE, needs_header_conversion=False)
-def base(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
-    return state_dict[key]
-
-
-@register_model_type(merge_space=MergeSpace.DELTA)
-def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
-    if key.endswith(".bias"):
-        raise KeyError(key)
-
-    if key.startswith("cond_stage_model.transformer."):
-        lora_key = "lora_te_" + "_".join(key.split(".")[2:-1])
-    else:
-        lora_key = SD1_MODEL_TO_LORA_KEYS[key]
-
-    return compose_lora_up_down(state_dict, lora_key)
-
+from typing import Mapping, List
 
 with open(pathlib.Path(__file__).parent / "lora" / "sd1_ldm_to_lora.json", 'r') as f:
     SD1_MODEL_TO_LORA_KEYS = json.load(f)
 
 
-@register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl")
-def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+def register_builtin_types():
+    global SD1_MODEL_TO_LORA_KEYS
+
+    @register_model_type(merge_space=MergeSpace.BASE, needs_header_conversion=False)
+    def base(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+        return state_dict[key]
+
+    @register_model_type(merge_space=MergeSpace.DELTA)
+    def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+        return torch.vstack([
+            compose_lora_up_down(state_dict, lora_key)
+            for lora_key in get_lora_keys_from_model_key(key, model_arch="sd1")
+        ])
+
+    @register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl")
+    def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+        return torch.vstack([
+            compose_lora_up_down(state_dict, k)
+            for k in get_lora_keys_from_model_key(key, model_arch="sdxl")
+        ])
+
+
+def get_lora_keys_from_model_key(key: str, model_arch: str) -> List[str]:
+    if model_arch == "sd1":
+        if key.endswith(".bias") or ".layer_norm" in key or "final_layer_norm" in key or "position_embedding" in key or "token_embedding" in key:
+            raise KeyError(key)
+
+        if key.startswith("cond_stage_model.transformer.") and ".position_ids" not in key:
+            return ["lora_te_" + "_".join(key.split(".")[2:-1])]
+        else:
+            return [SD1_MODEL_TO_LORA_KEYS[key]]
+
+    # if model_arch == "sdxl":
     if key.endswith((".bias", "_bias")):
         raise KeyError(key)
 
     if key.startswith("model.diffusion_model."):
         lora_key = "lora_unet_" + "_".join(key.split(".")[2:-1])
-        return compose_lora_up_down(state_dict, lora_key)
-    elif key.startswith("conditioner.embedders.0.transformer."):
+        return [lora_key]
+    elif key.startswith("conditioner.embedders.0.transformer.") or ".layer_norm" in key or "final_layer_norm" in key or "position_embedding" in key or "token_embedding" in key:
         lora_key = "lora_te1_" + "_".join(key.split(".")[4:-1])
-        return compose_lora_up_down(state_dict, lora_key)
+        return [lora_key]
     elif key.startswith("conditioner.embedders.1.model.transformer.resblocks."):
         # [6:] instead of [6:-1] because `key` can end with either ".weight" or "_weight"
         lora_key = "lora_te2_text_model_encoder_layers_" + "_".join(key.split(".")[6:])
@@ -53,12 +65,9 @@ def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
                 f"{lora_key}_{k}_proj"
                 for k in ("q", "k", "v")
             ]
-            return torch.vstack([
-                compose_lora_up_down(state_dict, k)
-                for k in lora_keys
-            ])
+            return lora_keys
 
-        return compose_lora_up_down(state_dict, lora_key)
+        return [lora_key]
     else:
         raise KeyError(key)
 
