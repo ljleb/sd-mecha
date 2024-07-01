@@ -1,5 +1,7 @@
 import dataclasses
 import functools
+import pathlib
+
 import fuzzywuzzy.process
 import traceback
 import torch
@@ -8,10 +10,13 @@ from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.streaming import DTYPE_REVERSE_MAPPING, DTYPE_MAPPING, InSafetensorsDict
 from torch._subclasses.fake_tensor import FakeTensorMode
-from typing import Callable, Mapping, Optional, List, Iterable
+from typing import Mapping, Optional, Iterable, Protocol
 
 
-ModelTypeCallback = Callable[[Mapping[str, torch.Tensor], str], torch.Tensor]
+class ModelTypeCallback(Protocol):
+    # Define types here, as if __call__ were a function (ignore self).
+    def __call__(self, state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
+        ...
 
 
 @dataclasses.dataclass
@@ -22,10 +27,10 @@ class ModelType:
     needs_header_conversion: bool
     location: str
 
-    def get_tensor(self, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
-        return self.__f(state_dict, key)
+    def get_tensor(self, sd_path: pathlib.Path | str, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+        return self.__f(state_dict, key, sd_path=sd_path)
 
-    def convert_header(self, state_dict: InSafetensorsDict | Mapping[str, torch.Tensor], model_arch: ModelArch):
+    def convert_header(self, sd_path: pathlib.Path | str, state_dict: InSafetensorsDict | Mapping[str, torch.Tensor], model_arch: ModelArch):
         def _create_header(fake_state_dict):
             data_offsets = 0
             return {
@@ -57,7 +62,7 @@ class ModelType:
                 converted_state_dict = {}
                 for k in model_arch.keys:
                     try:
-                        converted_state_dict[k] = self.get_tensor(fake_state_dict, k)
+                        converted_state_dict[k] = self.get_tensor(sd_path, fake_state_dict, k)
                     except KeyError:
                         continue
 
