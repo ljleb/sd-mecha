@@ -85,9 +85,10 @@ class ModelConfig:
 
 class DetermineConfigVisitor(RecipeVisitor):
     def visit_model(self, node: ModelRecipeNode) -> ModelConfig:
+        state_dict_path = getattr(node.state_dict, "file_path", "<memory>")
         return ModelConfig(
-            node.model_type.convert_header(node.state_dict, node.model_arch),
-            [getattr(node.state_dict, "file_path", "<memory>")],
+            node.model_type.convert_header(state_dict_path, node.state_dict, node.model_arch),
+            [state_dict_path],
             node.model_arch,
         )
 
