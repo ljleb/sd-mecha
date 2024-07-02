@@ -16,14 +16,16 @@ def register_builtin_types():
     def base(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return state_dict[key]
 
-    @register_model_type(merge_space=MergeSpace.DELTA)
+    lora_suffixes = (".lora_up.weight", ".lora_down.weight", ".alpha")
+
+    @register_model_type(merge_space=MergeSpace.DELTA, key_suffixes=lora_suffixes, strict_suffixes=True)
     def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return torch.vstack([
             compose_lora_up_down(state_dict, lora_key)
             for lora_key in get_lora_keys_from_model_key(key, model_arch="sd1")
         ])
 
-    @register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl")
+    @register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl", key_suffixes=lora_suffixes, strict_suffixes=True)
     def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return torch.vstack([
             compose_lora_up_down(state_dict, k)
