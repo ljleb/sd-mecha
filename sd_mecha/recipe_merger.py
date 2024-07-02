@@ -35,7 +35,6 @@ class RecipeMerger:
                 models_dir[i] = models_dir[i].absolute()
 
         self.__base_dirs = models_dir
-
         self.__default_device = default_device
         self.__default_dtype = default_dtype
         self.__tqdm = tqdm
