@@ -43,8 +43,7 @@ class RecipeMerger:
     def merge_and_save(
         self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
-        fallback_model: Optional[
-            Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
+        fallback_model: Optional[Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
         save_device: Optional[str] = "cpu",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
