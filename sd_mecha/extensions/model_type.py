@@ -10,7 +10,7 @@ from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.streaming import DTYPE_REVERSE_MAPPING, DTYPE_MAPPING, InSafetensorsDict
 from torch._subclasses.fake_tensor import FakeTensorMode
-from typing import Mapping, Optional, Iterable, Protocol
+from typing import Mapping, Optional, Iterable, Protocol, Tuple
 
 
 class ModelTypeCallback(Protocol):
@@ -25,6 +25,8 @@ class ModelType:
     identifier: str
     merge_space: MergeSpace
     needs_header_conversion: bool
+    strict_suffixes: bool
+    key_suffixes: Optional[Tuple[str]]
     location: str
 
     def get_tensor(self, sd_path: pathlib.Path | str, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
@@ -54,10 +56,18 @@ class ModelType:
                 return torch.empty(shape, dtype=dtype)
 
             with FakeTensorMode():
+                if self.strict_suffixes:
+                    for sd_key in state_dict:
+                        if not sd_key.endswith(self.key_suffixes):
+                            raise RuntimeError(
+                                f"cannot load a non-{self.identifier} network using the {self.identifier} model type. ({sd_path})\n" +
+                                f"found key not matching allowed suffixes {self.key_suffixes}: {sd_key}"
+                            )
+
                 fake_state_dict = {
                     k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
                     for k, h in state_dict.header.items()
-                    if k != "__metadata__"
+                    if k != "__metadata__" and (self.strict_suffixes or self.key_suffixes is None or k.endswith(self.key_suffixes))
                 }
                 converted_state_dict = {}
                 for k in model_arch.keys:
@@ -77,6 +87,8 @@ def register_model_type(
     identifier: Optional[str] = None,
     model_archs: str | Iterable[str] = ("__default__",),
     needs_header_conversion: bool = True,
+    strict_suffixes: bool = False,
+    key_suffixes: Optional[Iterable[str]] = None,
 ):
     stack_frame = traceback.extract_stack(None, 2)[0]
     partial = functools.partial(
@@ -85,6 +97,8 @@ def register_model_type(
         merge_space=merge_space,
         model_archs=model_archs,
         needs_header_conversion=needs_header_conversion,
+        strict_suffixes=strict_suffixes,
+        key_suffixes=key_suffixes,
         stack_frame=stack_frame,
     )
     return partial
@@ -97,6 +111,8 @@ def __register_model_type_impl(
     merge_space: MergeSpace,
     model_archs: str | Iterable[str],
     needs_header_conversion: bool,
+    strict_suffixes: bool,
+    key_suffixes: Optional[Iterable[str]],
     stack_frame: traceback.FrameSummary,
 ):
     if identifier is None:
@@ -107,6 +123,9 @@ def __register_model_type_impl(
 
     if not model_archs:
         raise ValueError(f"cannot register model type '{identifier}' without an architecture")
+
+    if key_suffixes is not None:
+        key_suffixes = tuple(key_suffixes)
 
     model_archs = [
         extensions.model_arch.resolve(model_arch).identifier
@@ -122,7 +141,7 @@ def __register_model_type_impl(
     if identifier not in _model_types_registry:
         _model_types_registry[identifier] = {}
     for model_arch in model_archs:
-        _model_types_registry[identifier][model_arch] = ModelType(f, identifier, merge_space, needs_header_conversion, location)
+        _model_types_registry[identifier][model_arch] = ModelType(f, identifier, merge_space, needs_header_conversion, strict_suffixes, key_suffixes, location)
 
     return f
 

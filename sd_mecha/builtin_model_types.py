@@ -11,8 +11,8 @@ def base(state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Te
     return state_dict[key]
 
 
-@register_model_type(merge_space=MergeSpace.DELTA)
-def lora(state_dict: Mapping[str, torch.Tensor], key: str, sd_path: str, **kwargs) -> torch.Tensor:
+@register_model_type(merge_space=MergeSpace.DELTA, key_suffixes=[".lora_up.weight", ".lora_down.weight", ".alpha"], strict_suffixes=True)
+def lora(state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
     if key.endswith(".bias"):
         raise KeyError(key)
 
@@ -21,15 +21,15 @@ def lora(state_dict: Mapping[str, torch.Tensor], key: str, sd_path: str, **kwarg
     else:
         lora_key = SD1_MODEL_TO_LORA_KEYS[key]
 
-    return compose_lora_up_down(state_dict, lora_key, sd_path)
+    return compose_lora_up_down(state_dict, lora_key)
 
 
 with open(pathlib.Path(__file__).parent / "lora" / "sd1_ldm_to_lora.json", 'r') as f:
     SD1_MODEL_TO_LORA_KEYS = json.load(f)
 
 
-@register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl")
-def lora(state_dict: Mapping[str, torch.Tensor], key: str, sd_path: str, **kwargs) -> torch.Tensor:
+@register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl", key_suffixes=[".lora_up.weight", ".lora_down.weight", ".alpha"], strict_suffixes=True)
+def lora(state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
     if key.endswith((".bias", "_bias")):
         raise KeyError(key)
 
@@ -58,16 +58,12 @@ def lora(state_dict: Mapping[str, torch.Tensor], key: str, sd_path: str, **kwarg
                 for k in lora_keys
             ])
 
-        return compose_lora_up_down(state_dict, lora_key, sd_path)
+        return compose_lora_up_down(state_dict, lora_key)
     else:
         raise KeyError(key)
 
 
-def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str, sd_path: str = None):
-    for sd_key in state_dict:
-        if not sd_key.endswith((".lora_up.weight", ".lora_down.weight", ".alpha")):
-            raise RuntimeError(f"cannot load a non-lora network using the lora model type. ({sd_path})")
-
+def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
     up_weight = state_dict[f"{key}.lora_up.weight"].to(torch.float64)
     down_weight = state_dict[f"{key}.lora_down.weight"].to(torch.float64)
     alpha = state_dict[f"{key}.alpha"].to(torch.float64)
