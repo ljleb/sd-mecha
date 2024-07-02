@@ -7,12 +7,12 @@ from typing import Mapping
 
 
 @register_model_type(merge_space=MergeSpace.BASE, needs_header_conversion=False)
-def base(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+def base(state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
     return state_dict[key]
 
 
-@register_model_type(merge_space=MergeSpace.DELTA)
-def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+@register_model_type(merge_space=MergeSpace.DELTA, key_suffixes=[".lora_up.weight", ".lora_down.weight", ".alpha"], strict_suffixes=True)
+def lora(state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
     if key.endswith(".bias"):
         raise KeyError(key)
 
@@ -28,8 +28,8 @@ with open(pathlib.Path(__file__).parent / "lora" / "sd1_ldm_to_lora.json", 'r') 
     SD1_MODEL_TO_LORA_KEYS = json.load(f)
 
 
-@register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl")
-def lora(state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
+@register_model_type(merge_space=MergeSpace.DELTA, model_archs="sdxl", key_suffixes=[".lora_up.weight", ".lora_down.weight", ".alpha"], strict_suffixes=True)
+def lora(state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
     if key.endswith((".bias", "_bias")):
         raise KeyError(key)
 
