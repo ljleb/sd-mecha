@@ -55,19 +55,22 @@ class ModelType:
             def _create_fake_tensor(*shape, dtype):
                 return torch.empty(shape, dtype=dtype)
 
-            with FakeTensorMode():
-                if self.strict_suffixes:
-                    for sd_key in state_dict:
-                        if not sd_key.endswith(self.key_suffixes):
-                            raise RuntimeError(
-                                f"cannot load a non-{self.identifier} network using the {self.identifier} model type. ({sd_path})\n" +
-                                f"found key not matching allowed suffixes {self.key_suffixes}: {sd_key}"
-                            )
+            if self.strict_suffixes:
+                for sd_key in state_dict:
+                    if sd_key == "__metadata__":
+                        continue
 
+                    if not sd_key.endswith(self.key_suffixes):
+                        raise RuntimeError(
+                            f"cannot load a non-{self.identifier} network using the {self.identifier} model type. ({sd_path})\n" +
+                            f"found key not matching allowed suffixes {self.key_suffixes}: {sd_key}"
+                        )
+
+            with FakeTensorMode():
                 fake_state_dict = {
                     k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
                     for k, h in state_dict.header.items()
-                    if k != "__metadata__" and (self.strict_suffixes or self.key_suffixes is None or k.endswith(self.key_suffixes))
+                    if k != "__metadata__" and (self.key_suffixes is None or k.endswith(self.key_suffixes))
                 }
                 converted_state_dict = {}
                 for k in model_arch.keys:
