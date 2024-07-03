@@ -445,7 +445,7 @@ def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
 
 
-def lora(state_dict: str | pathlib.Path, model_arch: str = "sd1"):
+def lora(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1"):
     return recipe_nodes.ModelRecipeNode(state_dict, model_arch, "lora")
 
 
