@@ -42,15 +42,8 @@ def serialize_and_save(
 
 weighted_sum = merge_methods.weighted_sum
 slerp = merge_methods.slerp
+n_average = merge_methods.n_average
 
-# Same as dropout. Cannot use directly.
-def n_average(
-    *models: RecipeNodeOrPath,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
-) -> recipe_nodes.RecipeNode:
-    res = merge_methods.n_average(*models, device=device, dtype=dtype)
-    return res
 
 def add_difference(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,

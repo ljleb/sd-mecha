@@ -29,6 +29,6 @@ _expected = torch.tensor([
     [ 3.0000,  0.3333, -0.3333,  0.3333]
 ])
 
-avg = sd_mecha.merge_methods.n_average.__wrapped__(*_models)
+avg = sd_mecha.n_average.__wrapped__(*_models)
 
 assert torch.allclose(avg, _expected, atol=0.0001)
