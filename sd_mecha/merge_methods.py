@@ -705,6 +705,7 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     )
     return np.concatenate([[p], pmf * (1 - p)])
 
+
 def binomial_coefficient_np(n, k):
     if k > n - k:
         k = n - k
@@ -712,6 +713,7 @@ def binomial_coefficient_np(n, k):
     for i in range(1, k+1):
         result = result * (n - i + 1) // i
     return result
+
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
 # https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
@@ -732,6 +734,7 @@ def model_stock_for_tensor(
     # return w_h. Notice that w_0 is 0 here.
     return torch.nan_to_num(t * w_avg)
 
+
 # The guess from mergekit: Average of cos(theta). Expected value is 0, somehow match with paper.
 # However this may be very unstable, and the range is still -1 to 1.
 def get_model_stock_t(deltas, cos_eps):
@@ -751,6 +754,7 @@ def get_model_stock_t(deltas, cos_eps):
 
     return t
 
+
 # This becomes a wrapper since I want TIES use GM also.
 @convert_to_recipe
 def geometric_median(
@@ -759,8 +763,9 @@ def geometric_median(
     maxiter: Hyper = 100, 
     ftol: Hyper = 1e-20,
     **kwargs,
-)-> Tensor | SameMergeSpace:
+) -> Tensor | SameMergeSpace:
     return geometric_median_list_of_array(models, eps, maxiter, ftol)
+
 
 # Original sourcecode: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
 # Changed to "List comprehension" and rely on torch API only. It is now fully parallel.
@@ -788,12 +793,15 @@ def geometric_median_list_of_array(models, eps, maxiter, ftol):
         
     return weighted_average(models, new_weights)
 
+
 def weighted_average(points, weights):
     # weighted_average_component is not even required.
     return torch.sum(torch.stack([p * weights[i] for i, p in enumerate(points)]), dim=0) / weights.sum()
 
+
 def geometric_median_objective(median, points, weights):
     return torch.mean(torch.stack([l2distance(point, median) for point in points]) * weights)
+
 
 def l2distance(p1, p2):
     return torch.dist(p1, p2, p=2)
