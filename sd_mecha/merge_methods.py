@@ -25,6 +25,14 @@ def weighted_sum(
 ) -> Tensor | SameMergeSpace:
     return (1 - alpha) * a + alpha * b
 
+# Isotropic merge / Uniform Soup / Uniform Merge... you name it.
+# Instead of running average, this may run faster. 
+@convert_to_recipe
+def n_average(
+    *models: Tensor | SameMergeSpace,
+    **kwargs,
+) -> Tensor | SameMergeSpace:
+    return torch.mean(torch.stack(models), dim=0)
 
 @convert_to_recipe
 def slerp(
@@ -130,21 +138,66 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
     return weighted_sum.__wrapped__(a, b, alpha=k)
 
 
+# Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
+# Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
+@convert_to_recipe
+def ties_sum_extended(  # aka add_difference_ties
+    *models: Tensor | LiftFlag[MergeSpace.DELTA],
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
+
+    if apply_median <= 0.0:
+        # Model Stock
+        t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
+
+        filtered_delta = filtered_delta.sum(dim=0)
+
+        # $$ \tau_m $$
+        return torch.nan_to_num(filtered_delta * t / param_counts)   
+    else:
+        # $$ \tau_m $$, but in geometric median instead of arithmetic mean. Considered to replace model stock.
+        filtered_delta = geometric_median_list_of_array(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
+        
+        return torch.nan_to_num(filtered_delta)
+
+
 # latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
 # - `delta`: $$ \hat{\tau}_t $$
 # - `signs`: $$ \gamma_t $$
-# - `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$
 # - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
 # - `param_counts`: $$ |A^p| $$
-# - `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
+# - `filtered_delta`: $$ \Sigma_{t\in{A^p}} \hat{\tau}_t^p $$
 # - `return`: $$ \lambda * \tau_m $$
+# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
     k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
+    # $$ \tau_m $$
+    return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts)
+
+
+def ties_sum_deltas(
+    *models: Tensor,
+    k: float = 0.2,
+    vote_sgn: float = 0.0,
+):
     # Step 1: Trim redundant parameters
 
     # $$ \hat{\tau}_t $$ O(N) in space
@@ -157,11 +210,12 @@ def ties_sum(  # aka add_difference_ties
 
     # Step 2: Elect Final Signs.
 
-    # $$ \gamma_t $$ 
+    # $$ \gamma_t $$
     signs = torch.sign(deltas)
 
-    # $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$
-    final_sign = torch.sign(torch.sum(deltas, dim=0)) 
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
+    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0))
 
     # Step 3: Disjoint merge.
 
@@ -171,11 +225,11 @@ def ties_sum(  # aka add_difference_ties
     # $$ |A^p| $$
     param_counts = torch.sum(delta_filters, dim=0)
 
-    # $$ \sum_{t\in{A^P}} \hat{\tau}_t^p $$
-    filtered_delta = (deltas * delta_filters).sum(dim=0)
+    # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
+    # (note that the sum is not performed here directly)
+    filtered_delta = deltas * delta_filters
 
-    # $$ \tau_m $$
-    return torch.nan_to_num(filtered_delta / param_counts)
+    return filtered_delta, param_counts
 
 
 def filter_top_k(a: Tensor, k: float):
@@ -614,6 +668,49 @@ def dropout(  # aka n-supermario
     return final_delta / masks.sum(0).clamp(1) / (1 - probability)
 
 
+# Part of TIES w/ DARE
+# Hyperparameters defauled to values proposed to paper.
+# Special mode "DROP" has been implemented by setting `no_rescale` > 0.0
+# - `return`: $$ \hat{\delta}^t = \tilde{\delta}^t $$
+@convert_to_recipe
+def ties_sum_with_dropout(
+    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    probability: Hyper = 0.9,    
+    no_rescale: Hyper = 0.0,
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper =1e-20,
+    seed: Hyper = None,
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    # Set seed
+    torch.manual_seed(seed)
+
+    # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
+    # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$
+    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability)) for delta in deltas]
+
+    # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
+    deltas = ties_sum_extended.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
+
+    if probability == 1.0:
+        # Corner case
+        return deltas * 0.0
+    elif no_rescale <= 0.0:
+        # Rescale
+        # $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
+        return deltas / (1.0 - probability) 
+    else:
+        # No rescale
+        # $$ \hat{\delta}^t = \tilde{\delta}^t $$
+        return deltas
+
+
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, round(overlap)):
         if round(overlap) % 2 == 0:
@@ -653,3 +750,95 @@ def binomial_coefficient_np(n, k):
     for i in range(1, k+1):
         result = result * (n - i + 1) // i
     return result
+
+
+# Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
+# https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
+# I will break the functions to be retrivible for other algos like TIES.
+@convert_to_recipe
+def model_stock_for_tensor(
+    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    cos_eps: Hyper = 1e-6,    
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+
+    # This is obvious.
+    w_avg = n_average.__wrapped__(*deltas)
+
+    # t can get inf so handle with care
+    t = get_model_stock_t(deltas, cos_eps)
+
+    # return w_h. Notice that w_0 is 0 here.
+    return torch.nan_to_num(t * w_avg)
+
+
+# The guess from mergekit: Average of cos(theta). Expected value is 0, somehow match with paper.
+# However this may be very unstable, and the range is still -1 to 1.
+def get_model_stock_t(deltas, cos_eps):
+    n = len(deltas)
+
+    # Generator function. Default eps from torch API doc.
+    cos = torch.nn.CosineSimilarity(dim=-1, eps=cos_eps)
+
+    # One-liner is all you need. I may make it in running average if it really memory hungry.
+    cos_thetas = [cos(deltas[i], deltas[i + 1]) for i, _ in enumerate(deltas) if (i + 1) < n]
+    
+    # Still a vector.
+    cos_theta = torch.stack(cos_thetas).mean(dim=0)
+
+    # Convert to column vector for multiplication.
+    t = (n * cos_theta / (1 + (n - 1) * cos_theta)).unsqueeze(-1)
+
+    return t
+
+
+# This becomes a wrapper since I want TIES use GM also.
+@convert_to_recipe
+def geometric_median(
+    *models: Tensor | SameMergeSpace,
+    eps: Hyper = 1e-6,    
+    maxiter: Hyper = 100, 
+    ftol: Hyper = 1e-20,
+    **kwargs,
+) -> Tensor | SameMergeSpace:
+    return geometric_median_list_of_array(models, eps, maxiter, ftol)
+
+
+# Original sourcecode: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
+# Changed to "List comprehension" and rely on torch API only. It is now fully parallel.
+def geometric_median_list_of_array(models, eps, maxiter, ftol):
+    # I think it is impossible to pass this from user space so I hardcode this instead.
+    # Meanwhile I rename "points" as "models"
+    # no_grad part is rare case: Merge algorithm under GPU is never heard.
+    weights = torch.ones(len(models), device=models[0].device)
+
+    # initialize median estimate at mean
+    median = weighted_average(models, weights)
+    new_weights = weights
+    objective_value = geometric_median_objective(median, models, weights)
+
+    # Weiszfeld iterations
+    for _ in range(maxiter):
+        prev_obj_value = objective_value
+        denom = torch.stack([l2distance(p, median) for p in models])
+        new_weights = weights / torch.clamp(denom, min=eps) 
+        median = weighted_average(models, new_weights)
+
+        objective_value = geometric_median_objective(median, models, weights)
+        if abs(prev_obj_value - objective_value) <= ftol * objective_value:
+            break
+        
+    return weighted_average(models, new_weights)
+
+
+def weighted_average(points, weights):
+    # weighted_average_component is not even required.
+    return torch.sum(torch.stack([p * weights[i] for i, p in enumerate(points)]), dim=0) / weights.sum()
+
+
+def geometric_median_objective(median, points, weights):
+    return torch.mean(torch.stack([l2distance(point, median) for point in points]) * weights)
+
+
+def l2distance(p1, p2):
+    return torch.dist(p1, p2, p=2)
