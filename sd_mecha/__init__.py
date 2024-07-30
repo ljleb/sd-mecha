@@ -207,7 +207,7 @@ def add_difference_ties_extended(
     ftol: Hyper =1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
-):
+) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
     base = path_to_node(base)
     models = tuple(path_to_node(model) for model in models)
