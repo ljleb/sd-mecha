@@ -274,7 +274,7 @@ def train_difference(
     alpha: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    mask = 1.8 * torch.nan_to_num(torch.abs(b - a) / (torch.abs(b - a) + torch.abs(b - c)), nan=0)
+    mask = 1.8 * torch.nan_to_num((b - a).abs() / ((b - a).abs() + (b - c).abs()), nan=0)
     return a + (b - c) * alpha * mask
 
 
@@ -287,8 +287,7 @@ def add_opposite(
     alpha: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    threshold = torch.maximum(torch.abs(a - c), torch.abs(b - c))
-    mask = 1 - torch.nan_to_num((a - c) * (b - c) / threshold**2, nan=0)
+    mask = 2 * torch.nan_to_num((a - b).abs() / ((a - b).abs() + (a + b - 2*c).abs()), nan=0)
     return a + (b - c) * alpha * mask
 
 
@@ -314,7 +313,9 @@ def select_max_delta(
     alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    return torch.where((1 - alpha) * a.abs() >= alpha * b.abs(), a, b)
+    a_abs = (a / a.std()).abs()
+    b_abs = (b / b.std()).abs()
+    return torch.where((1 - alpha) * a_abs >= alpha * b_abs, a, b)
 
 
 @convert_to_recipe
