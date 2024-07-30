@@ -138,20 +138,10 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
     return weighted_sum.__wrapped__(a, b, alpha=k)
 
 
-# latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
-# - `delta`: $$ \hat{\tau}_t $$
-# - `signs`: $$ \gamma_t $$
-# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$
-# - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
-# - `param_counts`: $$ |A^p| $$
-# - `filtered_delta`: $$ \Sigma_{t\in{A^p}} \hat{\tau}_t^p $$
-# - `return`: $$ \lambda * \tau_m $$
-# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
-# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
 # Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 # Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
 @convert_to_recipe
-def ties_sum(  # aka add_difference_ties
+def ties_sum_extended(  # aka add_difference_ties
     *models: Tensor | LiftFlag[MergeSpace.DELTA],
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
@@ -163,36 +153,7 @@ def ties_sum(  # aka add_difference_ties
     ftol: Hyper =1e-20,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-
-    # Step 1: Trim redundant parameters
-
-    # $$ \hat{\tau}_t $$ O(N) in space
-    deltas = [
-        # $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
-        filter_top_k(m, k)
-        for m in models
-    ]
-    deltas = torch.stack(deltas, dim=0)
-
-    # Step 2: Elect Final Signs.
-
-    # $$ \gamma_t $$ 
-    signs = torch.sign(deltas)
-
-    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
-    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
-    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0)) 
-
-    # Step 3: Disjoint merge.
-
-    # $$ \{ \gamma_t^p = \gamma_m^p \} $$
-    delta_filters = (signs == final_sign).float()
-
-    # $$ |A^p| $$
-    param_counts = torch.sum(delta_filters, dim=0)
-
-    # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
-    filtered_delta = (deltas * delta_filters)
+    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
     if apply_median <= 0.0:
         # Model Stock
@@ -207,6 +168,68 @@ def ties_sum(  # aka add_difference_ties
         filtered_delta = geometric_median_list_of_array(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
         
         return torch.nan_to_num(filtered_delta)
+
+
+# latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
+# - `delta`: $$ \hat{\tau}_t $$
+# - `signs`: $$ \gamma_t $$
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$
+# - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
+# - `param_counts`: $$ |A^p| $$
+# - `filtered_delta`: $$ \Sigma_{t\in{A^p}} \hat{\tau}_t^p $$
+# - `return`: $$ \lambda * \tau_m $$
+# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
+@convert_to_recipe
+def ties_sum(  # aka add_difference_ties
+    *models: Tensor | LiftFlag[MergeSpace.DELTA],
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    **kwargs,
+) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
+
+    # $$ \tau_m $$
+    return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts)
+
+
+def ties_sum_deltas(
+    *models: Tensor,
+    k: float = 0.2,
+    vote_sgn: float = 0.0,
+):
+    # Step 1: Trim redundant parameters
+
+    # $$ \hat{\tau}_t $$ O(N) in space
+    deltas = [
+        # $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
+        filter_top_k(m, k)
+        for m in models
+    ]
+    deltas = torch.stack(deltas, dim=0)
+
+    # Step 2: Elect Final Signs.
+
+    # $$ \gamma_t $$
+    signs = torch.sign(deltas)
+
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
+    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0))
+
+    # Step 3: Disjoint merge.
+
+    # $$ \{ \gamma_t^p = \gamma_m^p \} $$
+    delta_filters = (signs == final_sign).float()
+
+    # $$ |A^p| $$
+    param_counts = torch.sum(delta_filters, dim=0)
+
+    # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
+    # (note that the sum is not performed here directly)
+    filtered_delta = deltas * delta_filters
+
+    return filtered_delta, param_counts
 
 
 def filter_top_k(a: Tensor, k: float):
@@ -607,6 +630,7 @@ def dropout(  # aka n-supermario
         final_delta[mask] += delta[mask]
     return final_delta / masks.sum(0).clamp(1) / (1 - probability)
 
+
 # Part of TIES w/ DARE
 # Hyperparameters defauled to values proposed to paper.
 # Special mode "DROP" has been implemented by setting `no_rescale` > 0.0
@@ -635,7 +659,7 @@ def ties_sum_with_dropout(
     deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability)) for delta in deltas]
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
-    deltas = ties_sum.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
+    deltas = ties_sum_extended.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
 
     if probability == 1.0:
         # Corner case
@@ -648,6 +672,7 @@ def ties_sum_with_dropout(
         # No rescale
         # $$ \hat{\delta}^t = \tilde{\delta}^t $$
         return deltas
+
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, round(overlap)):

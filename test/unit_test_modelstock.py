@@ -62,14 +62,14 @@ _expected3 = torch.tensor([
 
 #Visual inspect if dropout really happens
 
-_stock_only = sd_mecha.model_stock_for_tensor.__wrapped__(*_models, cos_eps = _cos_eps)
+_stock_only = sd_mecha.model_stock_for_tensor.__wrapped__(*_models, cos_eps=_cos_eps)
 #print(_stock_only)
-assert torch.allclose(_stock_only, _expected1, atol = 0.0001)
+assert torch.allclose(_stock_only, _expected1, atol=0.0001)
 
 _with_dare = sd_mecha.ties_sum_with_dropout.__wrapped__(*_models, probability=_probability, no_rescale=_no_rescale, k=_k, vote_sgn=_use_signs, seed=_seed, apply_stock = _apply_stock, cos_eps = _cos_eps)
 #print(_with_dare)
-assert torch.allclose(_with_dare, _expected2, atol = 0.0001)
+assert torch.allclose(_with_dare, _expected2, atol=0.0001)
 
 _dare_only = sd_mecha.ties_sum_with_dropout.__wrapped__(*_models, probability=_probability, no_rescale=_no_rescale, k=_k, vote_sgn=_use_signs, seed=_seed, apply_stock = _no_stock, cos_eps = _cos_eps)
 #print(_dare_only)
-assert torch.allclose(_dare_only, _expected3, atol = 0.0001)
+assert torch.allclose(_dare_only, _expected3, atol=0.0001)

@@ -140,6 +140,7 @@ train_difference = merge_methods.train_difference
 cosine_add_a = merge_methods.add_cosine_a
 cosine_add_b = merge_methods.add_cosine_b
 ties_sum = merge_methods.ties_sum
+ties_sum_extended = merge_methods.ties_sum_extended
 
 
 # latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
@@ -157,13 +158,6 @@ def add_difference_ties(
     *models: RecipeNodeOrPath,
     alpha: Hyper,
     k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    apply_stock: Hyper = 0.0,
-    cos_eps: Hyper = 1e-6,
-    apply_median: Hyper = 0.0,
-    eps: Hyper = 1e-6,    
-    maxiter: Hyper = 100, 
-    ftol: Hyper =1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -184,12 +178,59 @@ def add_difference_ties(
     res = ties_sum(
         *models,
         k=k,
+        device=device,
+        dtype=dtype,
+    )
+
+    # Obtain merged checkpoint
+
+    # $$ \theta_{init} + \lambda * \tau_m $$
+    return add_difference(
+        base, res,
+        alpha=alpha,
+        device=device,
+        dtype=dtype,
+    )
+
+
+def add_difference_ties_extended(
+    base: RecipeNodeOrPath,
+    *models: RecipeNodeOrPath,
+    alpha: Hyper,
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,
+    maxiter: Hyper = 100,
+    ftol: Hyper =1e-20,
+    device: Optional[str] = None,
+    dtype: Optional[torch.dtype] = None,
+):
+    # $$ \{\theta_{init}\}_{t=1}^n $$
+    base = path_to_node(base)
+    models = tuple(path_to_node(model) for model in models)
+
+    # Create task vectors.
+    # $$ \tau_t $$
+    models = tuple(
+        subtract(model, base)
+        if model.merge_space is MergeSpace.BASE else
+        model
+        for model in models
+    )
+
+    # step 1 + step 2 + step 3
+    res = ties_sum_extended(
+        *models,
+        k=k,
         vote_sgn=vote_sgn,
         apply_stock=apply_stock,
         cos_eps=cos_eps,
         apply_median=apply_median,
-        eps=eps,    
-        maxiter=maxiter, 
+        eps=eps,
+        maxiter=maxiter,
         ftol=ftol,
         device=device,
         dtype=dtype,
@@ -204,6 +245,7 @@ def add_difference_ties(
         device=device,
         dtype=dtype,
     )
+
 
 
 def copy_region(
@@ -322,7 +364,9 @@ def dropout(
     ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
     return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
+
 ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
+
 
 # latex notes in reference to original implementation: https://arxiv.org/abs/2311.03099
 # Notice that this is "TIES Merging w/ DARE", which is "Prune > Merge (TIES) > Rescale"
@@ -385,7 +429,9 @@ def ties_with_dare(
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return sd_mecha.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
 
+
 model_stock_for_tensor = merge_methods.model_stock_for_tensor
+
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
 # https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
