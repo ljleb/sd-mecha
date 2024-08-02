@@ -7,6 +7,7 @@ from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
 from sd_mecha.hypers import Hyper
+from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.merge_method import LiftFlag, convert_to_recipe
 
@@ -25,14 +26,14 @@ def weighted_sum(
 ) -> Tensor | SameMergeSpace:
     return (1 - alpha) * a + alpha * b
 
-# Isotropic merge / Uniform Soup / Uniform Merge... you name it.
-# Instead of running average, this may run faster. 
+
 @convert_to_recipe
 def n_average(
     *models: Tensor | SameMergeSpace,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     return torch.mean(torch.stack(models), dim=0)
+
 
 @convert_to_recipe
 def slerp(
@@ -564,54 +565,6 @@ def rotate(
     a_neurons @= transform
     a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
     return a_neurons.reshape_as(a)
-
-
-def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
-    svd_driver = "gesvd" if a.is_cuda else None
-    u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
-
-    if cancel_reflection:
-        u[:, -1] /= torch.det(u) * torch.det(v_t)
-
-    transform = u @ v_t
-    if not torch.isfinite(u).all():
-        raise ValueError(
-            f"determinant error: {torch.det(transform)}. "
-            'This can happen when merging on the CPU with the "rotate" method. '
-            "Consider merging on a cuda device, "
-            "or try setting alpha to 1 for the problematic blocks. "
-            "See this related discussion for more info: "
-            "https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"
-        )
-
-    return transform
-
-
-def fractional_matrix_power(matrix: Tensor, power: float, cache: Optional[Dict[str, Tensor]] = None):
-    if cache is not None and "eigenvalues" in cache:
-        complex_dtype = torch_complex_dtype_map[matrix.dtype]
-        eigenvalues = cache["eigenvalues"].to(matrix.device, complex_dtype)
-        eigenvectors = cache["eigenvectors"].to(matrix.device, complex_dtype)
-        eigenvectors_inv = cache["eigenvectors_inv"].to(matrix.device, complex_dtype)
-    else:
-        eigenvalues, eigenvectors = torch.linalg.eig(matrix)
-        eigenvectors_inv = torch.linalg.inv(eigenvectors)
-        if cache is not None:
-            cache["eigenvalues"] = eigenvalues.to("cpu", torch.complex32)
-            cache["eigenvectors"] = eigenvectors.to("cpu", torch.complex32)
-            cache["eigenvectors_inv"] = eigenvectors_inv.to("cpu", torch.complex32)
-
-    eigenvalues.pow_(power)
-    result = eigenvectors @ torch.diag(eigenvalues) @ eigenvectors_inv
-    return result.real.to(dtype=matrix.dtype)
-
-
-torch_complex_dtype_map = {
-    torch.bfloat16: torch.complex32,
-    torch.float16: torch.complex32,
-    torch.float32: torch.complex64,
-    torch.float64: torch.complex128,
-}
 
 
 @convert_to_recipe

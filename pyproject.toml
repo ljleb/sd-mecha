@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sd-mecha"
-version = "0.0.22"
+version = "0.0.23"
 description = "State dict recipe merger"
 readme = "README.md"
 authors = [{ name = "ljleb" }]
@@ -27,6 +27,7 @@ dependencies = [
 [tool.setuptools]
 packages = [
     "sd_mecha",
+    "sd_mecha.merge_methods",
     "sd_mecha.extensions",
     "sd_mecha.lora",
     "sd_mecha.models",

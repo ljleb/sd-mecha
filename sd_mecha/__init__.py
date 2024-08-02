@@ -240,7 +240,6 @@ def add_difference_ties_extended(
     )
 
 
-
 def copy_region(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
     width: Hyper = 1.0,
@@ -293,8 +292,8 @@ crossover = merge_methods.crossover
 
 def rotate(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
-    alpha: Hyper = 1.0,
-    beta: Hyper = 0.0,
+    alignment: Hyper = 1.0,
+    alpha: Hyper = 0.0,
     device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = None,
     cache: Optional[Dict[str, torch.Tensor]] = None,
@@ -318,8 +317,8 @@ def rotate(
 
     res = merge_methods.rotate(
         a, b,
-        alignment=alpha,
-        alpha=beta,
+        alignment=alignment,
+        alpha=alpha,
         cache=cache,
         device=device,
         dtype=dtype,
