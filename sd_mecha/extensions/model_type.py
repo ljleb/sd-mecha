@@ -32,7 +32,7 @@ class ModelType:
     def get_tensor(self, sd_path: pathlib.Path | str, state_dict: Mapping[str, torch.Tensor], key: str) -> torch.Tensor:
         return self.__f(state_dict, key, sd_path=sd_path)
 
-    def convert_header(self, sd_path: pathlib.Path | str, state_dict: InSafetensorsDict | Mapping[str, torch.Tensor], model_arch: ModelArch):
+    def convert_header(self, sd_path: pathlib.Path | str, state_dict: Mapping[str, torch.Tensor], model_arch: ModelArch):
         def _create_header(fake_state_dict):
             data_offsets = 0
             return {

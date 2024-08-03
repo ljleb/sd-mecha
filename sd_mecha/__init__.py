@@ -10,7 +10,7 @@ from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.recipe_nodes import MergeSpace
-from sd_mecha.hypers import Hyper, classes, blocks, default
+from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 
 

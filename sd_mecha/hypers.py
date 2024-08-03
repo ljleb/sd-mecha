@@ -12,11 +12,11 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
     if isinstance(hyper, (float, int)):
         return hyper
     elif isinstance(hyper, dict):
-        hyper_ids = model_arch.classes[key] | model_arch.blocks[key]
+        block_keys = model_arch.blocks[key]
         result = 0.0
         total = 0
-        for hyper_id in hyper_ids:
-            value = hyper.get(hyper_id)
+        for block_key in block_keys:
+            value = hyper.get(block_key)
             if value is not None:
                 result += value
                 total += 1
@@ -24,9 +24,9 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
         if total > 0:
             return result / total
 
-        for hyper_id in hyper_ids:
+        for block_key in block_keys:
             for component in model_arch.components:
-                if f"_{component}_" not in hyper_id:
+                if f"_{component}_" not in block_key:
                     continue
 
                 try:
@@ -59,7 +59,7 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: boo
     """
     Generate block hyperparameters for a model version.
     Either positional arguments or keyword arguments can be used, but not both at the same time.
-    If positional blocks are used, they must all be specified.
+    If positional blocks are used, they must all be specified, unless strict=False.
     The CLI has a command to help determine the names of the blocks without guessing:
 
     ```
@@ -70,7 +70,7 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: boo
 
     :param model_arch: the architecture of the model for which to generate block hyperparameters
     :param model_component: the model component for which the block-wise hyperparameters are intended for (i.e. "unet", "txt", "txt2", etc.)
-    :param strict: if blocks are passed through *args, determines whether the number of blocks must match exactly the maximum number of blocks for the selected model component
+    :param strict: if blocks are passed to *args, determines whether the number of blocks must match exactly the maximum number of blocks for the selected model component
     :param args: positional block hyperparameters
     :param kwargs: keyword block hyperparameters
     :return: block-wise hyperparameters
@@ -98,31 +98,6 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: boo
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
-
-
-def classes(model_arch: str | ModelArch, model_component: str, **kwargs) -> Hyper:
-    """
-    Generate class hyperparameters for a model version.
-    The CLI has a command to help determine the names of the classes for a given model version without guessing:
-
-    ```
-    python -m sd_mecha info <model_arch>
-    ```
-
-    where `<model_arch>` is the version identifier of the model used. (i.e. "sd1", "sdxl", etc.)
-
-    :param model_arch: the architecture of the model for which to generate class hyperparameters
-    :param model_component: the model component for which the class-wise hyperparameters are intended for (i.e. "unet", "txt", "txt2", etc.)
-    :param kwargs: class hyperparameters by name
-    :return: class-wise hyperparameters
-    """
-    if isinstance(model_arch, str):
-        model_arch = extensions.model_arch.resolve(model_arch)
-
-    return {
-        model_arch.identifier + "_" + model_component + "_class_" + k: v
-        for k, v in kwargs.items()
-    }
 
 
 def default(model_arch: str | ModelArch, model_components: Optional[str | List[str]] = None, value: int | float = 0) -> Hyper:

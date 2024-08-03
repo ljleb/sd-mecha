@@ -4,12 +4,13 @@ from typing import Optional, Tuple, Dict
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
-    svd_driver = "gesvd" if a.is_cuda else None
     if a.shape[0] + 10 < a.shape[1]:
+        svd_driver = "gesvdj" if a.is_cuda else None
         u, _, v = torch_svd_lowrank(a.T @ b, driver=svd_driver, q=a.shape[0] + 10)
         v_t = v.T
         del v
     else:
+        svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
 
     if cancel_reflection:
