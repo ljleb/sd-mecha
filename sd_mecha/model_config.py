@@ -6,8 +6,7 @@ import torch
 from typing import Iterable, Dict, List, Mapping, Callable, Tuple, Optional
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import get_hyper
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, MergeRecipeNode, DepthRecipeVisitor, RecipeVisitor
-from sd_mecha.streaming import InSafetensorsDict
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, MergeRecipeNode, ConvertRecipeNode, DepthRecipeVisitor, RecipeVisitor
 
 
 @dataclasses.dataclass
@@ -19,12 +18,12 @@ class ModelConfig:
     def __post_init__(self):
         self.__keys_to_forward = set(
             k for k in self.__minimal_dummy_header
-            if k in self.__model_arch.keys_to_forward
+            if k.startswith(self.__model_arch.passthrough_prefixes)
         )
         self.__keys_to_merge = set(
             k for k in self.__minimal_dummy_header
             if k not in self.__keys_to_forward
-            and k in self.__model_arch.keys_to_merge
+            and any(pattern.match(k) for pattern in self.__model_arch.blocks.values())
         )
         self.__minimal_dummy_header = {
             k: v
@@ -33,13 +32,13 @@ class ModelConfig:
         }
 
     def keys(self) -> Iterable[str]:
-        return self.get_minimal_dummy_header().keys()
+        return self.__minimal_dummy_header.keys()
 
     def get_keys_to_merge(self):
         return self.__keys_to_merge
 
     def get_shape(self, key: str) -> List[int]:
-        return self.get_minimal_dummy_header()[key]["shape"]
+        return self.__minimal_dummy_header[key]["shape"]
 
     def get_minimal_dummy_header(self) -> Dict[str, Dict[str, str | List[int]]]:
         return self.__minimal_dummy_header
@@ -48,13 +47,13 @@ class ModelConfig:
         return self.__input_paths
 
     def intersect(self, other):
-        if self.__model_arch is not other.__model_arch:
+        if self.__model_arch.identifier != other.__model_arch.identifier:
             self_paths = ', '.join(str(p) for p in self.__input_paths)
             other_paths = ', '.join(str(p) for p in other.__input_paths)
             raise ValueError(
                 "Found incompatible model architectures: "
-                f"{len(self.__input_paths)} {self.__model_arch} models ({self_paths}) and "
-                f"{len(other.__input_paths)} {other.__model_arch} models ({other_paths})"
+                f"{len(self.__input_paths)} {self.__model_arch.identifier} models ({self_paths}) and "
+                f"{len(other.__input_paths)} {other.__model_arch.identifier} models ({other_paths})"
             )
 
         return ModelConfig(
@@ -103,6 +102,9 @@ class DetermineConfigVisitor(RecipeVisitor):
         if configs:
             return functools.reduce(ModelConfig.intersect, configs)
         raise ValueError("No input models")
+
+    def visit_convert(self, node: ConvertRecipeNode) -> ModelConfig:
+        pass
 
 
 @dataclasses.dataclass
@@ -159,6 +161,9 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
     def visit_merge(self, node: MergeRecipeNode) -> torch.Tensor:
         pass
 
+    def visit_convert(self, node: ConvertRecipeNode) -> torch.Tensor:
+        pass
+
 
 @dataclasses.dataclass
 class KeyMergeVisitor(KeyVisitor):
@@ -169,7 +174,10 @@ class KeyMergeVisitor(KeyVisitor):
         try:
             return node.merge_method(
                 self.__visit_deeper_first(node.models, merged),
-                {k: get_hyper(v, self._key, node.model_arch) for k, v in node.hypers.items()} | node.volatile_hypers,
+                {
+                    k: get_hyper(v, self._key, node.model_arch, node.merge_method.get_default_hypers().get(k))
+                    for k, v in node.hypers.items()
+                } | node.volatile_hypers,
                 self._key,
                 node.device if node.device is not None else self._default_device,
                 node.dtype if node.dtype is not None else self._default_dtype,

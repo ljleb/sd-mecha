@@ -142,6 +142,33 @@ class MergeRecipeNode(RecipeNode):
             return False
 
 
+class ConvertRecipeNode(RecipeNode):
+    def __init__(
+        self,
+        model: RecipeNode,
+        out_model_arch: ModelArch | str,
+    ):
+        if isinstance(out_model_arch, str):
+            out_model_arch = extensions.model_arch.resolve(out_model_arch)
+
+        self.model = model
+        self.out_model_arch = out_model_arch
+
+    def accept(self, visitor, *args, **kwargs):
+        return visitor.visit_convert(self, *args, **kwargs)
+
+    @property
+    def merge_space(self) -> MergeSpace:
+        return self.model.merge_space
+
+    @property
+    def model_arch(self) -> Optional[ModelArch]:
+        return self.out_model_arch
+
+    def __contains__(self, item):
+        return item in self.model
+
+
 class RecipeVisitor(abc.ABC):
     @abc.abstractmethod
     def visit_model(self, node: ModelRecipeNode):
@@ -153,6 +180,10 @@ class RecipeVisitor(abc.ABC):
 
     @abc.abstractmethod
     def visit_merge(self, node: MergeRecipeNode):
+        pass
+
+    @abc.abstractmethod
+    def visit_convert(self, node: ConvertRecipeNode):
         pass
 
 
@@ -168,6 +199,9 @@ class DepthRecipeVisitor(RecipeVisitor):
             model.accept(self)
             for model in node.models
         ) + 1
+
+    def visit_convert(self, node: ConvertRecipeNode):
+        return node.model.accept(self)
 
 
 class ModelsCountVisitor(RecipeVisitor):
@@ -188,6 +222,9 @@ class ModelsCountVisitor(RecipeVisitor):
             for model in node.models
         )
 
+    def visit_convert(self, node: ConvertRecipeNode):
+        return node.model.accept(self)
+
 
 class ParameterResolverVisitor(RecipeVisitor):
     def __init__(self, arguments: Dict[str, RecipeNode]):
@@ -207,4 +244,10 @@ class ParameterResolverVisitor(RecipeVisitor):
             volatile_hypers=node.volatile_hypers,
             device=node.device,
             dtype=node.dtype,
+        )
+
+    def visit_convert(self, node: ConvertRecipeNode):
+        return ConvertRecipeNode(
+            node.convert_method,
+            node.model.accept(self)
         )

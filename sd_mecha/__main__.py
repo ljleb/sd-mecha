@@ -104,7 +104,8 @@ def compose(
     if output is None:
         output = pathlib.Path("merge.mecha")
 
-    base_recipe = deserialize(base_recipe)
+    base_recipe = deserialize_path(base_recipe)
+
     arguments = {
         k: deserialize_path(v, models_directory)
         for k, v in arguments

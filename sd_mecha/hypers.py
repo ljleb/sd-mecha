@@ -8,15 +8,17 @@ from sd_mecha.extensions.model_arch import ModelArch
 Hyper = int | float | Dict[str, int | float]
 
 
-def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
-    if isinstance(hyper, (float, int)):
+def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch, default_value: Optional[int | float]) -> int | float:
+    if isinstance(hyper, (int, float)):
         return hyper
     elif isinstance(hyper, dict):
-        block_keys = model_arch.blocks[key]
         result = 0.0
         total = 0
-        for block_key in block_keys:
-            value = hyper.get(block_key)
+        for block_id, pattern in model_arch.blocks.items():
+            if not pattern.match(key):
+                continue
+
+            value = hyper.get(block_id)
             if value is not None:
                 result += value
                 total += 1
@@ -24,17 +26,23 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch) -> int | float:
         if total > 0:
             return result / total
 
-        for block_key in block_keys:
+        for block_id, pattern in model_arch.blocks.items():
+            if not pattern.match(key):
+                continue
+
             for component in model_arch.components:
-                if f"_{component}_" not in block_key:
+                if not block_id.startswith(f"{model_arch.identifier}_{component}_"):
                     continue
 
                 try:
-                    return hyper[model_arch.identifier + "_" + component + "_default"]
+                    return hyper[f"{model_arch.identifier}_{component}_default"]
                 except KeyError:
                     continue
 
-        return 0
+        if default_value is not None:
+            return default_value
+
+        raise ValueError(f"Key {key} does not have a value")
     else:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
@@ -44,10 +52,10 @@ def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
         if model_arch is None:
             raise ValueError("Abstract recipes (with recipe parameters) cannot specify component-wise hyperparameters")
 
-        user_keys = model_arch.user_keys()
+        hyper_keys = model_arch.hyper_keys()
         for key in hyper.keys():
-            if key not in user_keys and not key.endswith("_default"):
-                suggestion = fuzzywuzzy.process.extractOne(key, user_keys)[0]
+            if key not in hyper_keys and not key.endswith("_default"):
+                suggestion = fuzzywuzzy.process.extractOne(key, hyper_keys)[0]
                 raise ValueError(f"Unsupported dictionary key '{key}'. Nearest match is '{suggestion}'")
     elif isinstance(hyper, (int, float)):
         return hyper
@@ -82,8 +90,8 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: boo
         raise ValueError("`args` and `kwargs` cannot be used at the same time. Either use positional or keyword arguments, but not both.")
     if args:
         identifiers = list(
-            k for k in model_arch.user_keys()
-            if "_" + model_component + "_block_" in k
+            k for k in model_arch.hyper_keys()
+            if k.startswith(f"{model_arch.identifier}_{model_component}_block_")
         )
         if strict and len(args) != len(identifiers):
             raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few (i.e. 'in0=1, out3=0.5, ...') or pass strict=False.")
@@ -91,7 +99,7 @@ def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: boo
         identifiers.sort(key=natural_sort_key)
         return dict(zip(identifiers, args))
     return {
-        model_arch.identifier + "_" + model_component + "_block_" + k: v
+        f"{model_arch.identifier}_{model_component}_block_{k}": v
         for k, v in kwargs.items()
     }
 
@@ -110,6 +118,6 @@ def default(model_arch: str | ModelArch, model_components: Optional[str | List[s
         model_components = [model_components]
 
     return {
-        model_arch.identifier + "_" + model_component + "_default": value
+        f"{model_arch.identifier}_{model_component}_default": value
         for model_component in model_components
     }

@@ -7,7 +7,7 @@ import threading
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.model_detection import DetermineConfigVisitor
-from sd_mecha.recipe_nodes import RecipeVisitor
+from sd_mecha.recipe_nodes import RecipeVisitor, ConvertRecipeNode
 from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
@@ -195,6 +195,9 @@ class LoadInputDictsVisitor(RecipeVisitor):
         for model in node.models:
             model.accept(self)
 
+    def visit_convert(self, node: ConvertRecipeNode):
+        node.model.accept(self)
+
     def __load_dict(
         self,
         node: recipe_nodes.ModelRecipeNode,
@@ -218,7 +221,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
 
 @dataclasses.dataclass
-class CloseInputDictsVisitor:
+class CloseInputDictsVisitor(RecipeVisitor):
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         if node.state_dict is not None:
             node.state_dict.close()
@@ -230,3 +233,6 @@ class CloseInputDictsVisitor:
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         for model in node.models:
             model.accept(self)
+
+    def visit_convert(self, node: ConvertRecipeNode):
+        node.model.accept(self)

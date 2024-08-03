@@ -1,67 +1,60 @@
 import dataclasses
-import functools
-import operator
 import fuzzywuzzy.process
 import pathlib
 import re
 import traceback
 import yaml
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Tuple
 
 
 WILDCARD = "*"
 
 
-def discover_block_prefixes(keys: Set[str], config: dict, arch_identifier: str):
-    discovered_blocks = {}
+def discover_blocks(config: dict, arch_identifier: str):
+    blocks = {}
 
     for component, component_config in config["merge"].items():
         prefix = component_config["prefix"]
-        for shorthand, patterns in component_config["blocks"].items():
+        for block_id_pattern, patterns in component_config["blocks"].items():
             if isinstance(patterns, str):
                 patterns = [patterns]
 
-            first_pattern_re = re.escape(patterns[0]).replace(re.escape(WILDCARD), r'(\w+)')
-            pattern = re.compile(rf"^{re.escape(prefix)}\.{first_pattern_re}")
-
-            for key in keys:
-                match = pattern.match(key)
-                if match:
-                    block_id = match.groups()[0] if WILDCARD in patterns[0] else ""
-                    block_key = (arch_identifier + "_" + component + "_block_" + shorthand.replace(WILDCARD, block_id))
-                    if block_key not in discovered_blocks:
-                        discovered_blocks[block_key] = {
-                            "patterns": [re.compile(p) for p in sorted((
-                                re.escape(f"{prefix}.{p.replace(WILDCARD, block_id)}") + r"(?:\.|$)"
-                                for p in patterns
-                            ), key=lambda s: len(s.split(".")), reverse=True)],
-                        }
-
-    return discovered_blocks
-
-
-def discover_blocks(keys, discovered_block_prefixes, arch_identifier: str):
-    blocks = {}
-    for key in keys:
-        for block, prefixes in discovered_block_prefixes.items():
-            if any(prefix.match(key) for prefix in prefixes["patterns"]):
-                blocks.setdefault(key, set()).add(block)
+            for replacement in enumerate_block_id_replacements(block_id_pattern):
+                block_id = re.sub(r"\[.*?]", replacement, block_id_pattern) if replacement else block_id_pattern
+                block_key = f"{arch_identifier}_{component}_block_{block_id}"
+                blocks[block_key] = re.compile(rf"^{re.escape(prefix)}\.(?:" + "|".join(
+                    re.escape(pattern.replace(WILDCARD, replacement) if replacement else pattern)
+                    for pattern in patterns
+                ) + ")")
 
     return blocks
+
+
+def enumerate_block_id_replacements(block_id_pattern: str):
+    if "[" not in block_id_pattern:
+        yield ""
+        return
+
+    replacement_exprs = re.split(r"[\[\]]", block_id_pattern)[1].split(",")
+    for replacement_expr in replacement_exprs:
+        if ".." in replacement_expr:
+            low, high = replacement_expr.split("..")
+            for i in range(int(low.strip()), int(high.strip()) + 1):
+                yield str(i)
+        else:
+            yield replacement_expr.strip()
 
 
 @dataclasses.dataclass
 class ModelArch:
     identifier: str
     components: Set[str]
-    keys: Set[str]
-    keys_to_forward: Set[str]
-    keys_to_merge: Set[str]
-    blocks: Dict[str, Set[str]]
+    passthrough_prefixes: Tuple[str]
+    blocks: Dict[str, re.Pattern]
     location: str
 
-    def user_keys(self) -> Set[str]:
-        return functools.reduce(operator.or_, self.blocks.values(), set())
+    def hyper_keys(self) -> List[str]:
+        return list(self.blocks.keys())
 
 
 def register_model_arch(
@@ -80,20 +73,12 @@ def register_model_arch(
     with open(yaml_config_path, "r") as f:
         config = yaml.safe_load(f.read())
 
-    keys = config["keys"]
-    if isinstance(keys, str):
-        with open(yaml_config_path.parent / keys, "r") as f:
-            keys = [k.strip() for k in f.readlines()]
-
-    prefixes_to_forward = tuple(config["passthrough"])
-    keys_to_forward = set(key for key in keys if key.startswith(prefixes_to_forward))
-    keys_to_merge = set(key for key in keys if key not in keys_to_forward)
-    block_prefixes = discover_block_prefixes(keys_to_merge, config, identifier)
-    blocks = discover_blocks(keys_to_merge, block_prefixes, identifier)
+    passthrough_prefixes = tuple(config["passthrough"])
+    blocks = discover_blocks(config, identifier)
     components = set(config["merge"].keys())
 
     location = f"{stack_frame.filename}:{stack_frame.lineno}"
-    _model_archs_registry[identifier] = ModelArch(identifier, components, keys, keys_to_forward, keys_to_merge, blocks, location)
+    _model_archs_registry[identifier] = ModelArch(identifier, components, passthrough_prefixes, blocks, location)
 
 
 _model_archs_registry = {}

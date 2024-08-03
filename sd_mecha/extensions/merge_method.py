@@ -4,18 +4,14 @@ import inspect
 import pathlib
 import textwrap
 import torch
-from sd_mecha.recipe_nodes import MergeSpace, RecipeNode, ModelRecipeNode, MergeRecipeNode
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
-from typing import Optional, Callable, Dict, Tuple, TypeVar, Generic, get_type_hints, get_origin, Union, get_args, List, Set, Iterable
+from sd_mecha.extensions.merge_space import get_identifiers, MergeSpace, MergeSpaceBase
+from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable
+import typing
 
 
 RecipeNodeOrPath = RecipeNode | str | pathlib.Path
-T = TypeVar("T")
-
-
-class LiftFlag(Generic[T]):
-    def __init__(self):
-        raise TypeError
 
 
 class MergeMethod:
@@ -71,42 +67,42 @@ class MergeMethod:
             "key": key,
         }
 
-    def get_return_merge_space(self, merge_spaces_args: List[MergeSpace]) -> MergeSpace:
-        type_hints = get_type_hints(self.__f)
+    def get_return_merge_space(self, merge_spaces_args: List[type(MergeSpaceBase)]) -> type(MergeSpaceBase):
+        type_hints = typing.get_type_hints(self.__f)
         model_names = self.get_model_names()
         varargs_name = self.get_model_varargs_name()
         if varargs_name is not None:
             model_names.extend([varargs_name]*(len(merge_spaces_args) - len(model_names)))
 
         resolved_input_spaces = {}
-        for param, merge_space_arg in zip(model_names, merge_spaces_args):
-            annotation = type_hints.get(param)
+        for param_name, merge_space_arg in zip(model_names, merge_spaces_args):
+            annotation = type_hints.get(param_name)
             if annotation:
-                merge_space_param, key = self.__extract_lift_flag(annotation, param)
+                merge_space_param, key = self.__extract_merge_space(annotation, param_name)
 
                 if key in resolved_input_spaces:
                     # occurrence of already seen type var
                     if merge_space_arg != resolved_input_spaces[key]:
-                        raise TypeError(f"parameter '{param}' of method {self.__name} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
+                        raise TypeError(f"parameter '{param_name}' of method {self.__name} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
                 elif merge_space_arg & merge_space_param:
                     resolved_input_spaces[key] = merge_space_arg
                 else:
-                    raise TypeError(f"parameter '{param}' of method {self.__name} expects {merge_space_param} but got {merge_space_arg}")
+                    raise TypeError(f"parameter '{param_name}' of method {self.__name} expects {merge_space_param} but got {merge_space_arg}")
 
-        merge_space_param, key = self.__extract_lift_flag(type_hints.get("return"), None)
+        merge_space_param, key = self.__extract_merge_space(type_hints.get("return"), "return")
         if key in resolved_input_spaces:
             return resolved_input_spaces[key]
         else:
             return merge_space_param
 
-    def get_input_merge_spaces(self) -> Tuple[List[MergeSpace], Optional[MergeSpace]]:
-        type_hints = get_type_hints(self.__f)
+    def get_input_merge_spaces(self) -> Tuple[List[type], Optional[type]]:
+        type_hints = typing.get_type_hints(self.__f)
         model_names = self.get_model_names()
         merge_spaces = []
         for param in model_names:
             annotation = type_hints.get(param)
             if annotation:
-                merge_space, _ = self.__extract_lift_flag(annotation, param)
+                merge_space, _ = self.__extract_merge_space(annotation, param)
                 merge_spaces.append(merge_space)
 
         varargs_name = self.get_model_varargs_name()
@@ -114,17 +110,15 @@ class MergeMethod:
         if varargs_name:
             annotation = type_hints.get(varargs_name)
             if annotation:
-                varargs_merge_space, _ = self.__extract_lift_flag(annotation, varargs_name)
+                varargs_merge_space, _ = self.__extract_merge_space(annotation, varargs_name)
 
-        return merge_spaces, varargs_merge_space
+        return [MergeSpace(*m) for m in merge_spaces], varargs_merge_space
 
-    def __extract_lift_flag(self, annotation, param) -> Tuple[MergeSpace, object]:
-        if get_origin(annotation) is Union:
-            for arg in get_args(annotation):
-                if get_origin(arg) is LiftFlag:
-                    return get_args(arg)[0], param
-                elif isinstance(arg, TypeVar):
-                    return get_args(arg.__bound__)[0], arg
+    def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[Set[str], str]:
+        if annotation is not None and typing.get_origin(annotation) is Union:
+            key = param_name if issubclass(annotation, MergeSpaceBase) else typing.get_args(annotation)[-1].__name__
+            return set(get_identifiers(annotation)), key
+        return set(get_identifiers(MergeSpace())), param_name
 
     def get_model_names(self) -> List[str]:
         return inspect.getfullargspec(self.__f).args

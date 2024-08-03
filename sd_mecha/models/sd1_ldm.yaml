@@ -24,7 +24,8 @@ merge:
       in11:
       - encoder.layers.11
       - final_layer_norm
-      in*: encoder.layers.*
+      in[1..10]: encoder.layers.*
+
   unet:
     prefix: model.diffusion_model
     blocks:
@@ -39,11 +40,9 @@ merge:
       - output_blocks.11
       - time_embed
       - out
-      in*:
+      in[1,2,4,5,7,8,10,11]:
       - input_blocks.*
       - time_embed
-      out*:
+      out[0..10]:
       - output_blocks.*
       - time_embed
-
-keys: sd1_ldm_keys.txt

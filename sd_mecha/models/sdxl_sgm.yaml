@@ -8,8 +8,7 @@ merge:
     blocks:
       in0: input_blocks.0
       in3: input_blocks.3
-      in6:
-      - input_blocks.6
+      in6: input_blocks.6
       mid:
       - middle_block
       - time_embed
@@ -17,10 +16,10 @@ merge:
       - output_blocks.8
       - time_embed
       - out
-      in*:
+      in[1,2,4,5,7,8]:
       - input_blocks.*
       - time_embed
-      out*:
+      out[0..7]:
       - output_blocks.*
       - time_embed
 
@@ -33,7 +32,7 @@ merge:
       in11:
       - encoder.layers.11
       - final_layer_norm
-      in*: encoder.layers.*
+      in[1..10]: encoder.layers.*
 
   txt2:
     prefix: conditioner.embedders.1.model
@@ -47,6 +46,4 @@ merge:
       - ln_final
       - text_projection
       - logit_scale
-      in*: transformer.resblocks.*
-
-keys: sdxl_sgm_keys.txt
+      in[1..30]: transformer.resblocks.*

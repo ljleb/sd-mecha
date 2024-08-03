@@ -1,12 +1,10 @@
 import dataclasses
 import functools
 import pathlib
-
 import fuzzywuzzy.process
 import traceback
 import torch
 from sd_mecha import extensions
-from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.streaming import DTYPE_REVERSE_MAPPING, DTYPE_MAPPING, InSafetensorsDict
 from torch._subclasses.fake_tensor import FakeTensorMode
@@ -14,7 +12,6 @@ from typing import Mapping, Optional, Iterable, Protocol, Tuple
 
 
 class ModelTypeCallback(Protocol):
-    # Define types here, as if __call__ were a function (ignore self).
     def __call__(self, state_dict: Mapping[str, torch.Tensor], key: str, **kwargs) -> torch.Tensor:
         ...
 
@@ -23,7 +20,7 @@ class ModelTypeCallback(Protocol):
 class ModelType:
     __f: ModelTypeCallback
     identifier: str
-    merge_space: MergeSpace
+    merge_space: type
     needs_header_conversion: bool
     strict_suffixes: bool
     key_suffixes: Optional[Tuple[str]]
@@ -86,7 +83,7 @@ class ModelType:
 
 def register_model_type(
     *,
-    merge_space: MergeSpace,
+    merge_space: type,
     identifier: Optional[str] = None,
     model_archs: str | Iterable[str] = ("__default__",),
     needs_header_conversion: bool = True,
@@ -111,7 +108,7 @@ def __register_model_type_impl(
     f: ModelTypeCallback,
     *,
     identifier: Optional[str],
-    merge_space: MergeSpace,
+    merge_space: type,
     model_archs: str | Iterable[str],
     needs_header_conversion: bool,
     strict_suffixes: bool,

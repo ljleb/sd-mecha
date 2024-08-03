@@ -1,7 +1,10 @@
 import sd_mecha
 import torch
-from sd_mecha.extensions.merge_method import convert_to_recipe, LiftFlag, MergeSpace
+from sd_mecha.extensions.merge_method import convert_to_recipe
+from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol
 from sd_mecha import Hyper
+
+
 sd_mecha.set_log_level()
 
 
@@ -9,12 +12,12 @@ sd_mecha.set_log_level()
 # `@convert_to_recipe` converts the annotated function to work with the merge recipe API
 @convert_to_recipe
 def custom_sum(
-    # Each positional argument is either a weight or bias
-    # Merge methods are called once for each key that all input models have in common
-    # We use a type system trick to specify the expected merge space of each model: `Tensor | LiftFlag[MergeSpace...]`
-    # We can represent complex constraints where multiple models must be in the exact same merge space using a TypeVar:
+    # Each positional argument is a single tensor from one of the input models.
+    # Merge methods are called once for each key that all input models have in common.
+    # We use a type system trick to specify the expected merge space of each model: `Tensor | MergeSpace(...)`
+    # We can represent complex constraints where multiple models must be in the exact same merge space using MergeSpaceSymbol:
     #    ```
-    #    SameSpace = TypeVar("SharedSpace", bound=LiftFlag[MergeSpace.BASE | MergeSpace.DELTA])
+    #    SameSpace = MergeSpaceSymbol("weight", "delta")
     #    ...
     #    def my_method(
     #        a: torch.Tensor | SameSpace,
@@ -22,11 +25,11 @@ def custom_sum(
     #        **kwargs,
     #    ) -> torch.Tensor | SameSpace
     #    ```
-    # In this code, `a` and `b` must be in the same space, either in BASE space or DELTA space.
+    # In this code, `a` and `b` must be in the same space, either in "weight" space or "delta" space.
     # The return merge space is exactly the merge space that satisfies `a` and `b` at the same time.
     # For more examples, see /sd_mecha/merge_methods.py
-    a: torch.Tensor | LiftFlag[MergeSpace.BASE],
-    b: torch.Tensor | LiftFlag[MergeSpace.BASE],
+    a: torch.Tensor | MergeSpace("base"),
+    b: torch.Tensor | MergeSpace("base"),
     *,
     # hyperparameters go here
     # `Hyper` is an union type of `float`, `int` and `dict` (the dict case is for a different weight per block MBW), which is what the caller of the method excpects.
@@ -36,7 +39,7 @@ def custom_sum(
     # `@convert_to_recipe` introduces additional kwargs: `device=` and `dtype=`
     # We must put `**kwargs` to satisfy the type system:
     **kwargs,
-) -> torch.Tensor | LiftFlag[MergeSpace.BASE]:
+) -> torch.Tensor | MergeSpace("base"):
 
     # to call an existing `@convert_to_recipe` merge method inside another one (i.e. this one),
     #  we use the `__wrapped__` attribute that returns the original unwrapped function

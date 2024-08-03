@@ -5,15 +5,15 @@ import numpy as np
 import torch
 from scipy.stats import binom
 from torch import Tensor
-from typing import Tuple, TypeVar, Dict, Optional
+from typing import Tuple, Dict, Optional
 from sd_mecha.hypers import Hyper
 from .svd import orthogonal_procrustes, fractional_matrix_power
-from sd_mecha.merge_space import MergeSpace
-from sd_mecha.extensions.merge_method import LiftFlag, convert_to_recipe
+from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol
+from sd_mecha.extensions.merge_method import convert_to_recipe
 
 
 EPSILON = 1e-10
-SameMergeSpace = TypeVar("SameMergeSpace", bound=LiftFlag[MergeSpace.BASE | MergeSpace.DELTA])
+SameMergeSpace = MergeSpaceSymbol("weight", "delta")
 
 
 @convert_to_recipe
@@ -61,7 +61,7 @@ def slerp(
 @convert_to_recipe
 def add_difference(
     a: Tensor | SameMergeSpace,
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    b: Tensor | MergeSpace("delta"),
     *,
     alpha: Hyper = 1.0,
     **kwargs,
@@ -71,10 +71,10 @@ def add_difference(
 
 @convert_to_recipe
 def subtract(
-    a: Tensor | LiftFlag[MergeSpace.BASE],
-    b: Tensor | LiftFlag[MergeSpace.BASE],
+    a: Tensor | MergeSpace("weight"),
+    b: Tensor | MergeSpace("weight"),
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     return a - b
 
 
@@ -93,12 +93,12 @@ def perpendicular_component(
 
 @convert_to_recipe
 def geometric_sum(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    a: Tensor | MergeSpace("delta"),
+    b: Tensor | MergeSpace("delta"),
     *,
     alpha: Hyper = 0.5,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     a = torch.complex(a, torch.zeros_like(a))
     b = torch.complex(b, torch.zeros_like(b))
     res = a ** (1 - alpha) * b ** alpha
@@ -107,12 +107,12 @@ def geometric_sum(
 
 @convert_to_recipe
 def add_cosine_a(
-    a: Tensor | LiftFlag[MergeSpace.BASE],
-    b: Tensor | LiftFlag[MergeSpace.BASE],
+    a: Tensor | MergeSpace("weight"),
+    b: Tensor | MergeSpace("weight"),
     *,
     alpha: Hyper,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.BASE]:
+) -> Tensor | MergeSpace("weight"):
     a_norm = torch.nn.functional.normalize(a, dim=0)
     b_norm = torch.nn.functional.normalize(b, dim=0)
     similarity = torch.nn.functional.cosine_similarity(a_norm, b_norm, dim=0)
@@ -121,12 +121,12 @@ def add_cosine_a(
 
 @convert_to_recipe
 def add_cosine_b(
-    a: Tensor | LiftFlag[MergeSpace.BASE],
-    b: Tensor | LiftFlag[MergeSpace.BASE],
+    a: Tensor | MergeSpace("weight"),
+    b: Tensor | MergeSpace("weight"),
     *,
     alpha: Hyper,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.BASE]:
+) -> Tensor | MergeSpace("weight"):
     similarity = torch.nn.functional.cosine_similarity(a, b, dim=0)
     dot_product = torch.sum(a * b)
     magnitude_similarity = dot_product / (torch.norm(a) * torch.norm(b))
@@ -143,7 +143,7 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -
 # Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
 @convert_to_recipe
 def ties_sum_extended(  # aka add_difference_ties
-    *models: Tensor | LiftFlag[MergeSpace.DELTA],
+    *models: Tensor | MergeSpace("delta"),
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
@@ -153,7 +153,7 @@ def ties_sum_extended(  # aka add_difference_ties
     maxiter: Hyper = 100, 
     ftol: Hyper =1e-20,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
     if apply_median <= 0.0:
@@ -183,11 +183,11 @@ def ties_sum_extended(  # aka add_difference_ties
 # - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
-    *models: Tensor | LiftFlag[MergeSpace.DELTA],
+    *models: Tensor | MergeSpace("delta"),
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
     # $$ \tau_m $$
@@ -362,12 +362,12 @@ def clamped_add_opposite(
 
 @convert_to_recipe
 def select_max_delta(
-    a: Tensor | LiftFlag[MergeSpace.DELTA],
-    b: Tensor | LiftFlag[MergeSpace.DELTA],
+    a: Tensor | MergeSpace("delta"),
+    b: Tensor | MergeSpace("delta"),
     *,
     alpha: Hyper = 0.5,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     a_abs = (a / a.std()).abs()
     b_abs = (b / b.std()).abs()
     return torch.where((1 - alpha) * a_abs >= alpha * b_abs, a, b)
@@ -595,14 +595,14 @@ def clamp(
 
 @convert_to_recipe
 def dropout(  # aka n-supermario
-    delta0: Tensor | LiftFlag[MergeSpace.DELTA],
-    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    delta0: Tensor | MergeSpace("delta"),
+    *deltas: Tensor | MergeSpace("delta"),
     probability: Hyper = 0.9,
     overlap: Hyper = 1.0,
     overlap_emphasis: Hyper = 0.0,
     seed: Hyper = -1,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     if seed < 0:
         seed = None
     else:
@@ -634,7 +634,7 @@ def dropout(  # aka n-supermario
 # - `return`: $$ \hat{\delta}^t = \tilde{\delta}^t $$
 @convert_to_recipe
 def ties_sum_with_dropout(
-    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    *deltas: Tensor | MergeSpace("delta"),
     probability: Hyper = 0.9,    
     no_rescale: Hyper = 0.0,
     k: Hyper = 0.2,
@@ -647,7 +647,7 @@ def ties_sum_with_dropout(
     ftol: Hyper = 1e-20,
     seed: Hyper = -1,
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
     # Set seed
     if seed < 0:
         seed = None
@@ -721,10 +721,10 @@ def binomial_coefficient_np(n, k):
 # I will break the functions to be retrivible for other algos like TIES.
 @convert_to_recipe
 def model_stock_for_tensor(
-    *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
+    *deltas: Tensor | MergeSpace("delta"),
     cos_eps: Hyper = 1e-6,    
     **kwargs,
-) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+) -> Tensor | MergeSpace("delta"):
 
     # This is obvious.
     w_avg = n_average.__wrapped__(*deltas)
