@@ -6,27 +6,22 @@ merge:
   unet:
     prefix: model.diffusion_model
     blocks:
-      in0: input_blocks.0.#
-      in3: input_blocks.3.#
+      in0: input_blocks.0
+      in3: input_blocks.3
       in6:
-      - input_blocks.6.#
-      - input_blocks.6.#.transformer_blocks.#
+      - input_blocks.6
       mid:
-      - middle_block.#
-      - middle_block.#.transformer_blocks.#
+      - middle_block
       - time_embed
       out8:
-      - output_blocks.8.#
-      - output_blocks.8.#.transformer_blocks.#
+      - output_blocks.8
       - time_embed
       - out
       in*:
-      - input_blocks.*.#
-      - input_blocks.*.#.transformer_blocks.#
+      - input_blocks.*
       - time_embed
       out*:
-      - output_blocks.*.#
-      - output_blocks.*.#.transformer_blocks.#
+      - output_blocks.*
       - time_embed
 
   txt:

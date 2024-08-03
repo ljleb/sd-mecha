@@ -576,15 +576,16 @@ def clamp(
 ) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
-    centers = (maximums + minimums) / 2
+    bounds = torch.stack(bounds)
+    average = bounds.mean(dim=0)
 
     if stiffness:
         smallest_positive = maximums
         largest_negative = minimums
 
         for i, bound in enumerate(bounds):
-            smallest_positive = torch.where((smallest_positive >= bound) & (bound >= centers), bound, smallest_positive)
-            largest_negative = torch.where((largest_negative <= bound) & (bound <= centers), bound, largest_negative)
+            smallest_positive = torch.where((smallest_positive >= bound) & (bound >= average), bound, smallest_positive)
+            largest_negative = torch.where((largest_negative <= bound) & (bound <= average), bound, largest_negative)
 
         maximums = weighted_sum.__wrapped__(maximums, smallest_positive, alpha=stiffness)
         minimums = weighted_sum.__wrapped__(minimums, largest_negative, alpha=stiffness)
@@ -599,9 +600,14 @@ def dropout(  # aka n-supermario
     probability: Hyper = 0.9,
     overlap: Hyper = 1.0,
     overlap_emphasis: Hyper = 0.0,
-    seed: Hyper = None,
+    seed: Hyper = -1,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
+    if seed < 0:
+        seed = None
+    else:
+        seed = int(seed)
+
     deltas = torch.stack((delta0,) + deltas)
     rng = np.random.default_rng(seed)
 
@@ -638,11 +644,15 @@ def ties_sum_with_dropout(
     apply_median: Hyper = 0.0,
     eps: Hyper = 1e-6,    
     maxiter: Hyper = 100, 
-    ftol: Hyper =1e-20,
-    seed: Hyper = None,
+    ftol: Hyper = 1e-20,
+    seed: Hyper = -1,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
     # Set seed
+    if seed < 0:
+        seed = None
+    else:
+        seed = int(seed)
     torch.manual_seed(seed)
 
     # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.

@@ -6,21 +6,21 @@ merge:
     prefix: model.diffusion_model
     blocks:
       in0:
-      - joint_blocks.0.#
+      - joint_blocks.0
       - pos_embed
       - t_embedder
       - x_embedder
       - y_embedder
       - context_embedder
       in23:
-      - joint_blocks.23.#
+      - joint_blocks.23
       - pos_embed
       - t_embedder
       - x_embedder
       - y_embedder
       - final_layer
       in*:
-      - joint_blocks.*.#
+      - joint_blocks.*
       - pos_embed
       - t_embedder
       - x_embedder
@@ -53,12 +53,12 @@ merge:
     prefix: text_encoders.t5xxl.transformer
     blocks:
       in0:
-      - encoder.block.0.#.#
+      - encoder.block.0
       - encoder.embed_tokens
       - shared
       in23:
-      - encoder.block.23.#.#
+      - encoder.block.23
       - encoder.final_layer_norm
-      in*: encoder.block.*.#.#
+      in*: encoder.block.*
 
 keys: sd3_sgm_keys.txt

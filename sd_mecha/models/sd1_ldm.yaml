@@ -28,22 +28,22 @@ merge:
   unet:
     prefix: model.diffusion_model
     blocks:
-      in0: input_blocks.0.#
-      in3: input_blocks.3.#
-      in6: input_blocks.6.#
-      in9: input_blocks.9.#
+      in0: input_blocks.0
+      in3: input_blocks.3
+      in6: input_blocks.6
+      in9: input_blocks.9
       mid:
-      - middle_block.#
+      - middle_block
       - time_embed
       out11:
-      - output_blocks.11.#
+      - output_blocks.11
       - time_embed
       - out
       in*:
-      - input_blocks.*.#
+      - input_blocks.*
       - time_embed
       out*:
-      - output_blocks.*.#
+      - output_blocks.*
       - time_embed
 
 keys: sd1_ldm_keys.txt

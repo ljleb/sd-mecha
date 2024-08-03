@@ -46,7 +46,6 @@ def discover_blocks(keys, discovered_block_prefixes, arch_identifier: str):
         for block, prefixes in discovered_block_prefixes.items():
             if any(prefix.match(key) for prefix in prefixes["patterns"]):
                 blocks.setdefault(key, set()).add(block)
-                break
 
     return blocks
 

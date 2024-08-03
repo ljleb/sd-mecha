@@ -115,7 +115,7 @@ def compose(
         f.write(composed_recipe)
 
 
-@click.command(help="Show the available blocks and classes of model architectures")
+@click.command(help="Show the available blocks of model architectures")
 @click.argument("model_arch", type=click.Choice(extensions.model_arch.get_all() + [""], case_sensitive=False), default="")
 @click.option("--verbose", "-v", is_flag=True)
 @click.option("--debug", is_flag=True, help="Print the stacktrace when an error occurs.")
@@ -155,23 +155,6 @@ def info(
                     for bs in model_arch.blocks.values()
                     for b in bs
                     if f"_{component}_block_" in b
-                ], key=lambda t: natural_sort_key(t[0]))),
-            "Classes":
-                sorted(list({
-                    c.split("_", 3)[3]
-                    for cs in model_arch.classes.values()
-                    for c in cs
-                    if f"_{component}_class_" in c
-                }), key=natural_sort_key)
-                if not verbose else
-                dict(sorted([
-                    (c.split("_", 3)[3], sorted([
-                        k for k in model_arch.classes
-                        if c in model_arch.classes[k]
-                    ], key=natural_sort_key))
-                    for cs in model_arch.classes.values()
-                    for c in cs
-                    if f"_{component}_class_" in c
                 ], key=lambda t: natural_sort_key(t[0]))),
         }
         for component in model_arch.components
