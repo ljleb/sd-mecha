@@ -12,14 +12,115 @@ from typing import Optional, Set
 from tqdm import tqdm
 
 
+class DiffusersInSafetensorsDict:
+    def __init__(self, dir_path: pathlib.Path, model_arch, buffer_size: int):
+        self.file_path = dir_path
+        self.dicts = {
+            component: InSafetensorsDict(find_best_safetensors_path(dir_path / component), buffer_size // len(model_arch.components))
+            for component in model_arch.components
+        }
+        self.model_arch = model_arch
+
+    def __del__(self):
+        self.close()
+
+    def __getitem__(self, item):
+        component, key = item.split(".", maxcount=1)
+        if key in self.dicts[component]:
+            return self.dicts[component][key]
+
+        raise KeyError(item)
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def __len__(self):
+        return sum(len(d) for d in self.dicts)
+
+    def close(self):
+        for d in self.dicts:
+            d.close()
+
+    def keys(self):
+        for component, d in self.dicts.items():
+            for key in d:
+                if key != "__metadata__":
+                    yield f"{component}.{key}"
+
+    def values(self):
+        for key in self.keys():
+            yield self[key]
+
+    def items(self):
+        for key in self.keys():
+            yield key, self[key]
+
+
+def find_best_safetensors_path(dir_path: pathlib.Path) -> pathlib.Path:
+    best_file = None
+    for file in dir_path.iterdir():
+        if file.is_file() and "model" in file.name and file.suffix == ".safetensors":
+            if best_file is None or "fp16" in str(best_file.name):
+                best_file = file
+
+    if best_file is None:
+        raise RuntimeError(f"could not find safetensors model file under {dir_path}")
+
+    return best_file
+
+
+class DiffusersOutSafetensorsDict:
+    def __init__(
+        self,
+        dir_path: pathlib.Path,
+        model_arch,
+        template_header: dict,
+        keys_to_merge: Set[str],
+        mecha_recipe: str,
+        minimum_buffer_size: int,
+        save_dtype: torch.dtype,
+    ):
+        dir_path.mkdir(exist_ok=True)
+        for component in model_arch.components:
+            (dir_path / component).mkdir(exist_ok=True)
+
+        self.file_path = dir_path
+        self.dicts = {
+            component: OutSafetensorsDict(
+                dir_path / component / "model.safetensors",
+                {k.split(".", maxsplit=1)[1]: v for k, v in template_header.items() if k.startswith(component + ".")},
+                {k.split(".", maxsplit=1)[1] for k in keys_to_merge if k.startswith(component + ".")},
+                mecha_recipe,
+                minimum_buffer_size // len(model_arch.components),
+                save_dtype,
+            )
+            for component in model_arch.components
+        }
+        self.model_arch = model_arch
+
+    def __del__(self):
+        self.close()
+
+    def __setitem__(self, item, value):
+        component, key = item.split(".", maxcount=1)
+        self.dicts[component][key] = value
+
+    def __len__(self):
+        return sum(len(d) for d in self.dicts)
+
+    def close(self):
+        for d in self.dicts:
+            d.close()
+
+
 class InSafetensorsDict:
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":
             raise ValueError(f"Model type not supported: {file_path} (only safetensors are supported)")
 
         self.default_buffer_size = buffer_size
-        self.file_path = file_path
         self.file = open(file_path, mode='rb', buffering=0)
+        self.file_path = file_path
         self.header_size, self.header = self._read_header()
         self.buffer = bytearray()
         self.buffer_start_offset = 8 + self.header_size

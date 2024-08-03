@@ -177,7 +177,7 @@ class ModelsCountVisitor(RecipeVisitor):
     def visit_model(self, node: ModelRecipeNode):
         seen = node in self.__seen_nodes
         self.__seen_nodes.append(node)
-        return not seen
+        return int(not seen)
 
     def visit_parameter(self, _node: ParameterRecipeNode):
         return 0
