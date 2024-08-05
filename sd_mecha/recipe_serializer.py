@@ -1,7 +1,8 @@
 import pathlib
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeSpace, ParameterRecipeNode, RecipeVisitor, ConvertRecipeNode
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, RecipeVisitor, ConvertRecipeNode
+from sd_mecha.extensions.merge_space import MergeSpace
 
 
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
@@ -37,7 +38,7 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
         elif command == "model":
             results.append(ModelRecipeNode(*positional_args, **named_args))
         elif command == "parameter":
-            merge_space = MergeSpace[positional_args[1]]
+            merge_space = MergeSpace(positional_args[1])
             results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
         elif command == "merge":
             method, *positional_args = positional_args
@@ -126,9 +127,8 @@ class SerializerVisitor(RecipeVisitor):
         return self.__add_instruction(line)
 
     def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
-        merge_space = str(MergeSpace.BASE).split(".")[1]
         model_arch = f' "{node.model_arch.identifier}"' if node.model_arch else ""
-        line = f'parameter "{node.name}" "{merge_space}"' + model_arch
+        line = f'parameter "{node.name}" "weight"' + model_arch
         return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:

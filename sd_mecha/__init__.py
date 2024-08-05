@@ -2,14 +2,12 @@ import logging
 import pathlib
 import torch
 from torch import Tensor
-
-import sd_mecha.builtin_model_archs
-import sd_mecha.builtin_model_types
+import sd_mecha.builtin_models
 from typing import Optional, Dict, Mapping
+from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
-from sd_mecha.recipe_nodes import MergeSpace
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 
@@ -162,7 +160,7 @@ def add_difference_ties(
     # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space == MergeSpace("weight") else
         model
         for model in models
     )
@@ -209,7 +207,7 @@ def add_difference_ties_extended(
     # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space is MergeSpace("weight") else
         model
         for model in models
     )
@@ -395,7 +393,7 @@ def ties_with_dare(
     models = tuple(path_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space is MergeSpace("weight") else
         model
         for model in models
     )
@@ -434,12 +432,11 @@ def model_stock_n_models(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-
     base = path_to_node(base)
     models = tuple(path_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space is MergeSpace("weight") else
         model
         for model in models
     )

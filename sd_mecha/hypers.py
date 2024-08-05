@@ -2,13 +2,13 @@ import re
 import fuzzywuzzy.process
 from typing import Dict, Optional, List
 from sd_mecha import extensions
-from sd_mecha.extensions.model_arch import ModelArch
+from sd_mecha.extensions.model_impl import MergeConfig
 
 
 Hyper = int | float | Dict[str, int | float]
 
 
-def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch, default_value: Optional[int | float]) -> int | float:
+def get_hyper(hyper: Hyper, key: str, model_arch: MergeConfig, default_value: Optional[int | float]) -> int | float:
     if isinstance(hyper, (int, float)):
         return hyper
     elif isinstance(hyper, dict):
@@ -47,7 +47,7 @@ def get_hyper(hyper: Hyper, key: str, model_arch: ModelArch, default_value: Opti
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
-def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
+def validate_hyper(hyper: Hyper, model_arch: Optional[MergeConfig]) -> Hyper:
     if isinstance(hyper, dict):
         if model_arch is None:
             raise ValueError("Abstract recipes (with recipe parameters) cannot specify component-wise hyperparameters")
@@ -63,7 +63,7 @@ def validate_hyper(hyper: Hyper, model_arch: Optional[ModelArch]) -> Hyper:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
-def blocks(model_arch: str | ModelArch, model_component: str, *args, strict: bool = True, **kwargs) -> Hyper:
+def blocks(model_arch: str | MergeConfig, model_component: str, *args, strict: bool = True, **kwargs) -> Hyper:
     """
     Generate block hyperparameters for a model version.
     Either positional arguments or keyword arguments can be used, but not both at the same time.
@@ -108,7 +108,7 @@ def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
 
 
-def default(model_arch: str | ModelArch, model_components: Optional[str | List[str]] = None, value: int | float = 0) -> Hyper:
+def default(model_arch: str | MergeConfig, model_components: Optional[str | List[str]] = None, value: int | float = 0) -> Hyper:
     if isinstance(model_arch, str):
         model_arch = extensions.model_arch.resolve(model_arch)
 

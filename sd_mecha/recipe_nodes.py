@@ -2,13 +2,11 @@ import abc
 import pathlib
 import torch
 from typing import Optional, Dict, Any, Mapping
-
 from torch import Tensor
-
 from sd_mecha import extensions
-from sd_mecha.extensions.model_arch import ModelArch
+from sd_mecha.extensions.model_impl import MergeConfig
 from sd_mecha.hypers import validate_hyper, Hyper
-from sd_mecha.merge_space import MergeSpace
+from sd_mecha.extensions.merge_space import MergeSpace
 
 
 class RecipeNode(abc.ABC):
@@ -23,7 +21,7 @@ class RecipeNode(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def model_arch(self) -> Optional[ModelArch]:
+    def model_arch(self) -> Optional[MergeConfig]:
         pass
 
     @abc.abstractmethod
@@ -55,7 +53,7 @@ class ModelRecipeNode(RecipeNode):
         return self.model_type.merge_space
 
     @property
-    def model_arch(self) -> Optional[ModelArch]:
+    def model_arch(self) -> Optional[MergeConfig]:
         return self.__model_arch
 
     def __contains__(self, item):
@@ -66,7 +64,7 @@ class ModelRecipeNode(RecipeNode):
 
 
 class ParameterRecipeNode(RecipeNode):
-    def __init__(self, name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
+    def __init__(self, name: str, merge_space: type(MergeSpace), model_arch: Optional[str] = None):
         self.name = name
         self.__merge_space = merge_space
         if model_arch is not None:
@@ -81,7 +79,7 @@ class ParameterRecipeNode(RecipeNode):
         return self.__merge_space
 
     @property
-    def model_arch(self) -> Optional[ModelArch]:
+    def model_arch(self) -> Optional[MergeConfig]:
         return self.__model_arch
 
     def __contains__(self, item):
@@ -122,7 +120,7 @@ class MergeRecipeNode(RecipeNode):
         return self.__merge_space
 
     @property
-    def model_arch(self) -> Optional[ModelArch]:
+    def model_arch(self) -> Optional[MergeConfig]:
         if not self.models:
             return None
 
@@ -146,7 +144,7 @@ class ConvertRecipeNode(RecipeNode):
     def __init__(
         self,
         model: RecipeNode,
-        out_model_arch: ModelArch | str,
+        out_model_arch: MergeConfig | str,
     ):
         if isinstance(out_model_arch, str):
             out_model_arch = extensions.model_arch.resolve(out_model_arch)
@@ -162,7 +160,7 @@ class ConvertRecipeNode(RecipeNode):
         return self.model.merge_space
 
     @property
-    def model_arch(self) -> Optional[ModelArch]:
+    def model_arch(self) -> Optional[MergeConfig]:
         return self.out_model_arch
 
     def __contains__(self, item):

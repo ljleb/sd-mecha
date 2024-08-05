@@ -14,28 +14,24 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "click",
+    "click>=8.1.7",
     "numpy",
-    "safetensors",
-    "tqdm",
+    "safetensors>=0.4.2",
+    "tqdm>=4.66.2",
     "scipy",
-    "fuzzywuzzy",
+    "fuzzywuzzy>=0.18.0",
     "python-Levenshtein",
-    "PyYAML",
+    "PyYAML>=6.0.1",
+    "omegaconf>=2.3.0",
+    "lycoris-lora>=3.0.0",
+    "open-clip-torch",
 ]
 
-[tool.setuptools]
-packages = [
-    "sd_mecha",
-    "sd_mecha.merge_methods",
-    "sd_mecha.extensions",
-    "sd_mecha.lora",
-    "sd_mecha.models",
-]
+[tool.setuptools.package-dir]
+sd_mecha = "sd_mecha"
 
 [tool.setuptools.package-data]
-"sd_mecha.lora" = ["*.json"]
-"sd_mecha.models" = ["*.yaml", "*.txt"]
+"*" = ["*.yaml"]
 
 [project.urls]
 Homepage = "https://github.com/ljleb/sd-mecha"

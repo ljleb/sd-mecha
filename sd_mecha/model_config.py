@@ -86,7 +86,7 @@ class DetermineConfigVisitor(RecipeVisitor):
     def visit_model(self, node: ModelRecipeNode) -> ModelConfig:
         state_dict_path = getattr(node.state_dict, "file_path", "<memory>")
         return ModelConfig(
-            node.model_type.convert_header(state_dict_path, node.state_dict, node.model_arch),
+            node.state_dict.header,
             [state_dict_path],
             node.model_arch,
         )
@@ -104,7 +104,7 @@ class DetermineConfigVisitor(RecipeVisitor):
         raise ValueError("No input models")
 
     def visit_convert(self, node: ConvertRecipeNode) -> ModelConfig:
-        pass
+        assert False, "todo"
 
 
 @dataclasses.dataclass
@@ -119,7 +119,6 @@ class KeyMerger:
         key: str,
     ) -> torch.Tensor:
         key_merger = KeyMergeVisitor(
-            key,
             self.default_device,
             self.default_dtype,
             self.__get_passthrough_tensor,
@@ -137,7 +136,6 @@ class KeyMerger:
             return self.fallback_model[key]
 
         key_merger = KeyPassthroughVisitor(
-            key,
             self.default_device,
             self.default_dtype,
         )
@@ -146,13 +144,13 @@ class KeyMerger:
 
 @dataclasses.dataclass
 class KeyVisitor(RecipeVisitor, abc.ABC):
-    _key: str
     _default_device: str
     _default_dtype: torch.dtype
 
     def visit_model(self, node: ModelRecipeNode) -> torch.Tensor:
+        # key order for merging: as soon as one of the model inputs has a key available, pick the same key for all other model inputs
         state_dict_path = getattr(node.state_dict, "file_path", "<memory>")
-        return node.model_type.get_tensor(state_dict_path, node.state_dict, self._key)
+        return node.model_type.get_tensor(node.state_dict, state_dict_path)
 
     def visit_parameter(self, node: ParameterRecipeNode) -> torch.Tensor:
         raise NotImplementedError(f"Interactive arguments are not yet implemented. Recipe is abstract: parameter '{node.name}' has no value.")
@@ -162,7 +160,7 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
         pass
 
     def visit_convert(self, node: ConvertRecipeNode) -> torch.Tensor:
-        pass
+        assert False, "todo"
 
 
 @dataclasses.dataclass
@@ -183,8 +181,8 @@ class KeyMergeVisitor(KeyVisitor):
                 node.dtype if node.dtype is not None else self._default_dtype,
             )
         except KeyError:
-            for n, m in ((n, m) for n, m in zip(node.models, merged) if m is not None):
-                if n.merge_space == node.merge_space:
+            for n, m in zip(node.models, merged):
+                if m is not None and n.merge_space == node.merge_space:
                     return m
             return self._passthrough_callback(self._key)
 

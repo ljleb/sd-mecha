@@ -1,0 +1,6 @@
+[submodule "sd_mecha/builtin_models/repositories/stability-ai-stable-diffusion"]
+	path = sd_mecha/builtin_models/repositories/stability-ai-stable-diffusion
+	url = https://github.com/Stability-AI/stablediffusion.git
+[submodule "sd_mecha/builtin_models/repositories/stability-ai-generative-models"]
+	path = sd_mecha/builtin_models/repositories/stability-ai-generative-models
+	url = https://github.com/Stability-AI/generative-models.git
