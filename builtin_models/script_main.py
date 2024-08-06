@@ -1,23 +1,18 @@
-import importlib.util
 import pathlib
 import sys
-from builtin_models.paths import target_yaml_dir
+from builtin_models.paths import get_target_yaml_file, get_script_module
 from sd_mecha.extensions.model_config import to_yaml
 
 
 def run_script(script_path: pathlib.Path):
-    module_name = script_path.stem
-    spec = importlib.util.spec_from_file_location(module_name, script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = get_script_module(script_path)
 
-    if hasattr(module, 'create_config'):
-        model_config = module.create_config()
-    else:
+    if not hasattr(module, 'create_config'):
         raise RuntimeError(f"Function `create_config` not found in script {script_path}")
 
+    model_config = module.create_config()
     yaml_config = to_yaml(model_config)
-    with open(target_yaml_dir / f"{model_config.identifier}.yaml", "w") as f:
+    with open(get_target_yaml_file(model_config.identifier), "w") as f:
         f.write(yaml_config)
 
 

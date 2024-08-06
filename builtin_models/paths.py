@@ -1,6 +1,8 @@
+import importlib.util
 import pathlib
 import sys
 from contextlib import contextmanager
+from types import ModuleType
 
 
 module_dir = pathlib.Path(__file__).parent
@@ -20,3 +22,14 @@ def extra_path(*paths):
     sys.path[:0] = [str(path) for path in paths]
     yield
     sys.path[:] = original_sys_path
+
+
+def get_target_yaml_file(identifier: str) -> pathlib.Path:
+    return target_yaml_dir / f"{identifier}.yaml"
+
+
+def get_script_module(script_path: pathlib.Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

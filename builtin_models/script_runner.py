@@ -1,13 +1,12 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed
-import importlib.util
 import os
 import pathlib
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import as_completed, ProcessPoolExecutor
+from builtin_models.paths import get_script_module, get_target_yaml_file, module_dir, scripts_dir, venv_dir
 from types import ModuleType
 from typing import List
-from builtin_models.paths import scripts_dir, venv_dir, module_dir, target_yaml_dir
 
 
 def generate_model_configs():
@@ -22,11 +21,10 @@ def generate_model_configs():
             future.result()
 
 
-
 def generate_model_config(script_path: pathlib.Path):
     module = get_script_module(script_path)
     config_identifier = get_config_identifier(module)
-    if (target_yaml_dir / f"{config_identifier}.yaml").exists():
+    if get_target_yaml_file(config_identifier).exists():
         return
 
     requirements = get_script_requirements(module)
@@ -38,13 +36,6 @@ def generate_model_config(script_path: pathlib.Path):
         else:
             new_venv_dir = venv_dir
         run_script(new_venv_dir, script_path)
-
-
-def get_script_module(script_path: pathlib.Path) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def get_config_identifier(module: ModuleType):
