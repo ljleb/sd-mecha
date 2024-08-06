@@ -1,3 +1,4 @@
+import functools
 import typing
 from typing import List
 import uuid
@@ -13,7 +14,7 @@ class MergeSpaceSymbolBase:
 
 def MergeSpace(*identifiers: str) -> type(MergeSpaceBase):
     if not identifiers:
-        identifiers = list(_merge_space_registry.keys())
+        identifiers = get_all()
 
     res = _merge_space_registry[identifiers[0]]
     for identifier in identifiers[1:]:
@@ -33,6 +34,13 @@ def register_merge_space(identifier: str):
     _merge_space_registry[identifier] = new_class
 
 
+@functools.cache
+def _register_builtin_merge_spaces():
+    global builtin_merge_spaces
+    for builtin_merge_space in builtin_merge_spaces:
+        register_merge_space(builtin_merge_space)
+
+
 def get_identifiers(merge_space: type) -> List[str]:
     return [
         m.identifier
@@ -43,16 +51,15 @@ def get_identifiers(merge_space: type) -> List[str]:
     ]
 
 
+def get_all() -> List[str]:
+    return list(_merge_space_registry.keys())
+
+
 _merge_space_registry = {}
-
-
-def register_builtin_merge_spaces():
-    global builtin_merge_spaces
-    for builtin_merge_space in builtin_merge_spaces:
-        register_merge_space(builtin_merge_space)
-
-
 builtin_merge_spaces = (
     "weight",
     "delta",
 )
+
+
+_register_builtin_merge_spaces()

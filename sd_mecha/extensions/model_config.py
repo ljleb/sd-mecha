@@ -1,4 +1,6 @@
 import dataclasses
+import functools
+import pathlib
 import fuzzywuzzy.process
 import traceback
 import torch
@@ -101,6 +103,16 @@ def register_model_config(config: ModelConfig):
     _model_configs_registry[config.identifier] = config
 
 
+@functools.cache
+def _register_builtin_model_configs():
+    yaml_directory = pathlib.Path(__file__).parent.parent / "model_configs"
+    for yaml_config_path in yaml_directory.glob("*.yaml"):
+        with open(yaml_config_path, "r") as f:
+            yaml_config = f.read()
+        model_config = from_yaml(yaml_config)
+        register_model_config(model_config)
+
+
 _model_configs_registry: Dict[str, ModelConfig] = {}
 
 
@@ -114,3 +126,6 @@ def resolve(identifier: str) -> ModelConfig:
 
 def get_all() -> List[ModelConfig]:
     return list(_model_configs_registry.values())
+
+
+_register_builtin_model_configs()

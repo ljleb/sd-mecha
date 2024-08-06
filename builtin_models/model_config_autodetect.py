@@ -13,12 +13,19 @@ class Component:
     blocks: Mapping[str, torch.nn.Module] = dataclasses.field(default_factory=dict)
 
 
-def register_model_autodetect(
+def list_blocks(block_id_prefix: str, modules: Iterable[torch.nn.Module]):
+    return {
+        f"{block_id_prefix}{i}": module
+        for i, module in enumerate(modules)
+    }
+
+
+def create_config_autodetect(
     identifier: str,
     merge_space: str,
     model: torch.nn.Module,
     components: Component | Iterable[Component] = (),
-):
+) -> ModelConfig:
     stack_frame = traceback.extract_stack(None, 2)[0]
 
     if not isinstance(components, Iterable):
@@ -51,7 +58,7 @@ def register_model_autodetect(
                 config_components[component.identifier] = config_component
                 keys_to_merge |= {x for b in config_component.blocks.values() for x in b}
 
-    config = ModelConfig(
+    return ModelConfig(
         identifier=identifier,
         header=header,
         components=config_components,
@@ -59,7 +66,6 @@ def register_model_autodetect(
         merge_space=merge_space,
         _stack_frame=stack_frame,
     )
-    register_model_config(config)
 
 
 def header_from_model(model: torch.nn.Module):

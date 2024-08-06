@@ -1,4 +1,3 @@
-import functools
 import fuzzywuzzy.process
 import inspect
 import pathlib
@@ -6,7 +5,7 @@ import textwrap
 import torch
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
-from sd_mecha.extensions.merge_space import get_identifiers, MergeSpace, MergeSpaceBase
+from sd_mecha.extensions.merge_space import get_identifiers, get_all, MergeSpace, MergeSpaceBase
 from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable
 import typing
 
@@ -118,7 +117,7 @@ class MergeMethod:
         if annotation is not None and typing.get_origin(annotation) is Union:
             key = param_name if issubclass(annotation, MergeSpaceBase) else typing.get_args(annotation)[-1].__name__
             return set(get_identifiers(annotation)), key
-        return set(get_identifiers(MergeSpace())), param_name
+        return set(get_all()), param_name
 
     def get_model_names(self) -> List[str]:
         return inspect.getfullargspec(self.__f).args

@@ -4,23 +4,11 @@ import torch
 from torch import Tensor
 from typing import Optional, Dict, Mapping
 from sd_mecha.extensions.merge_space import MergeSpace
-import sd_mecha.extensions.merge_space
-sd_mecha.extensions.merge_space.register_builtin_merge_spaces()
-
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
-
-
-def merge_and_save(
-    recipe: recipe_nodes.RecipeNode,
-    models_dir: pathlib.Path,
-    output_path: pathlib.Path,
-):
-    merger = RecipeMerger(models_dir=models_dir)
-    merger.merge_and_save(recipe, output=output_path)
 
 
 def serialize_and_save(
@@ -355,7 +343,7 @@ def dropout(
         for model in models
     ]
     ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
-    return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
+    return merge_methods.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
 
 ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
@@ -420,7 +408,7 @@ def ties_with_dare(
     )
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
-    return sd_mecha.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
+    return merge_methods.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
 
 
 model_stock_for_tensor = merge_methods.model_stock_for_tensor
@@ -454,7 +442,7 @@ def model_stock_n_models(
         dtype=dtype
     )
 
-    return sd_mecha.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
+    return merge_methods.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
 
 
 def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_config: Optional[str] = None):
