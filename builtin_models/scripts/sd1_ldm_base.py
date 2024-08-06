@@ -1,12 +1,27 @@
+import pathlib
 from builtin_models.disable_init import DisableInitialization, MetaTensorMode
 from builtin_models.model_config_autodetect import create_config_autodetect, Component, list_blocks
 from builtin_models.paths import extra_path, configs_dir, repositories_dir
 from sd_mecha.extensions.model_config import ModelConfig
+from typing import List
+
+
+ldm_path = repositories_dir / "stability-ai-stable-diffusion"
+
+
+def get_requirements() -> List[str | pathlib.Path]:
+    return [
+        "-r", ldm_path / "requirements.txt",
+    ]
+
+
+def get_identifier() -> str:
+    return "sd1-ldm-base"
 
 
 def create_config() -> ModelConfig:
     with (
-        extra_path(repositories_dir / "stability-ai-stable-diffusion"),
+        extra_path(ldm_path),
         DisableInitialization(),
         MetaTensorMode()
     ):
@@ -18,7 +33,7 @@ def create_config() -> ModelConfig:
         model = instantiate_from_config(config)
 
         return create_config_autodetect(
-            identifier="sd1-ldm-base",
+            identifier=get_identifier(),
             merge_space="weight",
             model=model,
             components=(

@@ -1,21 +1,80 @@
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import importlib.util
-import multiprocessing
+import os
 import pathlib
-from builtin_models.paths import scripts_dir
+import shutil
+import subprocess
+import tempfile
+from types import ModuleType
+from typing import List
+from builtin_models.paths import scripts_dir, venv_dir, module_dir, target_yaml_dir
 
 
-def get_model_configs():
+def generate_model_configs():
     script_paths = scripts_dir.glob('*.py')
-    with multiprocessing.Pool(1) as pool:
-        return pool.map(run_create_config_script, script_paths)
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(generate_model_config, path) for path in script_paths]
+        for future in as_completed(futures):
+            if future.exception() is not None:
+                for future_to_cancel in futures:
+                    future_to_cancel.cancel()
+                raise future.exception()
+            future.result()
 
 
-def run_create_config_script(script_path: pathlib.Path):
+
+def generate_model_config(script_path: pathlib.Path):
+    module = get_script_module(script_path)
+    config_identifier = get_config_identifier(module)
+    if (target_yaml_dir / f"{config_identifier}.yaml").exists():
+        return
+
+    requirements = get_script_requirements(module)
+    with tempfile.TemporaryDirectory("venv") as new_venv_dir:
+        if requirements:
+            new_venv_dir = pathlib.Path(new_venv_dir).resolve()
+            copy_venv_to(new_venv_dir)
+            install_packages(new_venv_dir, requirements)
+        else:
+            new_venv_dir = venv_dir
+        run_script(new_venv_dir, script_path)
+
+
+def get_script_module(script_path: pathlib.Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
 
-    if hasattr(module, 'create_config'):
-        return module.create_config()
+
+def get_config_identifier(module: ModuleType):
+    if not hasattr(module, 'get_identifier'):
+        raise RuntimeError(f"Function `get_identifier` is not defined in script {module.__file__}")
+    return module.get_identifier()
+
+
+def get_script_requirements(module: ModuleType):
+    if not hasattr(module, 'get_requirements'):
+        return []
+    return module.get_requirements()
+
+
+def copy_venv_to(new_venv_dir: pathlib.Path):
+    shutil.copytree(venv_dir, new_venv_dir, dirs_exist_ok=True)
+
+
+def install_packages(new_venv_dir: pathlib.Path, requirements: List[str]):
+    args = ["-m", "pip", "install", "--upgrade-strategy", "only-if-needed"] + requirements
+    subprocess.run([str(get_executable(new_venv_dir))] + args, check=True)
+
+
+def run_script(new_venv_dir: pathlib.Path, script_path: pathlib.Path):
+    args = [str(module_dir / "script_main.py"), str(script_path)]
+    subprocess.run([str(get_executable(new_venv_dir))] + args, cwd=os.getcwd(), check=True)
+
+
+def get_executable(new_venv_dir: pathlib.Path):
+    if os.name == "nt":
+        return new_venv_dir / "Scripts" / "python.exe"
     else:
-        raise RuntimeError("function `create_config()` not found")
+        return new_venv_dir / "bin" / "python"

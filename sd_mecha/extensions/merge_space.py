@@ -1,7 +1,7 @@
 import functools
 import typing
-from typing import List
 import uuid
+from typing import List, Union
 
 
 class MergeSpaceBase:
@@ -9,7 +9,7 @@ class MergeSpaceBase:
 
 
 class MergeSpaceSymbolBase:
-    merge_space: type(MergeSpaceBase)
+    merge_space: type(MergeSpaceBase) | type(Union)
 
 
 def MergeSpace(*identifiers: str) -> type(MergeSpaceBase):
@@ -42,11 +42,17 @@ def _register_builtin_merge_spaces():
 
 
 def get_identifiers(merge_space: type) -> List[str]:
+    if issubclass(merge_space, MergeSpaceBase):
+        return [merge_space.identifier]
+    elif issubclass(merge_space, MergeSpaceSymbolBase):
+        return get_identifiers(merge_space.merge_space)
+    elif typing.get_origin(merge_space) is not Union:
+        return []
+
     return [
-        m.identifier
-        if issubclass(merge_space, MergeSpaceBase) else
-        m.merge_space.identifier
+        i
         for m in typing.get_args(merge_space)
+        for i in get_identifiers(m)
         if issubclass(m, (MergeSpaceBase, MergeSpaceSymbolBase))
     ]
 

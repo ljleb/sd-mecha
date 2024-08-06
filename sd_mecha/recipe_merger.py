@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict, TensorData
 from sd_mecha import extensions, recipe_nodes, recipe_serializer, hypers
-import sd_mecha.extensions.model_config
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Callable, Tuple, Set, Dict
 

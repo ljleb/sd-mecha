@@ -1,7 +1,8 @@
 import dataclasses
 import torch
 import traceback
-from sd_mecha.extensions.model_config import ModelConfigComponent, ModelConfig, register_model_config, StateDictKey
+from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
+from sd_mecha.extensions.model_config import ModelConfigComponent, ModelConfig, StateDictKey
 from sd_mecha.streaming import TensorData
 from typing import Mapping, Iterable, Dict
 
@@ -57,6 +58,8 @@ def create_config_autodetect(
                 )
                 config_components[component.identifier] = config_component
                 keys_to_merge |= {x for b in config_component.blocks.values() for x in b}
+
+    merge_space = get_identifiers(MergeSpace(merge_space))[0]
 
     return ModelConfig(
         identifier=identifier,

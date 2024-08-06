@@ -9,7 +9,9 @@ configs_dir = module_dir / "configs"
 scripts_dir = module_dir / "scripts"
 
 sd_mecha_dir = module_dir.parent / "sd_mecha"
-target_yaml_directory = sd_mecha_dir / "model_configs"
+target_yaml_dir = sd_mecha_dir / "model_configs"
+
+venv_dir = module_dir.parent / "venv"
 
 
 @contextmanager

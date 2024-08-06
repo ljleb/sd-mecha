@@ -1,14 +1,8 @@
-from builtin_models.paths import target_yaml_directory
-from builtin_models.script_runner import get_model_configs
-from sd_mecha.extensions import model_config
-
-
-def main():
-    for config in get_model_configs():
-        yaml_config = model_config.to_yaml(config)
-        with open(target_yaml_directory / f"{config.identifier}.yaml", "w") as f:
-            f.write(yaml_config)
+import time
+from builtin_models.script_runner import generate_model_configs
 
 
 if __name__ == "__main__":
-    main()
+    start = time.time()
+    generate_model_configs()
+    print(f"total time taken: {time.time() - start}")
