@@ -2,25 +2,13 @@ import logging
 import pathlib
 import torch
 from torch import Tensor
-
-import sd_mecha.builtin_model_archs
-import sd_mecha.builtin_model_types
 from typing import Optional, Dict, Mapping
+from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
-from sd_mecha.recipe_nodes import MergeSpace
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
-
-
-def merge_and_save(
-    recipe: recipe_nodes.RecipeNode,
-    models_dir: pathlib.Path,
-    output_path: pathlib.Path,
-):
-    merger = RecipeMerger(models_dir=models_dir)
-    merger.merge_and_save(recipe, output=output_path)
 
 
 def serialize_and_save(
@@ -43,6 +31,7 @@ def serialize_and_save(
 weighted_sum = merge_methods.weighted_sum
 slerp = merge_methods.slerp
 n_average = merge_methods.n_average
+geometric_median = merge_methods.geometric_median
 
 
 def add_difference(
@@ -162,7 +151,7 @@ def add_difference_ties(
     # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space == MergeSpace("weight") else
         model
         for model in models
     )
@@ -209,7 +198,7 @@ def add_difference_ties_extended(
     # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space is MergeSpace("weight") else
         model
         for model in models
     )
@@ -354,7 +343,7 @@ def dropout(
         for model in models
     ]
     ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
-    return sd_mecha.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
+    return merge_methods.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
 
 
 ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
@@ -395,7 +384,7 @@ def ties_with_dare(
     models = tuple(path_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space is MergeSpace("weight") else
         model
         for model in models
     )
@@ -419,7 +408,7 @@ def ties_with_dare(
     )
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
-    return sd_mecha.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
+    return merge_methods.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
 
 
 model_stock_for_tensor = merge_methods.model_stock_for_tensor
@@ -434,12 +423,11 @@ def model_stock_n_models(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-
     base = path_to_node(base)
     models = tuple(path_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace.BASE else
+        if model.merge_space is MergeSpace("weight") else
         model
         for model in models
     )
@@ -454,22 +442,11 @@ def model_stock_n_models(
         dtype=dtype
     )
 
-    return sd_mecha.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
+    return merge_methods.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
 
 
-geometric_median = merge_methods.geometric_median
-
-
-def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1", model_type: str = "base"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
-
-
-def lora(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, "lora")
-
-
-def parameter(name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
-    return recipe_nodes.ParameterRecipeNode(name, merge_space, model_arch)
+def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_config: Optional[str] = None):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_config)
 
 
 def set_log_level(level: str = "INFO"):

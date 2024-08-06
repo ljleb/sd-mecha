@@ -1,8 +1,0 @@
-parameter "a" "BASE" "sdxl"
-parameter "c" "BASE"
-merge "subtract" &0 &1
-parameter "b" "BASE"
-merge "subtract" &3 &1
-merge "perpendicular_component" &2 &4
-merge "add_difference" &0 &5 alpha=1.0
-merge "rotate" &6 &0 alpha=1.0 beta=0.0

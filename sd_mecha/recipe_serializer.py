@@ -1,34 +1,31 @@
 import pathlib
-import fuzzywuzzy.process
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeSpace, ParameterRecipeNode, RecipeVisitor
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor
 
 
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
-    if not isinstance(recipe, pathlib.Path):
+    if isinstance(recipe, str):
         recipe = pathlib.Path(recipe)
-    if recipe.exists():
-        if recipe.suffix == ".safetensors":
-            return recipe_nodes.ModelRecipeNode(recipe)
-        elif recipe.suffix == ".mecha":
-            return deserialize(recipe)
-        else:
-            raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
+    if isinstance(models_dir, str):
+        models_dir = pathlib.Path(models_dir)
 
-    if models_dir is not None and not recipe.is_absolute():
+    if models_dir is not None and not recipe.exists() and not recipe.is_absolute():
         recipe = models_dir / recipe
-    if not recipe.suffix:
-        recipe = recipe.with_suffix(".safetensors")
-    elif recipe.suffix != ".safetensors":
-        raise ValueError(f"invalid path to safetensors or recipe: {recipe}")
-    return recipe_nodes.ModelRecipeNode(recipe)
 
+    if not recipe.exists():
+        raise ValueError(f"unable to deserialize '{recipe}': no such file")
 
-def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
-    if not isinstance(recipe, list):
+    if recipe.suffix == ".mecha":
         with open(recipe, "r") as recipe:
-            recipe = recipe.readlines()
+            return deserialize(recipe.read())
+    else:
+        raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
+
+
+def deserialize(recipe: List[str] | str) -> RecipeNode:
+    if not isinstance(recipe, list):
+        recipe = recipe.split("\n")
 
     results = []
 
@@ -39,9 +36,6 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
             results.append(dict(*positional_args, **named_args))
         elif command == "model":
             results.append(ModelRecipeNode(*positional_args, **named_args))
-        elif command == "parameter":
-            merge_space = MergeSpace[positional_args[1]]
-            results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
         elif command == "merge":
             method, *positional_args = positional_args
             method = extensions.merge_method.resolve(method)
@@ -122,29 +116,23 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.path}" "{node.model_arch.identifier}" "{node.model_type.identifier}"'
-        return self.__add_instruction(line)
-
-    def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
-        merge_space = str(MergeSpace.BASE).split(".")[1]
-        model_arch = f' "{node.model_arch.identifier}"' if node.model_arch else ""
-        line = f'parameter "{node.name}" "{merge_space}"' + model_arch
+        line = f'model "{node.path}" "{node.model_config.identifier}"'
         return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
         models = [
-            f" &{model.accept(self)}"
+            f"&{model.accept(self)}"
             for model in node.models
         ]
 
         hypers = []
         for hyper_k, hyper_v in node.hypers.items():
             if isinstance(hyper_v, dict):
-                dict_line = "dict" + "".join(f" {k}={v}" for k, v in hyper_v.items())
+                dict_line = "dict " + " ".join(f"{k}={v}" for k, v in hyper_v.items())
                 hyper_v = f"&{self.__add_instruction(dict_line)}"
-            hypers.append(f" {hyper_k}={hyper_v}")
+            hypers.append(f"{hyper_k}={hyper_v}")
 
-        line = f'merge "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
+        line = f'merge "{node.merge_method.get_name()}" {" ".join(models)} {" ".join(hypers)}'
         return self.__add_instruction(line)
 
     def __add_instruction(self, instruction: str) -> int:
