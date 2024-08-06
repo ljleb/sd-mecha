@@ -1,6 +1,5 @@
 import functools
 import math
-import operator
 import numpy as np
 import torch
 from scipy.stats import binom
@@ -514,16 +513,14 @@ def rotate(
     if alignment == 0 and alpha == 0:
         return a
 
-    if len(a.shape) < 2 or torch.allclose(a.half(), b.half()):
+    if len(a.shape) <= 1 or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
-    is_conv = len(a.shape) == 4 and a.shape[-1] != 1
+    is_conv = len(a.shape) == 4 and a.shape[-2:].numel() != 1
     if is_conv:
-        shape_2d = (-1, functools.reduce(operator.mul, a.shape[2:]))
-    elif len(a.shape) == 4:
-        shape_2d = (-1, functools.reduce(operator.mul, a.shape[1:]))
+        shape_2d = a.shape[:2].numel(), a.shape[2:].numel()
     else:
-        shape_2d = (-1, a.shape[-1])
+        shape_2d = a.shape[:1].numel(), a.shape[1:].numel()
 
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)

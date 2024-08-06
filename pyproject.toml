@@ -15,16 +15,15 @@ classifiers = [
 ]
 dependencies = [
     "click>=8.1.7",
-    "numpy",
+    "numpy>=1.26.0",
+    "torch>=2.0.0",
     "safetensors>=0.4.2",
     "tqdm>=4.66.2",
     "scipy",
     "fuzzywuzzy>=0.18.0",
     "python-Levenshtein",
     "PyYAML>=6.0.1",
-    "omegaconf>=2.3.0",
     "lycoris-lora>=3.0.0",
-    "open-clip-torch",
 ]
 
 [tool.setuptools.package-dir]

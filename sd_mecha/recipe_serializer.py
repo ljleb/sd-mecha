@@ -1,8 +1,7 @@
 import pathlib
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, RecipeVisitor, ConvertRecipeNode
-from sd_mecha.extensions.merge_space import MergeSpace
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor
 
 
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
@@ -37,16 +36,10 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
             results.append(dict(*positional_args, **named_args))
         elif command == "model":
             results.append(ModelRecipeNode(*positional_args, **named_args))
-        elif command == "parameter":
-            merge_space = MergeSpace(positional_args[1])
-            results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
         elif command == "merge":
             method, *positional_args = positional_args
             method = extensions.merge_method.resolve(method)
             results.append(method.create_recipe(*positional_args, **named_args))
-        elif command == "convert":
-            model, model_arch = positional_args
-            results.append(ConvertRecipeNode(model, model_arch))
         else:
             raise ValueError(f"unknown command: {command}")
 
@@ -123,12 +116,7 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.path}" "{node.model_arch.identifier}" "{node.model_type.identifier}"'
-        return self.__add_instruction(line)
-
-    def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
-        model_arch = f' "{node.model_arch.identifier}"' if node.model_arch else ""
-        line = f'parameter "{node.name}" "weight"' + model_arch
+        line = f'model "{node.path}" "{node.model_config.identifier}"'
         return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
@@ -145,10 +133,6 @@ class SerializerVisitor(RecipeVisitor):
             hypers.append(f"{hyper_k}={hyper_v}")
 
         line = f'merge "{node.merge_method.get_name()}" {" ".join(models)} {" ".join(hypers)}'
-        return self.__add_instruction(line)
-
-    def visit_convert(self, node: ConvertRecipeNode) -> int:
-        line = f'convert &{node.model.accept(self)} "{node.out_model_arch.identifier}"'
         return self.__add_instruction(line)
 
     def __add_instruction(self, instruction: str) -> int:

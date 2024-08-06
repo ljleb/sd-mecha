@@ -1,1 +1,1 @@
-from . import merge_method, model_impl, model_conversion, merge_space
+from . import merge_method, model_config, model_conversion, merge_space

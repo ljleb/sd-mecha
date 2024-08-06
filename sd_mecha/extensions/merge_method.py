@@ -226,12 +226,7 @@ def resolve(identifier: str) -> MergeMethod:
         raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
 
 
-@functools.cache
 def path_to_node(node_or_path: RecipeNodeOrPath) -> RecipeNode:
     if isinstance(node_or_path, (str, pathlib.Path)):
         return ModelRecipeNode(node_or_path)
     return node_or_path
-
-
-def clear_model_paths_cache():
-    path_to_node.cache_clear()

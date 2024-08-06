@@ -5,7 +5,8 @@ import pathlib
 import sys
 import torch
 from contextlib import contextmanager
-from sd_mecha.extensions import model_impl
+from .model_config_autodetect import register_model_autodetect, Component
+from sd_mecha.extensions import model_config
 from typing import Iterable
 
 
@@ -29,35 +30,34 @@ def register_builtin_models():
             repositories_dir / "stability-ai-stable-diffusion",
             repositories_dir / "stability-ai-generative-models",
         ):
-            try:
-                callback()
-            except ImportError as e:
-                logging.error(e)
+            with DisableInitialization(), MetaTensorMode():
+                try:
+                    callback()
+                except ImportError as e:
+                    logging.error(e)
 
 
 def register_sd1_ldm_base():
-    import ldm.modules.encoders.modules as ldm_encoder_modules
     from ldm.util import instantiate_from_config
     config = str(module_dir / "configs/v1-inference.yaml")
     config = omegaconf.OmegaConf.load(config).model
+    model = instantiate_from_config(config)
 
-    with DisableInitialization(ldm_encoder_modules), MetaTensorMode():
-        model = instantiate_from_config(config)
-        model_impl.register_model_autodetect(
-            identifier="sd1-ldm-base",
-            model=model,
-            components=(
-                model_impl.ModelComponent("unet", unet := model.model.diffusion_model, {
-                    **list_blocks("in", unet.input_blocks.children()),
-                    "mid": unet.middle_block,
-                    **list_blocks("out", unet.output_blocks.children()),
-                }),
-                model_impl.ModelComponent("txt", txt := model.cond_stage_model.transformer.text_model, {
-                    **list_blocks("in", txt.encoder.layers.children()),
-                }),
-            ),
-            modules_to_ignore=model.first_stage_model,
-        )
+    register_model_autodetect(
+        identifier="sd1-ldm-base",
+        merge_space="weight",
+        model=model,
+        components=(
+            Component("txt", txt := model.cond_stage_model.transformer.text_model, {
+                **list_blocks("in", txt.encoder.layers.children()),
+            }),
+            Component("unet", unet := model.model.diffusion_model, {
+                **list_blocks("in", unet.input_blocks.children()),
+                "mid": unet.middle_block,
+                **list_blocks("out", unet.output_blocks.children()),
+            }),
+        ),
+    )
 
 
 def list_blocks(block_id_prefix: str, modules: Iterable[torch.nn.Module]):
@@ -98,7 +98,7 @@ class MetaTensorMode(ReplaceHelper):
         def patch_original_init(f, args, kwargs):
             try:
                 return f(*args, **force_meta_device(kwargs))
-            except:
+            except (KeyError, ValueError, TypeError):
                 return f(*args, **kwargs)
 
         for module_key, module_class in torch.nn.__dict__.items():
@@ -120,9 +120,8 @@ class MetaTensorMode(ReplaceHelper):
 
 
 class DisableInitialization(ReplaceHelper):
-    def __init__(self, ldm_encoder_modules=None):
+    def __init__(self):
         super().__init__()
-        self.ldm_encoder_modules = ldm_encoder_modules
 
     def __enter__(self):
         def do_nothing(*args, **kwargs):
@@ -170,12 +169,12 @@ class DisableInitialization(ReplaceHelper):
         self.replace(torch.nn.init, '_no_grad_normal_', do_nothing)
         self.replace(torch.nn.init, '_no_grad_uniform_', do_nothing)
 
+        import ldm.modules.encoders.modules
         import transformers
         import open_clip
 
         self.create_model_and_transforms = self.replace(open_clip, 'create_model_and_transforms', create_model_and_transforms_without_pretrained)
-        if self.ldm_encoder_modules is not None:
-            self.CLIPTextModel_from_pretrained = self.replace(self.ldm_encoder_modules.CLIPTextModel, 'from_pretrained', CLIPTextModel_from_pretrained)
+        self.CLIPTextModel_from_pretrained = self.replace(ldm.modules.encoders.modules.CLIPTextModel, 'from_pretrained', CLIPTextModel_from_pretrained)
         self.transformers_modeling_utils_load_pretrained_model = self.replace(transformers.modeling_utils.PreTrainedModel, '_load_pretrained_model', transformers_modeling_utils_load_pretrained_model)
         self.transformers_tokenization_utils_base_cached_file = self.replace(transformers.tokenization_utils_base, 'cached_file', transformers_tokenization_utils_base_cached_file)
         self.transformers_configuration_utils_cached_file = self.replace(transformers.configuration_utils, 'cached_file', transformers_configuration_utils_cached_file)
@@ -186,4 +185,15 @@ class DisableInitialization(ReplaceHelper):
         self.restore()
 
 
-register_builtin_models()
+def main():
+    register_builtin_models()
+    yaml_directory = pathlib.Path(__file__).parent.parent / "sd_mecha" / "model_configs"
+
+    for config in model_config.get_all():
+        yaml_config = model_config.to_yaml(config)
+        with open(yaml_directory / f"{config.identifier}.yaml", "w") as f:
+            f.write(yaml_config)
+
+
+if __name__ == "__main__":
+    main()

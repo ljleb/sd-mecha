@@ -1,3 +1,4 @@
+import abc
 import dataclasses
 import functools
 import gc
@@ -6,12 +7,12 @@ import pathlib
 import threading
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from sd_mecha.model_detection import DetermineConfigVisitor
-from sd_mecha.recipe_nodes import RecipeVisitor, ConvertRecipeNode
-from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
-from sd_mecha import extensions, recipe_nodes, recipe_serializer
+from sd_mecha.recipe_nodes import RecipeVisitor
+from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict, TensorData
+from sd_mecha import extensions, recipe_nodes, recipe_serializer, hypers
+import sd_mecha.extensions.model_config
 from tqdm import tqdm
-from typing import Optional, Mapping, MutableMapping, Dict, Set, List
+from typing import Optional, Mapping, MutableMapping, List, Iterable, Callable, Tuple, Set, Dict
 
 
 class RecipeMerger:
@@ -40,7 +41,7 @@ class RecipeMerger:
 
     def merge_and_save(
         self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
-        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge",
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge.safetensors",
         fallback_model: Optional[Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
         save_device: Optional[str] = "cpu",
         save_dtype: Optional[torch.dtype] = torch.float16,
@@ -48,24 +49,23 @@ class RecipeMerger:
         total_buffer_size: int = 2**28,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
-        if recipe.merge_space != recipe_nodes.MergeSpace.BASE:
-            raise ValueError(f"recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
+        model_config = recipe.model_config
+        if recipe.merge_space != model_config.merge_space:
+            raise ValueError(f"recipe should be in merge space '{model_config.merge_space}', not '{recipe.merge_space}'")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
         elif not isinstance(fallback_model, (recipe_nodes.ModelRecipeNode, Mapping, type(None))):
             raise ValueError(f"fallback_model should be a simple model or None, not {type(fallback_model)}")
-        extensions.merge_method.clear_model_paths_cache()
 
         fallback_is_recipe = isinstance(fallback_model, recipe_nodes.ModelRecipeNode)
-        fallback_in_recipe = fallback_is_recipe and fallback_model in recipe
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
             int(isinstance(output, (str, pathlib.Path))) +
-            int(fallback_is_recipe and not fallback_in_recipe)
+            int(fallback_is_recipe and fallback_model not in recipe)
         )
         buffer_size_per_file = total_buffer_size // total_files_open
         if threads is None:
-            threads = total_files_open
+            threads = min(max(total_files_open, 2), 8)
 
         load_input_dicts_visitor = LoadInputDictsVisitor(
             self.__base_dirs,
@@ -75,28 +75,29 @@ class RecipeMerger:
         if fallback_is_recipe:
             fallback_model.accept(load_input_dicts_visitor)
 
-        model_config = recipe.accept(DetermineConfigVisitor())
+        model_config = recipe.model_config
         if fallback_is_recipe:
-            model_config = model_config.intersect(fallback_model.accept(DetermineConfigVisitor()))
+            if model_config is not fallback_model.model_config:
+                raise ValueError(f"fallback_model ({fallback_model.model_config.identifier}) must have the same config as the recipe ({model_config.identifier})")
             fallback_model = fallback_model.state_dict
 
         output = self.__normalize_output_to_dict(
             output,
-            model_config.get_minimal_dummy_header(),
-            model_config.get_keys_to_merge(),
+            model_config.header,
+            model_config.keys_to_merge,
             recipe_serializer.serialize(recipe),
             buffer_size_per_file // threads,
             save_dtype,
         )
 
         thread_local_data = threading.local()
-        progress = self.__tqdm(total=len(model_config.keys()), desc="Merging recipe")
+        progress = self.__tqdm(total=len(model_config.header.keys()), desc="Merging recipe")
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
-            for key in model_config.keys():
-                key_merger = model_config.get_key_merger(key, recipe, fallback_model, self.__default_device, self.__default_dtype)
+            for key in model_config.header.keys():
+                key_merger = self.__get_key_merger(key, recipe, fallback_model)
                 key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
-                key_merger = self.__track_progress(key_merger, key, model_config.get_shape(key), progress)
+                key_merger = self.__track_progress(key_merger, key, model_config.header[key].shape, progress)
                 key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
                 futures.append(executor.submit(key_merger))
 
@@ -118,8 +119,8 @@ class RecipeMerger:
     def __normalize_output_to_dict(
         self,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
-        merged_header: Dict[str, dict],
-        keys_to_merge: Set[str],
+        merged_header: Mapping[str, TensorData],
+        keys_to_merge: Iterable[str],
         serialized_recipe: str,
         buffer_size_per_thread: int,
         dtype: torch.dtype,
@@ -133,24 +134,30 @@ class RecipeMerger:
                 output = output.with_suffix(".safetensors")
             logging.info(f"Saving to {output}")
 
+            merged_header = {
+                k: dataclasses.replace(v, dtype=dtype) if k in keys_to_merge else v
+                for k, v in merged_header.items()
+            }
+
             output = OutSafetensorsDict(
                 output,
                 merged_header,
-                keys_to_merge,
                 serialized_recipe,
                 buffer_size_per_thread,
-                dtype,
             )
         return output
 
-    def __track_progress(self, f, key, key_shape, progress):
-        @functools.wraps(f)
-        def track_progress(*args, **kwargs):
-            progress.set_postfix({"key": key, "shape": key_shape})
-            res = f(*args, **kwargs)
-            progress.update()
-            return res
-        return track_progress
+    def __get_key_merger(self, key, recipe, fallback_model):
+        key_merger = KeyMerger(
+            recipe,
+            fallback_model,
+            self.__default_device,
+            self.__default_dtype,
+        )
+        if key in recipe.model_config.keys_to_merge:
+            return functools.partial(key_merger.merge_and_save, key)
+        else:
+            return functools.partial(key_merger.forward_and_save, key)
 
     def __track_output(self, f, output, key, save_dtype, save_device):
         if save_dtype is None:
@@ -165,6 +172,15 @@ class RecipeMerger:
         def track_output(*args, **kwargs):
             output[key] = f(*args, **kwargs).to(**to_kwargs)
         return track_output
+
+    def __track_progress(self, f, key, key_shape, progress):
+        @functools.wraps(f)
+        def track_progress(*args, **kwargs):
+            progress.set_postfix({"key": key, "shape": list(key_shape)})
+            res = f(*args, **kwargs)
+            progress.update()
+            return res
+        return track_progress
 
     def __wrap_thread_context(self, f, ctx):
         @functools.wraps(f)
@@ -181,27 +197,35 @@ class RecipeMerger:
 
 
 @dataclasses.dataclass
-class LoadInputDictsVisitor(RecipeVisitor):
-    __base_dirs: List[pathlib.Path]
-    __buffer_size_per_dict: int
+class ValidateConfigVisitor(RecipeVisitor):
+    node_paths: Set[str]
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
-        node.state_dict = self.__load_dict(node)
+        pass
 
-    def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
-        return
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
+        first_config = node.models[0].model_config
+        for m in node.models:
+            if m.model_config.identifier != first_config.identifier:
+                raise ValueError(f"Incompatible models found as input to recipe: {first_config.identifier} and {m.model_config.identifier}")
+
+
+@dataclasses.dataclass
+class LoadInputDictsVisitor(RecipeVisitor):
+    base_dirs: List[pathlib.Path]
+    buffer_size_per_dict: int
+    dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=list)
+
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode):
+        node.state_dict, node_path = self.__load_dict(node)
+        if node.model_config is None:
+            node.model_config = self.__detect_model_config(node.state_dict, node_path)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         for model in node.models:
             model.accept(self)
 
-    def visit_convert(self, node: ConvertRecipeNode):
-        node.model.accept(self)
-
-    def __load_dict(
-        self,
-        node: recipe_nodes.ModelRecipeNode,
-    ) -> InSafetensorsDict:
+    def __load_dict(self, node: recipe_nodes.ModelRecipeNode):
         if node.state_dict is not None:
             return node.state_dict
 
@@ -209,7 +233,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         if not isinstance(path, pathlib.Path):
             path = pathlib.Path(path)
         if not path.is_absolute():
-            for base_dir in self.__base_dirs:
+            for base_dir in self.base_dirs:
                 path_attempt = base_dir / path
                 if not path_attempt.suffix:
                     path_attempt = path_attempt.with_suffix(".safetensors")
@@ -217,7 +241,24 @@ class LoadInputDictsVisitor(RecipeVisitor):
                     path = path_attempt
                     break
 
-        return InSafetensorsDict(path, self.__buffer_size_per_dict)
+        if path not in self.dicts_cache:
+            self.dicts_cache[str(path)] = InSafetensorsDict(path, self.buffer_size_per_dict)
+
+        return self.dicts_cache[str(path)], path
+
+    def __detect_model_config(self, state_dict: Mapping[str, torch.Tensor], path: pathlib.Path):
+        configs_affinity = {}
+        for model_config in extensions.model_config.get_all():
+            model_config = extensions.model_config.resolve(model_config)
+            unmatched_keys = set(model_config.header.keys()).difference(set(state_dict.keys()))
+            configs_affinity[model_config.identifier] = len(unmatched_keys)
+
+        best_config = min(configs_affinity, key=configs_affinity.get)
+        best_config = extensions.model_config.resolve(best_config)
+        if configs_affinity[best_config.identifier] == len(best_config.header):
+            raise ValueError(f"No configuration matches any key from {path}")
+
+        return best_config
 
 
 @dataclasses.dataclass
@@ -227,12 +268,106 @@ class CloseInputDictsVisitor(RecipeVisitor):
             node.state_dict.close()
         node.state_dict = None
 
-    def visit_parameter(self, _node: recipe_nodes.ParameterRecipeNode):
-        return
-
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         for model in node.models:
             model.accept(self)
 
-    def visit_convert(self, node: ConvertRecipeNode):
-        node.model.accept(self)
+
+@dataclasses.dataclass
+class KeyMerger:
+    recipe: recipe_nodes.RecipeNode
+    fallback_model: Mapping[str, torch.Tensor]
+    default_device: str
+    default_dtype: torch.dtype
+
+    def merge_and_save(
+        self,
+        key: str,
+    ) -> torch.Tensor:
+        key_merger = KeyMergeVisitor(
+            key,
+            self.default_device,
+            self.default_dtype,
+            self.__get_passthrough_tensor,
+        )
+        return self.recipe.accept(key_merger)
+
+    def forward_and_save(
+        self,
+        key: str,
+    ) -> torch.Tensor:
+        return self.__get_passthrough_tensor(key)
+
+    def __get_passthrough_tensor(self, key: str):
+        if self.fallback_model is not None and key in self.fallback_model:
+            return self.fallback_model[key]
+
+        key_merger = KeyPassthroughVisitor(
+            key,
+            self.default_device,
+            self.default_dtype,
+        )
+        return self.recipe.accept(key_merger)
+
+
+@dataclasses.dataclass
+class KeyVisitor(RecipeVisitor, abc.ABC):
+    key: str
+    default_device: str
+    default_dtype: torch.dtype
+
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
+        return node.state_dict[self.key]
+
+    @abc.abstractmethod
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
+        pass
+
+
+@dataclasses.dataclass
+class KeyMergeVisitor(KeyVisitor):
+    passthrough_callback: Callable[[str], torch.Tensor]
+
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
+        merged: List[Optional[torch.Tensor]] = [None] * len(node.models)
+        try:
+            return node.merge_method(
+                self.__visit_deeper_first(node.models, merged),
+                {
+                    k: hypers.get_hyper(v, self.key, node.model_config, node.merge_method.get_default_hypers().get(k))
+                    for k, v in node.hypers.items()
+                } | node.volatile_hypers,
+                self.key,
+                node.device if node.device is not None else self.default_device,
+                node.dtype if node.dtype is not None else self.default_dtype,
+            )
+        except KeyError:
+            for n, m in zip(node.models, merged):
+                if m is not None and n.merge_space == node.merge_space:
+                    return m
+            return self.passthrough_callback(self.key)
+
+    def __visit_deeper_first(self, nodes: Tuple[recipe_nodes.RecipeNode, ...], merged: List[Optional[torch.Tensor]]) -> list:
+        def depth_of_value(index) -> int:
+            if nodes[index] is None:
+                return 0
+            return nodes[index].accept(recipe_nodes.DepthRecipeVisitor())
+
+        for index in sorted(range(len(nodes)), key=depth_of_value, reverse=True):
+            if nodes[index] is None:
+                continue
+            merged[index] = nodes[index].accept(self)
+
+        return merged
+
+
+@dataclasses.dataclass
+class KeyPassthroughVisitor(KeyVisitor):
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
+        for model in node.models:
+            try:
+                return model.accept(self)
+            except KeyError:
+                continue
+
+        raise KeyError(f"No model has key '{self.key}'")

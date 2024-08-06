@@ -2,40 +2,36 @@ import re
 import fuzzywuzzy.process
 from typing import Dict, Optional, List
 from sd_mecha import extensions
-from sd_mecha.extensions.model_impl import MergeConfig
+from sd_mecha.extensions.model_config import ModelConfig
 
 
 Hyper = int | float | Dict[str, int | float]
 
 
-def get_hyper(hyper: Hyper, key: str, model_arch: MergeConfig, default_value: Optional[int | float]) -> int | float:
+def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: Optional[int | float]) -> int | float:
     if isinstance(hyper, (int, float)):
         return hyper
     elif isinstance(hyper, dict):
         result = 0.0
         total = 0
-        for block_id, pattern in model_arch.blocks.items():
-            if not pattern.match(key):
-                continue
+        for component_id, component in model_config.components.items():
+            for block_id, block_keys in component.blocks.items():
+                if key not in block_keys:
+                    continue
 
-            value = hyper.get(block_id)
-            if value is not None:
-                result += value
-                total += 1
+                hyper_id = f"{model_config.identifier}_{component_id}_{block_id}"
+                value = hyper.get(hyper_id)
+                if value is not None:
+                    result += value
+                    total += 1
 
         if total > 0:
             return result / total
 
-        for block_id, pattern in model_arch.blocks.items():
-            if not pattern.match(key):
-                continue
-
-            for component in model_arch.components:
-                if not block_id.startswith(f"{model_arch.identifier}_{component}_"):
-                    continue
-
+        for component_id, component in model_config.components.items():
+            if key in component.keys:
                 try:
-                    return hyper[f"{model_arch.identifier}_{component}_default"]
+                    return hyper[f"{model_config.identifier}_{component}_default"]
                 except KeyError:
                     continue
 
@@ -47,12 +43,12 @@ def get_hyper(hyper: Hyper, key: str, model_arch: MergeConfig, default_value: Op
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
-def validate_hyper(hyper: Hyper, model_arch: Optional[MergeConfig]) -> Hyper:
+def validate_hyper(hyper: Hyper, model_config: Optional[ModelConfig]) -> Hyper:
     if isinstance(hyper, dict):
-        if model_arch is None:
+        if model_config is None:
             raise ValueError("Abstract recipes (with recipe parameters) cannot specify component-wise hyperparameters")
 
-        hyper_keys = model_arch.hyper_keys()
+        hyper_keys = model_config.hyper_keys()
         for key in hyper.keys():
             if key not in hyper_keys and not key.endswith("_default"):
                 suggestion = fuzzywuzzy.process.extractOne(key, hyper_keys)[0]
@@ -63,7 +59,7 @@ def validate_hyper(hyper: Hyper, model_arch: Optional[MergeConfig]) -> Hyper:
         raise TypeError(f"Hyperparameter must be a float or a dictionary, not {type(hyper).__name__}")
 
 
-def blocks(model_arch: str | MergeConfig, model_component: str, *args, strict: bool = True, **kwargs) -> Hyper:
+def blocks(model_config: str | ModelConfig, model_component: str, *args, strict: bool = True, **kwargs) -> Hyper:
     """
     Generate block hyperparameters for a model version.
     Either positional arguments or keyword arguments can be used, but not both at the same time.
@@ -76,22 +72,22 @@ def blocks(model_arch: str | MergeConfig, model_component: str, *args, strict: b
 
     where `<model_arch>` is the version identifier of the model used. (i.e. "sd1", "sdxl", etc.)
 
-    :param model_arch: the architecture of the model for which to generate block hyperparameters
+    :param model_config: the configuration of the model for which to generate block hyperparameters
     :param model_component: the model component for which the block-wise hyperparameters are intended for (i.e. "unet", "txt", "txt2", etc.)
     :param strict: if blocks are passed to *args, determines whether the number of blocks must match exactly the maximum number of blocks for the selected model component
     :param args: positional block hyperparameters
     :param kwargs: keyword block hyperparameters
     :return: block-wise hyperparameters
     """
-    if isinstance(model_arch, str):
-        model_arch = extensions.model_arch.resolve(model_arch)
+    if isinstance(model_config, str):
+        model_arch = extensions.model_config.resolve(model_config)
 
     if args and kwargs:
         raise ValueError("`args` and `kwargs` cannot be used at the same time. Either use positional or keyword arguments, but not both.")
     if args:
         identifiers = list(
-            k for k in model_arch.hyper_keys()
-            if k.startswith(f"{model_arch.identifier}_{model_component}_block_")
+            k for k in model_config.hyper_keys()
+            if k.startswith(f"{model_config.identifier}_{model_component}_block_")
         )
         if strict and len(args) != len(identifiers):
             raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few (i.e. 'in0=1, out3=0.5, ...') or pass strict=False.")
@@ -99,7 +95,7 @@ def blocks(model_arch: str | MergeConfig, model_component: str, *args, strict: b
         identifiers.sort(key=natural_sort_key)
         return dict(zip(identifiers, args))
     return {
-        f"{model_arch.identifier}_{model_component}_block_{k}": v
+        f"{model_config.identifier}_{model_component}_block_{k}": v
         for k, v in kwargs.items()
     }
 
@@ -108,16 +104,16 @@ def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
 
 
-def default(model_arch: str | MergeConfig, model_components: Optional[str | List[str]] = None, value: int | float = 0) -> Hyper:
-    if isinstance(model_arch, str):
-        model_arch = extensions.model_arch.resolve(model_arch)
+def default(model_config: str | ModelConfig, model_components: Optional[str | List[str]] = None, value: int | float = 0) -> Hyper:
+    if isinstance(model_config, str):
+        model_config = extensions.model_config.resolve(model_config)
 
     if not model_components:
-        model_components = model_arch.components
+        model_components = model_config.components
     elif isinstance(model_components, str):
         model_components = [model_components]
 
     return {
-        f"{model_arch.identifier}_{model_component}_default": value
+        f"{model_config.identifier}_{model_component}_default": value
         for model_component in model_components
     }

@@ -2,9 +2,11 @@ import logging
 import pathlib
 import torch
 from torch import Tensor
-import sd_mecha.builtin_models
 from typing import Optional, Dict, Mapping
 from sd_mecha.extensions.merge_space import MergeSpace
+import sd_mecha.extensions.merge_space
+sd_mecha.extensions.merge_space.register_builtin_merge_spaces()
+
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
@@ -41,6 +43,7 @@ def serialize_and_save(
 weighted_sum = merge_methods.weighted_sum
 slerp = merge_methods.slerp
 n_average = merge_methods.n_average
+geometric_median = merge_methods.geometric_median
 
 
 def add_difference(
@@ -454,19 +457,8 @@ def model_stock_n_models(
     return sd_mecha.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
 
 
-geometric_median = merge_methods.geometric_median
-
-
-def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1", model_type: str = "base"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, model_type)
-
-
-def lora(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_arch: str = "sd1"):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_arch, "lora")
-
-
-def parameter(name: str, merge_space: MergeSpace, model_arch: Optional[str] = None):
-    return recipe_nodes.ParameterRecipeNode(name, merge_space, model_arch)
+def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_config: Optional[str] = None):
+    return recipe_nodes.ModelRecipeNode(state_dict, model_config)
 
 
 def set_log_level(level: str = "INFO"):

@@ -6,9 +6,10 @@ import operator
 import pathlib
 import struct
 import threading
+from collections import OrderedDict
 import torch
 import warnings
-from typing import Optional, Set
+from typing import Optional, Dict, Mapping
 from tqdm import tqdm
 
 
@@ -69,16 +70,42 @@ def find_best_safetensors_path(dir_path: pathlib.Path) -> pathlib.Path:
     return best_file
 
 
+@dataclasses.dataclass
+class TensorData:
+    shape: torch.Size
+    dtype: torch.dtype
+
+    def __post_init__(self):
+        if isinstance(self.shape, list):
+            self.shape = torch.Size(self.shape)
+        if isinstance(self.dtype, str):
+            self.dtype = getattr(torch, self.dtype)
+
+    def safetensors_header_value(self, data_offset: int):
+        return {
+            "shape": list(self.shape),
+            "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
+            "data_offsets": [data_offset, data_offset + self.get_byte_size()]
+        }
+
+    def get_byte_size(self):
+        return self.numel() * self.get_dtype_size()
+
+    def get_dtype_size(self):
+        return DTYPE_REVERSE_MAPPING[self.dtype][1]
+
+    def numel(self) -> int:
+        return functools.reduce(operator.mul, list(self.shape), 1)
+
+
 class DiffusersOutSafetensorsDict:
     def __init__(
         self,
         dir_path: pathlib.Path,
         model_arch,
-        template_header: dict,
-        keys_to_merge: Set[str],
+        template_header: Dict[str, TensorData],
         mecha_recipe: str,
         minimum_buffer_size: int,
-        save_dtype: torch.dtype,
     ):
         dir_path.mkdir(exist_ok=True)
         for component in model_arch.components:
@@ -89,10 +116,8 @@ class DiffusersOutSafetensorsDict:
             component: OutSafetensorsDict(
                 dir_path / component / "model.safetensors",
                 {k.split(".", maxsplit=1)[1]: v for k, v in template_header.items() if k.startswith(component + ".")},
-                {k.split(".", maxsplit=1)[1] for k in keys_to_merge if k.startswith(component + ".")},
                 mecha_recipe,
                 minimum_buffer_size // len(model_arch.components),
-                save_dtype,
             )
             for component in model_arch.components
         }
@@ -113,7 +138,7 @@ class DiffusersOutSafetensorsDict:
             d.close()
 
 
-class InSafetensorsDict:
+class InSafetensorsDict(Mapping[str, torch.Tensor]):
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":
             raise ValueError(f"Model type not supported: {file_path} (only safetensors are supported)")
@@ -208,11 +233,9 @@ class OutSafetensorsDict:
     def __init__(
         self,
         file_path: pathlib.Path,
-        template_header: dict,
-        keys_to_merge: Set[str],
+        header: Dict[str, TensorData],
         mecha_recipe: str,
         minimum_buffer_size: int,
-        save_dtype: torch.dtype,
     ):
         self.thread_states = {}
         self.lock = threading.Lock()
@@ -225,7 +248,7 @@ class OutSafetensorsDict:
         self.flushed_size = 0
         self.minimum_buffer_size = minimum_buffer_size
 
-        self.max_header_size = self._init_buffer(template_header, keys_to_merge, save_dtype)
+        self.max_header_size = self._init_buffer(header)
 
     def __del__(self):
         self.file.close()
@@ -258,33 +281,20 @@ class OutSafetensorsDict:
     def __len__(self):
         return len(self.header)
 
-    def _init_buffer(self, template_header: dict, keys_to_merge: Set[str], save_dtype: torch.dtype) -> int:
-        def get_dtype(k):
-            return DTYPE_REVERSE_MAPPING[save_dtype][0] if k in keys_to_merge else template_header[k]["dtype"]
-
-        def get_dtype_size(k):
-            return DTYPE_REVERSE_MAPPING[save_dtype][1] if k in keys_to_merge else DTYPE_MAPPING[template_header[k]["dtype"]][1]
-
-        def get_width(k):
-            return functools.reduce(operator.mul, template_header[k]["shape"], 1) * get_dtype_size(k)
-
-        keys = sorted(
-            list(k for k in template_header.keys() if k != "__metadata__"),
-            key=get_width,
+    def _init_buffer(self, header: Dict[str, TensorData]) -> int:
+        worst_case_header = dict(sorted(
+            header.items(),
+            key=lambda item: item[1].get_byte_size(),
             reverse=True,  # simulate worst case: maximize space taken by order
-        )
-        data_offset = 0
-        dummy_header = {
-            k: {
-                "dtype": get_dtype(k),
-                "shape": template_header[k]["shape"],
-                "data_offsets": [data_offset, (data_offset := data_offset + get_width(k))],
-            }
-            for k in keys
-        }
+        ))
 
-        dummy_header["__metadata__"] = self.header["__metadata__"]
-        header_json = json.dumps(dummy_header, separators=(',', ':')).encode('utf-8')
+        data_offset = 0
+        dummy_safetensors_header = OrderedDict(self.header)
+        for k, v in worst_case_header.items():
+            dummy_safetensors_header[k] = v.safetensors_header_value(data_offset)
+            data_offset += v.get_byte_size()
+
+        header_json = json.dumps(dummy_safetensors_header, separators=(',', ':')).encode('utf-8')
         max_header_size = len(header_json)
         self.file.seek(8 + max_header_size)  # Reserve space for the header
         return max_header_size
@@ -375,6 +385,4 @@ DTYPE_MAPPING = {
     'I32': (torch.int32, 4),
     'I16': (torch.int16, 2),
 }
-
-
 DTYPE_REVERSE_MAPPING = {v: (k, b) for k, (v, b) in DTYPE_MAPPING.items()}

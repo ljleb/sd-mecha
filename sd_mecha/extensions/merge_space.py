@@ -44,3 +44,15 @@ def get_identifiers(merge_space: type) -> List[str]:
 
 
 _merge_space_registry = {}
+
+
+def register_builtin_merge_spaces():
+    global builtin_merge_spaces
+    for builtin_merge_space in builtin_merge_spaces:
+        register_merge_space(builtin_merge_space)
+
+
+builtin_merge_spaces = (
+    "weight",
+    "delta",
+)
