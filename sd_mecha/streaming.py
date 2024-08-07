@@ -374,6 +374,8 @@ DTYPE_MAPPING = {
     'I64': (torch.int64, 8),
     'I32': (torch.int32, 4),
     'I16': (torch.int16, 2),
+    "F8_E4M3": (torch.float8_e4m3fn, 1),
+    "F8_E5M2": (torch.float8_e5m2, 1),
 }
 
 
