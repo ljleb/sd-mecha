@@ -2,7 +2,6 @@ import dataclasses
 import functools
 import pathlib
 import fuzzywuzzy.process
-import traceback
 import torch
 import yaml
 from sd_mecha.streaming import TensorMetadata
@@ -12,35 +11,40 @@ from typing import Dict, List, Iterable, Mapping
 StateDictKey = str
 
 
-def get_dataclass_caller_frame() -> traceback.FrameSummary:
-    return traceback.extract_stack(None, 3)[0]
+@dataclasses.dataclass
+class ModelConfigBlock:
+    keys: Iterable[StateDictKey]
+    keys_to_merge: Iterable[StateDictKey]
 
 
 @dataclasses.dataclass
 class ModelConfigComponent:
     identifier: str
-    blocks: Mapping[str, Iterable[StateDictKey]]
+    blocks: Mapping[str, ModelConfigBlock]
+
+    def __post_init__(self):
+        blocks = dict(self.blocks)
+        for k, v in self.blocks.items():
+            blocks[k] = v
+            if isinstance(v, dict):
+                blocks[k] = ModelConfigBlock(**v)
+        self.blocks = blocks
 
     @property
     def keys(self) -> Iterable[StateDictKey]:
-        return set(k for v in self.blocks.values() for k in v)
+        return set(k for v in self.blocks.values() for k in v.keys)
+
+    @property
+    def keys_to_merge(self) -> Iterable[StateDictKey]:
+        return set(k for v in self.blocks.values() for k in v.keys_to_merge)
 
 
 @dataclasses.dataclass
 class ModelConfig:
     identifier: str
     header: Mapping[StateDictKey, TensorMetadata]
-    keys_to_merge: Iterable[StateDictKey]
     components: Mapping[str, ModelConfigComponent]
     merge_space: str
-
-    _stack_frame: traceback.FrameSummary = dataclasses.field(
-        default_factory=get_dataclass_caller_frame,
-        repr=False,
-        hash=False,
-        compare=False,
-        metadata={"exclude": True},
-    )
 
     def __post_init__(self):
         header = dict(self.header)
@@ -61,10 +65,6 @@ class ModelConfig:
         for component_name, component in self.components.items():
             for block_name in component.blocks.keys():
                 yield f"{self.identifier}_{component_name}_block_{block_name}"
-
-    @property
-    def registration_location(self):
-        return f"{self._stack_frame.filename}:{self._stack_frame.lineno}"
 
 
 def serialize(obj):
@@ -100,8 +100,7 @@ def from_yaml(yaml_config: str) -> ModelConfig:
 
 def register_model_config(config: ModelConfig):
     if config.identifier in _model_configs_registry:
-        existing_location = _model_configs_registry[config.identifier].registration_location
-        raise ValueError(f"Extension {config.identifier} is already registered at {existing_location}.")
+        raise ValueError(f"Model {config.identifier} already exists")
 
     _model_configs_registry[config.identifier] = config
 

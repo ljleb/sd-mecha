@@ -31,8 +31,7 @@ def generate_model_config(script_path: pathlib.Path):
     with tempfile.TemporaryDirectory(prefix="venv") as new_venv_dir:
         if requirements:
             new_venv_dir = pathlib.Path(new_venv_dir).resolve()
-            copy_venv_to(new_venv_dir)
-            install_packages(new_venv_dir, requirements)
+            create_new_venv(new_venv_dir, requirements)
         else:
             new_venv_dir = venv_dir
         run_script(new_venv_dir, script_path)
@@ -48,6 +47,11 @@ def get_script_requirements(module: ModuleType):
     if not hasattr(module, 'get_requirements'):
         return []
     return module.get_requirements()
+
+
+def create_new_venv(new_venv_dir: pathlib.Path, requirements: List[str]):
+    copy_venv_to(new_venv_dir)
+    install_packages(new_venv_dir, requirements)
 
 
 def copy_venv_to(new_venv_dir: pathlib.Path):
