@@ -47,7 +47,7 @@ class ModelRecipeNode(RecipeNode):
 
     @property
     def merge_space(self) -> str:
-        return self.__model_config.merge_space
+        return extensions.model_config.resolve(self.__model_config).merge_space
 
     @property
     def model_config(self) -> Optional[ModelConfig]:

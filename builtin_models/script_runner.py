@@ -28,7 +28,7 @@ def generate_model_config(script_path: pathlib.Path):
         return
 
     requirements = get_script_requirements(module)
-    with tempfile.TemporaryDirectory("venv") as new_venv_dir:
+    with tempfile.TemporaryDirectory(prefix="venv") as new_venv_dir:
         if requirements:
             new_venv_dir = pathlib.Path(new_venv_dir).resolve()
             copy_venv_to(new_venv_dir)

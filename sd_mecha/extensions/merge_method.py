@@ -1,3 +1,5 @@
+from types import UnionType
+
 import fuzzywuzzy.process
 import inspect
 import pathlib
@@ -66,7 +68,7 @@ class MergeMethod:
             "key": key,
         }
 
-    def get_return_merge_space(self, merge_spaces_args: List[type(MergeSpaceBase)]) -> type(MergeSpaceBase):
+    def get_return_merge_space(self, merge_spaces_args: List[str]) -> str:
         type_hints = typing.get_type_hints(self.__f)
         model_names = self.get_model_names()
         varargs_name = self.get_model_varargs_name()
@@ -83,7 +85,7 @@ class MergeMethod:
                     # occurrence of already seen type var
                     if merge_space_arg != resolved_input_spaces[key]:
                         raise TypeError(f"parameter '{param_name}' of method {self.__name} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
-                elif merge_space_arg & merge_space_param:
+                elif merge_space_arg in merge_space_param:
                     resolved_input_spaces[key] = merge_space_arg
                 else:
                     raise TypeError(f"parameter '{param_name}' of method {self.__name} expects {merge_space_param} but got {merge_space_arg}")
@@ -92,7 +94,7 @@ class MergeMethod:
         if key in resolved_input_spaces:
             return resolved_input_spaces[key]
         else:
-            return merge_space_param
+            return next(iter(merge_space_param))
 
     def get_input_merge_spaces(self) -> Tuple[List[type], Optional[type]]:
         type_hints = typing.get_type_hints(self.__f)
@@ -114,8 +116,8 @@ class MergeMethod:
         return [MergeSpace(*m) for m in merge_spaces], varargs_merge_space
 
     def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[Set[str], str]:
-        if annotation is not None and typing.get_origin(annotation) is Union:
-            key = param_name if issubclass(annotation, MergeSpaceBase) else typing.get_args(annotation)[-1].__name__
+        if annotation is not None and typing.get_origin(annotation) is UnionType:
+            key = param_name if issubclass(typing.get_origin(annotation), MergeSpaceBase) else typing.get_args(annotation)[-1].__name__
             return set(get_identifiers(annotation)), key
         return set(get_all()), param_name
 

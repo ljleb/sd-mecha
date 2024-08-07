@@ -8,7 +8,7 @@ import threading
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.recipe_nodes import RecipeVisitor
-from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict, TensorData
+from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict, TensorMetadata
 from sd_mecha import extensions, recipe_nodes, recipe_serializer, hypers
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Callable, Tuple, Set, Dict
@@ -118,7 +118,7 @@ class RecipeMerger:
     def __normalize_output_to_dict(
         self,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
-        merged_header: Mapping[str, TensorData],
+        merged_header: Mapping[str, TensorMetadata],
         keys_to_merge: Iterable[str],
         serialized_recipe: str,
         buffer_size_per_thread: int,
@@ -213,7 +213,7 @@ class ValidateConfigVisitor(RecipeVisitor):
 class LoadInputDictsVisitor(RecipeVisitor):
     base_dirs: List[pathlib.Path]
     buffer_size_per_dict: int
-    dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=list)
+    dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)

@@ -1,6 +1,7 @@
 import functools
 import typing
 import uuid
+from types import UnionType
 from typing import List, Union
 
 
@@ -42,11 +43,15 @@ def _register_builtin_merge_spaces():
 
 
 def get_identifiers(merge_space: type) -> List[str]:
-    if issubclass(merge_space, MergeSpaceBase):
-        return [merge_space.identifier]
-    elif issubclass(merge_space, MergeSpaceSymbolBase):
-        return get_identifiers(merge_space.merge_space)
-    elif typing.get_origin(merge_space) is not Union:
+    merge_space_type = typing.get_origin(merge_space)
+    if merge_space_type is None:
+        merge_space_type = merge_space
+
+    if issubclass(merge_space_type, MergeSpaceBase):
+        return [merge_space_type.identifier]
+    elif issubclass(merge_space_type, MergeSpaceSymbolBase):
+        return get_identifiers(merge_space_type.merge_space)
+    elif merge_space_type is not UnionType:
         return []
 
     return [

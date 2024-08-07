@@ -5,7 +5,7 @@ import fuzzywuzzy.process
 import traceback
 import torch
 import yaml
-from sd_mecha.streaming import TensorData
+from sd_mecha.streaming import TensorMetadata
 from typing import Dict, List, Iterable, Mapping
 
 
@@ -19,14 +19,17 @@ def get_dataclass_caller_frame() -> traceback.FrameSummary:
 @dataclasses.dataclass
 class ModelConfigComponent:
     identifier: str
-    keys: Iterable[StateDictKey]
     blocks: Mapping[str, Iterable[StateDictKey]]
+
+    @property
+    def keys(self) -> Iterable[StateDictKey]:
+        return set(k for v in self.blocks.values() for k in v)
 
 
 @dataclasses.dataclass
 class ModelConfig:
     identifier: str
-    header: Mapping[StateDictKey, TensorData]
+    header: Mapping[StateDictKey, TensorMetadata]
     keys_to_merge: Iterable[StateDictKey]
     components: Mapping[str, ModelConfigComponent]
     merge_space: str
@@ -44,7 +47,7 @@ class ModelConfig:
         for k, v in self.header.items():
             header[k] = v
             if isinstance(v, dict):
-                header[k] = TensorData(**v)
+                header[k] = TensorMetadata(**v)
         self.header = header
 
         components = dict(self.components)
@@ -57,7 +60,7 @@ class ModelConfig:
     def hyper_keys(self) -> Iterable[str]:
         for component_name, component in self.components.items():
             for block_name in component.blocks.keys():
-                yield f"{self.identifier}_{component_name}_{block_name}"
+                yield f"{self.identifier}_{component_name}_block_{block_name}"
 
     @property
     def registration_location(self):

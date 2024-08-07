@@ -13,7 +13,7 @@ from typing import Optional, Dict, Mapping
 from tqdm import tqdm
 
 
-class DiffusersInSafetensorsDict:
+class DiffusersInSafetensorsDict(Mapping[str, torch.Tensor]):
     def __init__(self, dir_path: pathlib.Path, model_arch, buffer_size: int):
         self.file_path = dir_path
         self.dicts = {
@@ -71,7 +71,7 @@ def find_best_safetensors_path(dir_path: pathlib.Path) -> pathlib.Path:
 
 
 @dataclasses.dataclass
-class TensorData:
+class TensorMetadata:
     shape: torch.Size
     dtype: torch.dtype
 
@@ -103,7 +103,7 @@ class DiffusersOutSafetensorsDict:
         self,
         dir_path: pathlib.Path,
         model_arch,
-        template_header: Dict[str, TensorData],
+        template_header: Dict[str, TensorMetadata],
         mecha_recipe: str,
         minimum_buffer_size: int,
     ):
@@ -166,7 +166,8 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
         return len(self.header)
 
     def close(self):
-        self.file.close()
+        if hasattr(self, "file"):
+            self.file.close()
         self.buffer = None
         self.header = None
 
@@ -233,7 +234,7 @@ class OutSafetensorsDict:
     def __init__(
         self,
         file_path: pathlib.Path,
-        header: Dict[str, TensorData],
+        header: Dict[str, TensorMetadata],
         mecha_recipe: str,
         minimum_buffer_size: int,
     ):
@@ -281,8 +282,8 @@ class OutSafetensorsDict:
     def __len__(self):
         return len(self.header)
 
-    def _init_buffer(self, header: Dict[str, TensorData]) -> int:
-        worst_case_header = dict(sorted(
+    def _init_buffer(self, header: Dict[str, TensorMetadata]) -> int:
+        worst_case_header = OrderedDict(sorted(
             header.items(),
             key=lambda item: item[1].get_byte_size(),
             reverse=True,  # simulate worst case: maximize space taken by order
@@ -301,11 +302,11 @@ class OutSafetensorsDict:
 
     def _flush_buffer(self, state: OutSafetensorsDictThreadState, next_tensor_size: Optional[int] = None, close: bool = False):
         if not close:
-            lock_obj = self.lock
+            lock = self.lock
         else:
-            lock_obj = contextlib.nullcontext()
+            lock = contextlib.nullcontext()
 
-        with lock_obj:
+        with lock:
             self.file.write(state.buffer[:state.memory_used])
             buffer_offset = self.flushed_size
             self.flushed_size += state.memory_used
