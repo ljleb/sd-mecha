@@ -9,20 +9,25 @@ merge:
       - double_blocks.0
       - time_in
       - vector_in
+      - guidance_in
       - img_in
       - txt_in
       single37:
       - single_blocks.37
       - time_in
       - vector_in
+      - guidance_in
+      - final_layer
       double*:
       - double_blocks.*
       - time_in
       - vector_in
+      - guidance_in
       single*:
       - single_blocks.*
       - time_in
       - vector_in
+      - guidance_in
 
   clip_l:
     prefix: text_encoders.clip_l
