@@ -33,20 +33,22 @@ merge:
       - transformer.text_model.embeddings.token_embedding
       in11:
       - transformer.text_model.encoder.layers.11
+      - text_projection
       - logit_scale
       in*:
       - transformer.text_model.encoder.layers.*
 
   t5xxl:
-    prefix: text_encoders.t5xxl.transformer
+    prefix: text_encoders.t5xxl
     blocks:
       in0:
-      - encoder.block.0
-      - shared.weight
+      - transformer.encoder.block.0
+      - transformer.shared.weight
       in23:
-      - encoder.block.23
-      - encoder.final_layer_norm.weight
+      - transformer.encoder.block.23
+      - transformer.encoder.final_layer_norm.weight
+      - logit_scale
       in*:
-      - encoder.block.*
+      - transformer.encoder.block.*
 
 keys: flux_flux_keys.txt
