@@ -240,9 +240,7 @@ class OutSafetensorsDict:
 
         state = self.thread_states[tid]
 
-        tensor_bytes = io.BytesIO()
-        torch.save(tensor.cpu().contiguous(), tensor_bytes)
-        tensor_bytes = tensor_bytes.getvalue()
+        tensor_bytes = bytes(tensor.cpu().contiguous().untyped_storage())
         tensor_size = len(tensor_bytes)
 
         if tensor_size > len(state.buffer) - state.memory_used:
