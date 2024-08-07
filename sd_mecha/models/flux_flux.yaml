@@ -33,7 +33,7 @@ merge:
       - transformer.text_model.embeddings.token_embedding
       in11:
       - transformer.text_model.encoder.layers.11
-      - text_projection
+      - transformer.text_projection
       - logit_scale
       in*:
       - transformer.text_model.encoder.layers.*
