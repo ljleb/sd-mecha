@@ -240,7 +240,7 @@ class OutSafetensorsDict:
 
         state = self.thread_states[tid]
 
-        tensor_bytes = bytes(tensor.cpu().contiguous().untyped_storage())
+        tensor_bytes = tensor.cpu().contiguous().untyped_storage()
         tensor_size = len(tensor_bytes)
 
         if tensor_size > len(state.buffer) - state.memory_used:
