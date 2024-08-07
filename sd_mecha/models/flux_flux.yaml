@@ -1,0 +1,52 @@
+passthrough:
+- vae
+
+merge:
+  transformer:
+    prefix: model.diffusion_model
+    blocks:
+      double0:
+      - double_blocks.0
+      - time_in
+      - vector_in
+      - img_in
+      - txt_in
+      single37:
+      - single_blocks.37
+      - time_in
+      - vector_in
+      double*:
+      - double_blocks.*
+      - time_in
+      - vector_in
+      single*:
+      - single_blocks.*
+      - time_in
+      - vector_in
+
+  clip_l:
+    prefix: text_encoders.clip_l
+    blocks:
+      in0:
+      - transformer.text_model.encoder.layers.0
+      - transformer.text_model.embeddings.position_embedding
+      - transformer.text_model.embeddings.token_embedding
+      in11:
+      - transformer.text_model.encoder.layers.11
+      - logit_scale
+      in*:
+      - transformer.text_model.encoder.layers.*
+
+  t5xxl:
+    prefix: text_encoders.t5xxl.transformer
+    blocks:
+      in0:
+      - encoder.block.0
+      - shared.weight
+      in23:
+      - encoder.block.23
+      - encoder.final_layer_norm.weight
+      in*:
+      - encoder.block.*
+
+keys: flux_flux_keys.txt

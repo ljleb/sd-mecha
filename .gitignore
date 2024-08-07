@@ -4,5 +4,6 @@ sd_mecha.egg-info
 build
 dist
 config
+venv
 
 examples/*_test.py
