@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import functools
+import io
 import json
 import operator
 import pathlib
@@ -239,7 +240,9 @@ class OutSafetensorsDict:
 
         state = self.thread_states[tid]
 
-        tensor_bytes = tensor.cpu().numpy().tobytes()
+        tensor_bytes = io.BytesIO()
+        torch.save(tensor.cpu().contiguous(), tensor_bytes)
+        tensor_bytes = tensor_bytes.getvalue()
         tensor_size = len(tensor_bytes)
 
         if tensor_size > len(state.buffer) - state.memory_used:
