@@ -8,7 +8,6 @@ import pathlib
 import struct
 import sys
 import threading
-
 import numpy
 import torch
 import warnings
