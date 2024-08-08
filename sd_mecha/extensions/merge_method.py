@@ -1,5 +1,3 @@
-from types import UnionType
-
 import fuzzywuzzy.process
 import inspect
 import pathlib
@@ -8,6 +6,7 @@ import torch
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
 from sd_mecha.extensions.merge_space import get_identifiers, get_all, MergeSpace, MergeSpaceBase
+from types import UnionType
 from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable
 import typing
 

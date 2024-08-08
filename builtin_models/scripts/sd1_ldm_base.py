@@ -37,11 +37,8 @@ def create_txt_component(model: torch.nn.Module) -> Component:
     component = Component("txt", txt, [
         *list_blocks("in", txt.encoder.layers.children()),
     ])
-    for block in component.blocks:
-        if block.identifier == "in0":
-            block.includes += [txt.embeddings.token_embedding, txt.embeddings.position_embedding]
-        if block.identifier == "in11":
-            block.includes += [txt.final_layer_norm]
+    component.blocks[0].includes += [txt.embeddings.token_embedding, txt.embeddings.position_embedding]
+    component.blocks[-1].includes += [txt.final_layer_norm]
 
     return component
 
@@ -53,11 +50,10 @@ def create_unet_component(model: torch.nn.Module):
         Block("mid", [unet.middle_block]),
         *list_blocks("out", unet.output_blocks.children()),
     ])
+    component.blocks[-1].includes += [unet.out]
     for i, block in enumerate(component.blocks):
         if not block.identifier.startswith("in") or i % 3 != 0:
             block.includes += [unet.time_embed]
-        if block.identifier == "out11":
-            block.includes += [unet.out]
 
     return component
 
