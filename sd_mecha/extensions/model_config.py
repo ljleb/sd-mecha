@@ -108,17 +108,24 @@ def serialize(obj):
 
 def to_yaml(model_config: ModelConfig) -> str:
     dict_config = serialize(model_config)
-    old_representer = yaml.SafeDumper.yaml_representers.get(list)
+    old_representers = yaml.SafeDumper.yaml_representers.copy()
 
     def flow_style_list_representer(dumper, data):
         return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
 
+    def flow_style_dict_representer(dumper, data):
+        if "shape" in data and "dtype" in data:
+            return dumper.represent_mapping('tag:yaml.org,2002:map', data, flow_style=True)
+        else:
+            return dumper.represent_mapping('tag:yaml.org,2002:map', data)
+
     try:
         yaml.SafeDumper.add_representer(list, flow_style_list_representer)
-        return yaml.safe_dump(dict_config, sort_keys=False)
+        yaml.SafeDumper.add_representer(dict, flow_style_dict_representer)
+        return yaml.safe_dump(dict_config, width=2**64, sort_keys=False)
     finally:
-        if old_representer is not None:
-            yaml.SafeDumper.add_representer(list, old_representer)
+        yaml.SafeDumper.yaml_representers.clear()
+        yaml.SafeDumper.yaml_representers.update(old_representers)
 
 
 def from_yaml(yaml_config: str) -> ModelConfig:

@@ -31,7 +31,10 @@ def get_target_yaml_file(identifier: str) -> pathlib.Path:
 
 
 def get_script_venv(identifier: str) -> pathlib.Path:
-    return script_venvs_dir / identifier
+    script_venv_dir = script_venvs_dir / identifier
+    if not script_venv_dir.exists():
+        return shared_venv_dir
+    return script_venv_dir
 
 
 def get_script_module(script_path: pathlib.Path) -> ModuleType:

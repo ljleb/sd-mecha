@@ -30,6 +30,16 @@ class MetaTensorMode(ReplaceHelper):
             kwargs["device"] = "meta"
             return kwargs
 
+        def to_meta_device(f, args, kwargs):
+            args = [
+                arg
+                for arg in args
+                if not isinstance(arg, (str, torch.device))
+            ]
+            if "device" in kwargs:
+                del kwargs["device"]
+            return f(*args, **kwargs)
+
         def patch_original_init(f, args, kwargs):
             try:
                 return f(*args, **force_meta_device(kwargs))
@@ -48,7 +58,7 @@ class MetaTensorMode(ReplaceHelper):
                 lambda *args, __original_init=module_class.__init__, **kwargs: patch_original_init(__original_init, args, kwargs)
             )
 
-        self.replace(torch.nn.Module, 'to', lambda *args, **kwargs: None)
+        torch_nn_Module_to = self.replace(torch.nn.Module, 'to', lambda *args, **kwargs: to_meta_device(torch_nn_Module_to, args, kwargs))
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.restore()

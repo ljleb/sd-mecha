@@ -16,6 +16,7 @@ def create_configs() -> Iterable[ModelConfig]:
     config = str(configs_dir / "v1-inference.yaml")
     config = OmegaConf.load(config).model
     model = instantiate_from_config(config)
+    model.to(torch.float16)
 
     return [
         create_config_from_module(
