@@ -53,6 +53,13 @@ class ModelConfig:
     components: Mapping[str, ModelConfigComponent]
 
     def __post_init__(self):
+        keys_to_copy = dict(self.keys_to_copy)
+        for k, v in self.keys_to_copy.items():
+            keys_to_copy[k] = v
+            if isinstance(v, dict):
+                keys_to_copy[k] = TensorMetadata(**v)
+        self.keys_to_copy = keys_to_copy
+
         components = dict(self.components)
         for k, v in self.components.items():
             components[k] = v

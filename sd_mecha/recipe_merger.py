@@ -48,9 +48,6 @@ class RecipeMerger:
         total_buffer_size: int = 2**28,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
-        model_config = recipe.model_config
-        if recipe.merge_space != model_config.merge_space:
-            raise ValueError(f"recipe should be in merge space '{model_config.merge_space}', not '{recipe.merge_space}'")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
         elif not isinstance(fallback_model, (recipe_nodes.ModelRecipeNode, Mapping, type(None))):
@@ -75,6 +72,9 @@ class RecipeMerger:
             fallback_model.accept(load_input_dicts_visitor)
 
         model_config = recipe.model_config
+        if recipe.merge_space != model_config.merge_space:
+            raise ValueError(f"recipe should be in merge space '{model_config.merge_space}', not '{recipe.merge_space}'")
+
         if fallback_is_recipe:
             if model_config is not fallback_model.model_config:
                 raise ValueError(f"fallback_model ({fallback_model.model_config.identifier}) must have the same config as the recipe ({model_config.identifier})")

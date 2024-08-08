@@ -1,4 +1,5 @@
 import abc
+import functools
 import pathlib
 import torch
 from typing import Optional, Dict, Any, Mapping
@@ -47,11 +48,13 @@ class ModelRecipeNode(RecipeNode):
 
     @property
     def merge_space(self) -> str:
-        return extensions.model_config.resolve(self.__model_config).merge_space
+        return self.model_config.merge_space
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
-        return extensions.model_config.resolve(self.__model_config)
+        if isinstance(self.__model_config, str):
+            return extensions.model_config.resolve(self.__model_config)
+        return self.__model_config
 
     @model_config.setter
     def model_config(self, value: Optional[ModelConfig]):
@@ -82,16 +85,16 @@ class MergeRecipeNode(RecipeNode):
         self.volatile_hypers = volatile_hypers
         self.device = device
         self.dtype = dtype
-        self.__merge_space = self.merge_method.get_return_merge_space([
-            model.merge_space for model in self.models
-        ])
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_merge(self, *args, **kwargs)
 
     @property
+    @functools.cache
     def merge_space(self) -> str:
-        return self.__merge_space
+        return self.merge_method.get_return_merge_space([
+            model.merge_space for model in self.models
+        ])
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
