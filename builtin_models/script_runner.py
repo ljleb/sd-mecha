@@ -2,7 +2,7 @@ import os
 import pathlib
 import subprocess
 from concurrent.futures import as_completed, ProcessPoolExecutor
-from builtin_models.paths import get_script_module, get_target_yaml_file, get_executable, get_script_venv, module_dir, scripts_dir
+from builtin_models.paths import get_script_module, get_executable, get_script_venv, module_dir, scripts_dir
 from types import ModuleType
 
 
