@@ -14,7 +14,6 @@ StateDictKey = str
 @dataclasses.dataclass
 class ModelConfigBlock:
     keys_to_merge: Mapping[StateDictKey, TensorMetadata]
-    keys_to_copy: Mapping[StateDictKey, TensorMetadata]
 
     def __post_init__(self):
         keys_to_merge = dict(self.keys_to_merge)
@@ -24,21 +23,9 @@ class ModelConfigBlock:
                 keys_to_merge[k] = TensorMetadata(**v)
         self.keys_to_merge = keys_to_merge
 
-        keys_to_copy = dict(self.keys_to_copy)
-        for k, v in self.keys_to_copy.items():
-            keys_to_copy[k] = v
-            if isinstance(v, dict):
-                keys_to_copy[k] = TensorMetadata(**v)
-        self.keys_to_copy = keys_to_copy
-
-    @property
-    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return dict(self.keys_to_merge) | dict(self.keys_to_copy)
-
 
 @dataclasses.dataclass
 class ModelConfigComponent:
-    identifier: str
     blocks: Mapping[str, ModelConfigBlock]
 
     def __post_init__(self):
@@ -50,15 +37,7 @@ class ModelConfigComponent:
         self.blocks = blocks
 
     @property
-    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
-        return {
-            k: v
-            for block in self.blocks.values()
-            for k, v in block.keys.items()
-        }
-
-    @property
-    def keys_to_merge(self) -> Mapping[StateDictKey, TensorMetadata]:
+    def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
         return {
             k: v
             for block in self.blocks.values()
@@ -69,8 +48,9 @@ class ModelConfigComponent:
 @dataclasses.dataclass
 class ModelConfig:
     identifier: str
-    components: Mapping[str, ModelConfigComponent]
     merge_space: str
+    keys_to_copy: Mapping[StateDictKey, TensorMetadata]
+    components: Mapping[str, ModelConfigComponent]
 
     def __post_init__(self):
         components = dict(self.components)
@@ -87,11 +67,7 @@ class ModelConfig:
 
     @property
     def keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return {
-            k: v
-            for component in self.components.values()
-            for k, v in component.keys.items()
-        }
+        return self.keys_to_merge | self.keys_to_copy
 
     @property
     def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
@@ -125,17 +101,17 @@ def serialize(obj):
 
 def to_yaml(model_config: ModelConfig) -> str:
     dict_config = serialize(model_config)
-    old_representer = yaml.Dumper.yaml_representers.get(list)
+    old_representer = yaml.SafeDumper.yaml_representers.get(list)
 
     def flow_style_list_representer(dumper, data):
         return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
-    try:
-        yaml.add_representer(list, flow_style_list_representer)
 
+    try:
+        yaml.SafeDumper.add_representer(list, flow_style_list_representer)
         return yaml.safe_dump(dict_config, sort_keys=False)
     finally:
         if old_representer is not None:
-            yaml.add_representer(list, old_representer)
+            yaml.SafeDumper.add_representer(list, old_representer)
 
 
 def from_yaml(yaml_config: str) -> ModelConfig:

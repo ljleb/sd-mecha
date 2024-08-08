@@ -22,7 +22,9 @@ def run_script(script_path: pathlib.Path):
         model_config = module.create_config()
 
     yaml_config = to_yaml(model_config)
-    with open(get_target_yaml_file(model_config.identifier), "w") as f:
+    target_yaml_file = get_target_yaml_file(model_config.identifier)
+    target_yaml_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(target_yaml_file, "w") as f:
         f.write(yaml_config)
 
 

@@ -1,4 +1,6 @@
 import dataclasses
+import re
+
 import torch
 from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
 from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig, StateDictKey
@@ -40,6 +42,7 @@ def create_config_from_module(
             pass
 
     config_components = {}
+    keys_to_copy = header
     for component in components:
         config_blocks = {}
         for block in component.blocks:
@@ -58,48 +61,45 @@ def create_config_from_module(
                 for k, v in all_block_keys.items()
                 if k not in block_keys_to_copy
             }
-            config_block = ModelConfigBlock(
-                block_keys_to_merge,
-                block_keys_to_copy,
-            )
-            config_blocks[block.identifier] = config_block
+            keys_to_copy = {
+                k: v
+                for k, v in keys_to_copy.items()
+                if k not in block_keys_to_merge
+            }
+            config_blocks[block.identifier] = ModelConfigBlock(block_keys_to_merge)
 
-        config_component = ModelConfigComponent(
-            component.identifier,
-            config_blocks,
-        )
-        config_components[component.identifier] = config_component
+        config_components[component.identifier] = ModelConfigComponent(config_blocks)
 
     # validate merge space
     merge_space = get_identifiers(MergeSpace(merge_space))[0]
 
     return ModelConfig(
         identifier=identifier,
-        components=config_components,
         merge_space=merge_space,
+        keys_to_copy=keys_to_copy,
+        components=config_components,
     )
 
 
 def header_from_model(model: torch.nn.Module):
+    state_dict = model.state_dict(keep_vars=True)
     direct_state_dict_keys: Dict[str, Iterable[StateDictKey]] = {}
-    seen_keys = set()
     state_dict_hooks = {}
 
     def create_direct_state_dict_hook(module_name):
-        def hook(module, state_dict, _prefix, _local_metadata):
-            nonlocal direct_state_dict_keys, seen_keys, state_dict_hooks
+        def hook(module, partial_state_dict, _prefix, _local_metadata):
+            nonlocal direct_state_dict_keys, state_dict, state_dict_hooks
             state_dict_hooks[module_name].remove()
 
             module_state_dict_values = module.state_dict(keep_vars=True).values()
-            new_keys = set(
+            direct_keys = set(
                 k
                 for k, v in state_dict.items()
-                if k not in seen_keys and any(v is v2 for v2 in module_state_dict_values)
+                if any(v is v2 for v2 in module_state_dict_values)
             )
-            if new_keys:
-                direct_state_dict_keys[module_name] = new_keys
-                seen_keys |= new_keys
-            return state_dict
+            if direct_keys:
+                direct_state_dict_keys[module_name] = direct_keys
+            return partial_state_dict
         return hook
 
     for name, module in model.named_modules():
@@ -114,7 +114,7 @@ def header_from_model(model: torch.nn.Module):
 
         default = set()
         for module_name, module_keys in list(direct_state_dict_keys.items()):
-            if module_name.startswith(name):
+            if re.match(rf"^{re.escape(name)}(?=\.|$)", module_name):
                 state_dict_keys[name] = state_dict_keys.get(name, default) | module_keys
 
     return header, state_dict_keys, direct_state_dict_keys

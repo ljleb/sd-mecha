@@ -16,7 +16,7 @@ def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: 
         total = 0
         for component_id, component in model_config.components.items():
             for block_id, block in component.blocks.items():
-                if key not in block.keys:
+                if key not in block.keys_to_merge:
                     continue
 
                 hyper_id = f"{model_config.identifier}_{component_id}_block_{block_id}"
@@ -29,7 +29,7 @@ def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: 
             return result / total
 
         for component_id, component in model_config.components.items():
-            if key in component.keys:
+            if key in component.keys_to_merge:
                 try:
                     return hyper[f"{model_config.identifier}_{component_id}_default"]
                 except KeyError:
