@@ -20,6 +20,7 @@ class Component:
     identifier: str
     module: torch.nn.Module
     blocks: List[Block] = dataclasses.field(default_factory=list)
+    copy_only: bool = False
 
 
 def create_config_from_module(

@@ -23,34 +23,13 @@ def create_configs() -> Iterable[ModelConfig]:
             merge_space="weight",
             model=model,
             components=(
-                create_txt1_component(model),
-                create_txt2_component(model),
                 create_unet_component(model),
+                create_txt_component(model),
+                create_txt2_component(model),
+                create_vae_component(model),
             ),
         ),
     ]
-
-
-def create_txt1_component(model: torch.nn.Module) -> Component:
-    txt = model.conditioner.embedders[0].transformer.text_model
-    component = Component("txt1", txt, [
-        *list_blocks("in", txt.encoder.layers.children()),
-    ])
-    component.blocks[0].includes += [txt.embeddings.token_embedding, txt.embeddings.position_embedding]
-    component.blocks[-1].includes += [txt.final_layer_norm]
-
-    return component
-
-
-def create_txt2_component(model: torch.nn.Module) -> Component:
-    txt = model.conditioner.embedders[1].model
-    component = Component("txt2", txt, [
-        *list_blocks("in", txt.transformer.resblocks.children()),
-    ])
-    component.blocks[0].includes += [txt.token_embedding, txt.positional_embedding]
-    component.blocks[-1].includes += [txt.ln_final, txt.text_projection, txt.logit_scale]
-
-    return component
 
 
 def create_unet_component(model: torch.nn.Module):
@@ -64,6 +43,42 @@ def create_unet_component(model: torch.nn.Module):
     for i, block in enumerate(component.blocks):
         if not block.identifier.startswith("in") or i % 3 != 0:
             block.includes += [unet.time_embed, unet.label_emb]
+
+    return component
+
+
+def create_txt_component(model: torch.nn.Module) -> Component:
+    txt = model.conditioner.embedders[0].transformer
+    component = Component("txt", txt, [
+        *list_blocks("in", txt.text_model.encoder.layers.children()),
+    ])
+    component.blocks[0].includes += [txt.text_model.embeddings.token_embedding, txt.text_model.embeddings.position_embedding]
+    component.blocks[-1].includes += [txt.text_model.final_layer_norm, txt.text_projection]
+
+    return component
+
+
+def create_txt2_component(model: torch.nn.Module) -> Component:
+    txt2 = model.conditioner.embedders[1].model
+    component = Component("txt2", txt2, [
+        *list_blocks("in", txt2.transformer.resblocks.children()),
+    ])
+    component.blocks[0].includes += [txt2.token_embedding, txt2.positional_embedding]
+    component.blocks[-1].includes += [txt2.ln_final, txt2.text_projection, txt2.logit_scale]
+
+    return component
+
+
+def create_vae_component(model: torch.nn.Module) -> Component:
+    vae = model.first_stage_model
+    component = Component("vae", vae, [
+        *list_blocks("in", [*vae.encoder.down.children()] + [vae.encoder.mid]),
+        *list_blocks("out", [vae.decoder.mid] + [*vae.decoder.up.children()]),
+    ], copy_only=True)
+    component.blocks[0].includes += [vae.encoder.conv_in]
+    component.blocks[4].includes += [vae.encoder.norm_out, vae.encoder.conv_out, vae.quant_conv]
+    component.blocks[5].includes += [vae.post_quant_conv, vae.decoder.conv_in]
+    component.blocks[-1].includes += [vae.decoder.norm_out, vae.decoder.conv_out]
 
     return component
 

@@ -27,6 +27,7 @@ class ReplaceHelper:
 class MetaTensorMode(ReplaceHelper):
     def __enter__(self):
         def force_meta_device(kwargs):
+            kwargs = kwargs.copy()
             kwargs["device"] = "meta"
             return kwargs
 
@@ -75,41 +76,6 @@ class DisableInitialization(ReplaceHelper):
         def create_model_and_transforms_without_pretrained(*args, pretrained=None, **kwargs):
             return self.create_model_and_transforms(*args, pretrained=None, **kwargs)
 
-        def CLIPTextModel_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs):
-            res = self.CLIPTextModel_from_pretrained(None, *model_args, config=pretrained_model_name_or_path, state_dict={}, **kwargs)
-            res.name_or_path = pretrained_model_name_or_path
-            return res
-
-        def transformers_modeling_utils_load_pretrained_model(*args, **kwargs):
-            args = args[0:3] + ('/', ) + args[4:]  # resolved_archive_file; must set it to something to prevent what seems to be a bug
-            return self.transformers_modeling_utils_load_pretrained_model(*args, **kwargs)
-
-        def transformers_utils_hub_get_file_from_cache(original, url, *args, **kwargs):
-
-            # this file is always 404, prevent making request
-            if url is None or url == 'https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/added_tokens.json' or url == 'openai/clip-vit-large-patch14' and args[0] == 'added_tokens.json':
-                return None
-
-            try:
-                res = original(url, *args, local_files_only=True, **kwargs)
-                if res is None:
-                    res = original(url, *args, local_files_only=False, **kwargs)
-                return res
-            except Exception:
-                return original(url, *args, local_files_only=False, **kwargs)
-
-        def transformers_tokenization_utils_base_cached_file(url, *args, local_files_only=False, **kwargs):
-            return transformers_utils_hub_get_file_from_cache(self.transformers_tokenization_utils_base_cached_file, url, *args, **kwargs)
-
-        def transformers_configuration_utils_cached_file(url, *args, local_files_only=False, **kwargs):
-            return transformers_utils_hub_get_file_from_cache(self.transformers_configuration_utils_cached_file, url, *args, **kwargs)
-
-        def transformers_modeling_utils_cached_file(url, *args, local_files_only=False, **kwargs):
-            return transformers_utils_hub_get_file_from_cache(self.transformers_modeling_utils_cached_file, url, *args, **kwargs)
-
-        def transformers_utils_hub_get_from_cache(url, *args, local_files_only=False, **kwargs):
-            return transformers_utils_hub_get_file_from_cache(self.transformers_utils_hub_get_from_cache, url, *args, **kwargs)
-
         self.replace(torch.nn.init, 'kaiming_uniform_', do_nothing)
         self.replace(torch.nn.init, '_no_grad_normal_', do_nothing)
         self.replace(torch.nn.init, '_no_grad_uniform_', do_nothing)
@@ -121,18 +87,24 @@ class DisableInitialization(ReplaceHelper):
             pass
 
         try:
-            import ldm.modules.encoders.modules
-            self.CLIPTextModel_from_pretrained = self.replace(ldm.modules.encoders.modules.CLIPTextModel, 'from_pretrained', CLIPTextModel_from_pretrained)
-        except ImportError:
-            pass
-
-        try:
             import transformers
-            self.transformers_modeling_utils_load_pretrained_model = self.replace(transformers.modeling_utils.PreTrainedModel, '_load_pretrained_model', transformers_modeling_utils_load_pretrained_model)
-            self.transformers_tokenization_utils_base_cached_file = self.replace(transformers.tokenization_utils_base, 'cached_file', transformers_tokenization_utils_base_cached_file)
-            self.transformers_configuration_utils_cached_file = self.replace(transformers.configuration_utils, 'cached_file', transformers_configuration_utils_cached_file)
-            self.transformers_modeling_utils_cached_file = self.replace(transformers.modeling_utils, 'cached_file', transformers_modeling_utils_cached_file)
-            self.transformers_utils_hub_get_from_cache = self.replace(transformers.utils.hub, 'get_from_cache', transformers_utils_hub_get_from_cache)
+
+            def create_model_from_config(*args, **kwargs):
+                config = transformers.AutoConfig.from_pretrained(*args, **kwargs)
+                return transformers.AutoModel.from_config(config)
+
+            for module_name in transformers.__all__:
+                try:
+                    module_class = getattr(transformers, module_name)
+                except (ImportError, RuntimeError):
+                    continue
+
+                if module_name == "AutoConfig" or not hasattr(module_class, "from_pretrained"):
+                    print(f"NOT patching 'from_pretrained' of {module_name}")
+                    continue
+
+                self.replace(module_class, "from_pretrained", create_model_from_config)
+                print(f"patching 'from_pretrained' of {module_name}")
         except ImportError:
             pass
 

@@ -16,7 +16,6 @@ def create_configs() -> Iterable[ModelConfig]:
     config = str(configs_dir / "v1-inference.yaml")
     config = OmegaConf.load(config).model
     model = instantiate_from_config(config)
-    model.to(torch.float16)
 
     return [
         create_config_from_module(
@@ -24,22 +23,12 @@ def create_configs() -> Iterable[ModelConfig]:
             merge_space="weight",
             model=model,
             components=(
-                create_txt_component(model),
                 create_unet_component(model),
+                create_txt_component(model),
+                create_vae_component(model),
             ),
         ),
     ]
-
-
-def create_txt_component(model: torch.nn.Module) -> Component:
-    txt = model.cond_stage_model.transformer.text_model
-    component = Component("txt", txt, [
-        *list_blocks("in", txt.encoder.layers.children()),
-    ])
-    component.blocks[0].includes += [txt.embeddings.token_embedding, txt.embeddings.position_embedding]
-    component.blocks[-1].includes += [txt.final_layer_norm]
-
-    return component
 
 
 def create_unet_component(model: torch.nn.Module):
@@ -53,6 +42,31 @@ def create_unet_component(model: torch.nn.Module):
     for i, block in enumerate(component.blocks):
         if not block.identifier.startswith("in") or i % 3 != 0:
             block.includes += [unet.time_embed]
+
+    return component
+
+
+def create_txt_component(model: torch.nn.Module) -> Component:
+    txt = model.cond_stage_model.transformer
+    component = Component("txt", txt, [
+        *list_blocks("in", txt.text_model.encoder.layers.children()),
+    ])
+    component.blocks[0].includes += [txt.text_model.embeddings.token_embedding, txt.text_model.embeddings.position_embedding]
+    component.blocks[-1].includes += [txt.text_model.final_layer_norm, txt.text_projection]
+
+    return component
+
+
+def create_vae_component(model: torch.nn.Module) -> Component:
+    vae = model.first_stage_model
+    component = Component("vae", vae, [
+        *list_blocks("in", [*vae.encoder.down.children()] + [vae.encoder.mid]),
+        *list_blocks("out", [vae.decoder.mid] + [*vae.decoder.up.children()]),
+    ], copy_only=True)
+    component.blocks[0].includes += [vae.encoder.conv_in]
+    component.blocks[4].includes += [vae.encoder.norm_out, vae.encoder.conv_out, vae.quant_conv]
+    component.blocks[5].includes += [vae.post_quant_conv, vae.decoder.conv_in]
+    component.blocks[-1].includes += [vae.decoder.norm_out, vae.decoder.conv_out]
 
     return component
 
