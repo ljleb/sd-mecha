@@ -5,15 +5,11 @@ from sd_mecha.extensions.model_config import ModelConfig
 from typing import Iterable
 
 
-def get_identifier() -> str:
-    return "sd1-ldm-base"
-
-
 def get_venv() -> str:
     return "ldm"
 
 
-def create_config() -> ModelConfig:
+def create_configs() -> Iterable[ModelConfig]:
     from omegaconf import OmegaConf
     from ldm.util import instantiate_from_config
 
@@ -21,15 +17,17 @@ def create_config() -> ModelConfig:
     config = OmegaConf.load(config).model
     model = instantiate_from_config(config)
 
-    return create_config_from_module(
-        identifier=get_identifier(),
-        merge_space="weight",
-        model=model,
-        components=(
-            create_txt_component(model),
-            create_unet_component(model),
+    return [
+        create_config_from_module(
+            identifier="sd1-ldm-base",
+            merge_space="weight",
+            model=model,
+            components=(
+                create_txt_component(model),
+                create_unet_component(model),
+            ),
         ),
-    )
+    ]
 
 
 def create_txt_component(model: torch.nn.Module) -> Component:

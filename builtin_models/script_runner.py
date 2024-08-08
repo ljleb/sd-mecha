@@ -20,18 +20,8 @@ def generate_model_configs():
 
 def generate_model_config(script_path: pathlib.Path):
     module = get_script_module(script_path)
-    config_identifier = get_config_identifier(module)
-    if get_target_yaml_file(config_identifier).exists():
-        return
-
     script_venv_dir = get_module_venv(module)
     run_script(script_venv_dir, script_path)
-
-
-def get_config_identifier(module: ModuleType):
-    if not hasattr(module, "get_identifier"):
-        raise RuntimeError(f"Function `get_identifier` is not defined in script {module.__file__}")
-    return module.get_identifier()
 
 
 def get_module_venv(module: ModuleType) -> pathlib.Path:
