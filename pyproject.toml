@@ -16,7 +16,7 @@ classifiers = [
 dependencies = [
     "click>=8.1.7",
     "numpy>=1.26.0",
-    "torch>=2.0.0",
+    "torch>=2.1.0",
     "safetensors>=0.4.2",
     "tqdm>=4.66.2",
     "scipy",

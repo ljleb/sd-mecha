@@ -39,7 +39,8 @@ class RecipeMerger:
         self.__tqdm = tqdm
 
     def merge_and_save(
-        self, recipe: extensions.merge_method.RecipeNodeOrPath, *,
+        self,
+        recipe: extensions.merge_method.RecipeNodeOrPath,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge.safetensors",
         fallback_model: Optional[Mapping[str, torch.Tensor] | recipe_nodes.ModelRecipeNode | pathlib.Path | str] = None,
         save_device: Optional[str] = "cpu",

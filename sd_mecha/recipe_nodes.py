@@ -1,5 +1,4 @@
 import abc
-import functools
 import pathlib
 import torch
 from typing import Optional, Dict, Any, Mapping
@@ -90,7 +89,6 @@ class MergeRecipeNode(RecipeNode):
         return visitor.visit_merge(self, *args, **kwargs)
 
     @property
-    @functools.cache
     def merge_space(self) -> str:
         return self.merge_method.get_return_merge_space([
             model.merge_space for model in self.models

@@ -14,7 +14,7 @@ scripts_dir = module_dir / "scripts"
 sd_mecha_dir = module_dir.parent / "sd_mecha"
 target_yaml_dir = sd_mecha_dir / "model_configs"
 
-venv_dir = module_dir.parent / "venv"
+shared_venv_dir = module_dir.parent / "venv"
 script_venvs_dir = module_dir / "venvs"
 
 

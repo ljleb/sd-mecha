@@ -36,7 +36,7 @@ class MetaTensorMode(ReplaceHelper):
             except (KeyError, ValueError, TypeError):
                 return f(*args, **kwargs)
 
-        for module_key, module_class in torch.nn.__dict__.items():
+        for module_key, module_class in (torch.nn.__dict__ | torch.__dict__).items():
             if type(module_class) is not type or not issubclass(module_class, torch.nn.Module) or module_class is torch.nn.Module:
                 continue
             spec = inspect.getfullargspec(module_class.__init__)
