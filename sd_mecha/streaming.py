@@ -1,12 +1,15 @@
 import contextlib
+import ctypes
 import dataclasses
 import functools
-import io
 import json
 import operator
 import pathlib
 import struct
+import sys
 import threading
+
+import numpy
 import torch
 import warnings
 from typing import Optional, Set
@@ -240,7 +243,7 @@ class OutSafetensorsDict:
 
         state = self.thread_states[tid]
 
-        tensor_bytes = tensor.cpu().contiguous().untyped_storage()
+        tensor_bytes = tensor_to_bytes(tensor)
         tensor_size = len(tensor_bytes)
 
         if tensor_size > len(state.buffer) - state.memory_used:
@@ -364,6 +367,40 @@ class OutSafetensorsDict:
             self.file.write(header_json)
             self.file.write(b' ' * overhead)
             self.file.close()
+
+
+# src: https://github.com/huggingface/safetensors/blob/aa4ad823cf71d913f283b70332d37ab45803949d/bindings/python/py_src/safetensors/torch.py#L405
+# this function is Apache 2.0: https://github.com/huggingface/safetensors/blob/main/LICENSE
+def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
+    # assume tensor is not spare nor contiguous and on the cpu
+    total_bytes = len(tensor.untyped_storage())
+
+    ptr = tensor.data_ptr()
+    if ptr == 0:
+        return b""
+    newptr = ctypes.cast(ptr, ctypes.POINTER(ctypes.c_ubyte))
+    data = numpy.ctypeslib.as_array(newptr, (total_bytes,))  # no internal copy
+    if sys.byteorder == "big":
+        NPDTYPES = {
+            torch.int64: numpy.int64,
+            torch.float32: numpy.float32,
+            torch.int32: numpy.int32,
+            # XXX: This is ok because both have the same width
+            torch.bfloat16: numpy.float16,
+            torch.float16: numpy.float16,
+            torch.int16: numpy.int16,
+            torch.uint8: numpy.uint8,
+            torch.int8: numpy.int8,
+            torch.bool: bool,
+            torch.float64: numpy.float64,
+            # XXX: This is ok because both have the same width and byteswap is a no-op anyway
+            torch.float8_e4m3fn: numpy.uint8,
+            torch.float8_e5m2: numpy.uint8,
+        }
+        npdtype = NPDTYPES[tensor.dtype]
+        # Not in place as that would potentially modify a live running model
+        data = data.view(npdtype).byteswap(inplace=False)
+    return data.tobytes()
 
 
 DTYPE_MAPPING = {
