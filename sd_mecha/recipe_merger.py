@@ -82,7 +82,7 @@ class RecipeMerger:
 
         output = self.__normalize_output_to_dict(
             output,
-            model_config.header,
+            model_config.keys,
             model_config.keys_to_merge,
             recipe_serializer.serialize(recipe),
             buffer_size_per_file // threads,
@@ -90,13 +90,13 @@ class RecipeMerger:
         )
 
         thread_local_data = threading.local()
-        progress = self.__tqdm(total=len(model_config.header.keys()), desc="Merging recipe")
+        progress = self.__tqdm(total=len(model_config.keys), desc="Merging recipe")
         with ThreadPoolExecutor(max_workers=threads) as executor:
             futures = []
-            for key in model_config.header.keys():
+            for key in model_config.keys:
                 key_merger = self.__get_key_merger(key, recipe, fallback_model)
                 key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
-                key_merger = self.__track_progress(key_merger, key, model_config.header[key].shape, progress)
+                key_merger = self.__track_progress(key_merger, key, model_config.keys[key].shape, progress)
                 key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
                 futures.append(executor.submit(key_merger))
 
@@ -248,13 +248,12 @@ class LoadInputDictsVisitor(RecipeVisitor):
     def __detect_model_config(self, state_dict: Mapping[str, torch.Tensor], path: pathlib.Path):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
-            model_config = extensions.model_config.resolve(model_config)
-            unmatched_keys = set(model_config.header.keys()).difference(set(state_dict.keys()))
+            unmatched_keys = set(model_config.keys).difference(set(state_dict.keys()))
             configs_affinity[model_config.identifier] = len(unmatched_keys)
 
         best_config = min(configs_affinity, key=configs_affinity.get)
         best_config = extensions.model_config.resolve(best_config)
-        if configs_affinity[best_config.identifier] == len(best_config.header):
+        if configs_affinity[best_config.identifier] == len(best_config.keys):
             raise ValueError(f"No configuration matches any key from {path}")
 
         return best_config

@@ -13,8 +13,27 @@ StateDictKey = str
 
 @dataclasses.dataclass
 class ModelConfigBlock:
-    keys: Iterable[StateDictKey]
-    keys_to_merge: Iterable[StateDictKey]
+    keys_to_merge: Mapping[StateDictKey, TensorMetadata]
+    keys_to_copy: Mapping[StateDictKey, TensorMetadata]
+
+    def __post_init__(self):
+        keys_to_merge = dict(self.keys_to_merge)
+        for k, v in self.keys_to_merge.items():
+            keys_to_merge[k] = v
+            if isinstance(v, dict):
+                keys_to_merge[k] = TensorMetadata(**v)
+        self.keys_to_merge = keys_to_merge
+
+        keys_to_copy = dict(self.keys_to_copy)
+        for k, v in self.keys_to_copy.items():
+            keys_to_copy[k] = v
+            if isinstance(v, dict):
+                keys_to_copy[k] = TensorMetadata(**v)
+        self.keys_to_copy = keys_to_copy
+
+    @property
+    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        return dict(self.keys_to_merge) | dict(self.keys_to_copy)
 
 
 @dataclasses.dataclass
@@ -31,29 +50,29 @@ class ModelConfigComponent:
         self.blocks = blocks
 
     @property
-    def keys(self) -> Iterable[StateDictKey]:
-        return set(k for v in self.blocks.values() for k in v.keys)
+    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return {
+            k: v
+            for block in self.blocks.values()
+            for k, v in block.keys.items()
+        }
 
     @property
-    def keys_to_merge(self) -> Iterable[StateDictKey]:
-        return set(k for v in self.blocks.values() for k in v.keys_to_merge)
+    def keys_to_merge(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return {
+            k: v
+            for block in self.blocks.values()
+            for k, v in block.keys_to_merge.items()
+        }
 
 
 @dataclasses.dataclass
 class ModelConfig:
     identifier: str
-    header: Mapping[StateDictKey, TensorMetadata]
     components: Mapping[str, ModelConfigComponent]
     merge_space: str
 
     def __post_init__(self):
-        header = dict(self.header)
-        for k, v in self.header.items():
-            header[k] = v
-            if isinstance(v, dict):
-                header[k] = TensorMetadata(**v)
-        self.header = header
-
         components = dict(self.components)
         for k, v in self.components.items():
             components[k] = v
@@ -65,6 +84,22 @@ class ModelConfig:
         for component_name, component in self.components.items():
             for block_name in component.blocks.keys():
                 yield f"{self.identifier}_{component_name}_block_{block_name}"
+
+    @property
+    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        return {
+            k: v
+            for component in self.components.values()
+            for k, v in component.keys.items()
+        }
+
+    @property
+    def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
+        return {
+            k: v
+            for component in self.components.values()
+            for k, v in component.keys_to_merge.items()
+        }
 
 
 def serialize(obj):
@@ -90,7 +125,17 @@ def serialize(obj):
 
 def to_yaml(model_config: ModelConfig) -> str:
     dict_config = serialize(model_config)
-    return yaml.safe_dump(dict_config, sort_keys=False)
+    old_representer = yaml.Dumper.yaml_representers.get(list)
+
+    def flow_style_list_representer(dumper, data):
+        return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
+    try:
+        yaml.add_representer(list, flow_style_list_representer)
+
+        return yaml.safe_dump(dict_config, sort_keys=False)
+    finally:
+        if old_representer is not None:
+            yaml.add_representer(list, old_representer)
 
 
 def from_yaml(yaml_config: str) -> ModelConfig:

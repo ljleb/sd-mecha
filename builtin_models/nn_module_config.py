@@ -28,9 +28,8 @@ def create_config_from_module(
 ) -> ModelConfig:
     if not isinstance(components, Iterable):
         components = [components]
-    components = {c.identifier: c for c in components}
 
-    header, state_dict_keys, _ = header_from_model(model)
+    header, state_dict_keys, direct_state_dict_keys = header_from_model(model)
 
     named_modules = dict(model.named_modules())
     module_name_map = {}
@@ -41,28 +40,33 @@ def create_config_from_module(
             pass
 
     config_components = {}
-    for component in components.values():
-        component_blocks = {}
+    for component in components:
+        config_blocks = {}
         for block in component.blocks:
-            block_keys = set(
-                k
+            all_block_keys = {
+                k: header[k]
                 for module_to_include in block.includes
                 for k in state_dict_keys[module_name_map[module_to_include]]
-            )
-            block_keys_to_merge = block_keys.difference(
-                k
+            }
+            block_keys_to_copy = {
+                k: header[k]
                 for module_to_exclude in block.excludes
-                for k in state_dict_keys[module_name_map[module_to_exclude]]
-            )
+                for k in direct_state_dict_keys[module_name_map[module_to_exclude]]
+            }
+            block_keys_to_merge = {
+                k: v
+                for k, v in all_block_keys.items()
+                if k not in block_keys_to_copy
+            }
             config_block = ModelConfigBlock(
-                block_keys,
                 block_keys_to_merge,
+                block_keys_to_copy,
             )
-            component_blocks[block.identifier] = config_block
+            config_blocks[block.identifier] = config_block
 
         config_component = ModelConfigComponent(
             component.identifier,
-            component_blocks,
+            config_blocks,
         )
         config_components[component.identifier] = config_component
 
@@ -71,20 +75,19 @@ def create_config_from_module(
 
     return ModelConfig(
         identifier=identifier,
-        header=header,
         components=config_components,
         merge_space=merge_space,
     )
 
 
 def header_from_model(model: torch.nn.Module):
-    leaf_state_dict_keys: Dict[str, Iterable[StateDictKey]] = {}
+    direct_state_dict_keys: Dict[str, Iterable[StateDictKey]] = {}
     seen_keys = set()
     state_dict_hooks = {}
 
-    def create_leaf_state_dict_hook(module_name):
+    def create_direct_state_dict_hook(module_name):
         def hook(module, state_dict, _prefix, _local_metadata):
-            nonlocal leaf_state_dict_keys, seen_keys, state_dict_hooks
+            nonlocal direct_state_dict_keys, seen_keys, state_dict_hooks
             state_dict_hooks[module_name].remove()
 
             module_state_dict_values = module.state_dict(keep_vars=True).values()
@@ -94,27 +97,27 @@ def header_from_model(model: torch.nn.Module):
                 if k not in seen_keys and any(v is v2 for v2 in module_state_dict_values)
             )
             if new_keys:
-                leaf_state_dict_keys[module_name] = new_keys
+                direct_state_dict_keys[module_name] = new_keys
                 seen_keys |= new_keys
             return state_dict
         return hook
 
     for name, module in model.named_modules():
-        state_dict_hooks[name] = module._register_state_dict_hook(create_leaf_state_dict_hook(name))
+        state_dict_hooks[name] = module._register_state_dict_hook(create_direct_state_dict_hook(name))
 
     header = header_from_state_dict(model.state_dict(keep_vars=True))
 
-    state_dict_keys: Dict[str, Iterable[StateDictKey]] = leaf_state_dict_keys.copy()
+    state_dict_keys: Dict[str, Iterable[StateDictKey]] = direct_state_dict_keys.copy()
     for name, module in model.named_modules():
         if not list(module.children()):
             continue
 
         default = set()
-        for module_name, module_keys in list(leaf_state_dict_keys.items()):
+        for module_name, module_keys in list(direct_state_dict_keys.items()):
             if module_name.startswith(name):
                 state_dict_keys[name] = state_dict_keys.get(name, default) | module_keys
 
-    return header, state_dict_keys, leaf_state_dict_keys
+    return header, state_dict_keys, direct_state_dict_keys
 
 
 def header_from_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, TensorMetadata]:

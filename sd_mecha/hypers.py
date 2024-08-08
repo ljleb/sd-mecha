@@ -15,8 +15,8 @@ def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: 
         result = 0.0
         total = 0
         for component_id, component in model_config.components.items():
-            for block_id, block_keys in component.blocks.items():
-                if key not in block_keys:
+            for block_id, block in component.blocks.items():
+                if key not in block.keys:
                     continue
 
                 hyper_id = f"{model_config.identifier}_{component_id}_block_{block_id}"

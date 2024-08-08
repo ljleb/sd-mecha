@@ -5,6 +5,7 @@ __pycache__
 /dist
 /config
 /venv
+/builtin_models/venvs
 
 /examples/*_test.py
 

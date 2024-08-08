@@ -1,12 +1,9 @@
 import os
 import pathlib
-import shutil
 import subprocess
-import tempfile
 from concurrent.futures import as_completed, ProcessPoolExecutor
-from builtin_models.paths import get_script_module, get_target_yaml_file, module_dir, scripts_dir, venv_dir
+from builtin_models.paths import get_script_module, get_target_yaml_file, get_executable, get_script_venv, module_dir, scripts_dir
 from types import ModuleType
-from typing import List
 
 
 def generate_model_configs():
@@ -27,49 +24,22 @@ def generate_model_config(script_path: pathlib.Path):
     if get_target_yaml_file(config_identifier).exists():
         return
 
-    requirements = get_script_requirements(module)
-    with tempfile.TemporaryDirectory(prefix="venv") as new_venv_dir:
-        if requirements:
-            new_venv_dir = pathlib.Path(new_venv_dir).resolve()
-            create_new_venv(new_venv_dir, requirements)
-        else:
-            new_venv_dir = venv_dir
-        run_script(new_venv_dir, script_path)
+    script_venv_dir = get_module_venv(module)
+    run_script(script_venv_dir, script_path)
 
 
 def get_config_identifier(module: ModuleType):
-    if not hasattr(module, 'get_identifier'):
+    if not hasattr(module, "get_identifier"):
         raise RuntimeError(f"Function `get_identifier` is not defined in script {module.__file__}")
     return module.get_identifier()
 
 
-def get_script_requirements(module: ModuleType):
-    if not hasattr(module, 'get_requirements'):
-        return []
-    return module.get_requirements()
-
-
-def create_new_venv(new_venv_dir: pathlib.Path, requirements: List[str]):
-    copy_venv_to(new_venv_dir)
-    install_packages(new_venv_dir, requirements)
-
-
-def copy_venv_to(new_venv_dir: pathlib.Path):
-    shutil.copytree(venv_dir, new_venv_dir, dirs_exist_ok=True)
-
-
-def install_packages(new_venv_dir: pathlib.Path, requirements: List[str]):
-    args = ["-m", "pip", "install", "--upgrade-strategy", "only-if-needed"] + requirements
-    subprocess.run([str(get_executable(new_venv_dir))] + args, check=True)
+def get_module_venv(module: ModuleType) -> pathlib.Path:
+    if not hasattr(module, "get_venv"):
+        raise RuntimeError(f"Function `get_venv` is not defined in script {module.__file__}")
+    return get_script_venv(module.get_venv())
 
 
 def run_script(new_venv_dir: pathlib.Path, script_path: pathlib.Path):
     args = [str(module_dir / "script_main.py"), str(script_path)]
     subprocess.run([str(get_executable(new_venv_dir))] + args, cwd=os.getcwd(), check=True)
-
-
-def get_executable(new_venv_dir: pathlib.Path):
-    if os.name == "nt":
-        return new_venv_dir / "Scripts" / "python.exe"
-    else:
-        return new_venv_dir / "bin" / "python"
