@@ -26,6 +26,14 @@ def create_configs() -> Iterable[ModelConfig]:
             ),
         ),
         create_config_from_module(
+            identifier="flux+dev+unet-flux-base",
+            merge_space="weight",
+            model=dev_model.model.diffusion_model,
+            components=(
+                create_unet_component(dev_model.model.diffusion_model),
+            ),
+        ),
+        create_config_from_module(
             identifier="flux+schnell-flux-base",
             merge_space="weight",
             model=schnell_model,
@@ -34,6 +42,14 @@ def create_configs() -> Iterable[ModelConfig]:
                 create_clip_l_component(schnell_model.text_encoders.clip_l),
                 create_t5xxl_component(schnell_model.text_encoders.t5xxl),
                 create_vae_component(schnell_model.vae),
+            ),
+        ),
+        create_config_from_module(
+            identifier="flux+schnell+unet-flux-base",
+            merge_space="weight",
+            model=schnell_model.model.diffusion_model,
+            components=(
+                create_unet_component(schnell_model.model.diffusion_model),
             ),
         ),
     ]
