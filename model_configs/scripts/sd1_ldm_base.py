@@ -1,7 +1,7 @@
 import torch.nn
-from builtin_models.nn_module_config import create_config_from_module, Block, Component
-from builtin_models.paths import configs_dir
-from builtin_models.stable_diffusion_components import create_txt_component, create_vae_component, list_blocks
+from model_configs.nn_module_config import create_config_from_module, Block, Component
+from model_configs.paths import configs_dir
+from model_configs.stable_diffusion_components import create_clip_l_component, create_vae_component, list_blocks
 from sd_mecha.extensions.model_config import ModelConfig
 from typing import Iterable
 
@@ -25,7 +25,7 @@ def create_configs() -> Iterable[ModelConfig]:
             model=model,
             components=(
                 create_unet_component(model.model.diffusion_model),
-                create_txt_component(model.cond_stage_model.transformer),
+                create_clip_l_component(model.cond_stage_model),
                 create_vae_component(model.first_stage_model),
             ),
         ),
@@ -38,9 +38,9 @@ def create_unet_component(unet: torch.nn.Module):
         Block("mid", [unet.middle_block]),
         *list_blocks("out", unet.output_blocks.children()),
     ])
-    component.blocks[-1].includes += [unet.out]
+    component.blocks[-1].modules_to_merge += [unet.out]
     for i, block in enumerate(component.blocks):
         if not block.identifier.startswith("in") or i % 3 != 0:
-            block.includes += [unet.time_embed]
+            block.modules_to_merge += [unet.time_embed]
 
     return component

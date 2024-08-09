@@ -1,8 +1,8 @@
 import pathlib
 import sys
-from builtin_models.disable_init import MetaTensorMode, DisableInitialization
-from builtin_models.paths import get_target_yaml_file, get_script_module, extra_path, target_yaml_dir
-from builtin_models.script_venvs import get_venv_configs
+from model_configs.disable_init import MetaTensorMode, DisableInitialization
+from model_configs.paths import get_target_yaml_file, get_script_module, extra_path, target_yaml_dir
+from model_configs.script_venvs import get_venv_configs
 from sd_mecha.extensions.model_config import to_yaml
 
 

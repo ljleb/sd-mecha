@@ -86,19 +86,10 @@ class DisableInitialization(ReplaceHelper):
         try:
             import transformers
 
-            def create_model_from_config(*args, **kwargs):
-                config = transformers.AutoConfig.from_pretrained(*args, **kwargs)
-                return transformers.AutoModel.from_config(config)
+            def clip_text_model_from_config(*args, **kwargs):
+                config = transformers.CLIPTextConfig.from_pretrained(*args, **kwargs)
+                return transformers.CLIPTextModel._from_config(config)
 
-            for module_name in transformers.__all__:
-                try:
-                    module_class = getattr(transformers, module_name)
-                except (ImportError, RuntimeError):
-                    continue
-
-                if not hasattr(module_class, "from_pretrained") or module_name == "AutoConfig":
-                    continue
-
-                self.replace(module_class, "from_pretrained", create_model_from_config)
+            self.replace(transformers.CLIPTextModel, "from_pretrained", clip_text_model_from_config)
         except ImportError:
             pass

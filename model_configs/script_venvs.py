@@ -3,7 +3,7 @@ import functools
 import pathlib
 import shutil
 import subprocess
-from builtin_models.paths import get_executable, get_script_venv, repositories_dir, shared_venv_dir
+from model_configs.paths import get_executable, get_script_venv, repositories_dir, shared_venv_dir
 from typing import List, Dict
 
 

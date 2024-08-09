@@ -1,6 +1,6 @@
 import time
-from builtin_models.script_runner import generate_model_configs
-from builtin_models.script_venvs import create_venvs
+from model_configs.script_runner import generate_model_configs
+from model_configs.script_venvs import create_venvs
 
 
 if __name__ == "__main__":

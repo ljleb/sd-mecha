@@ -1,6 +1,4 @@
 import dataclasses
-import re
-
 import torch
 from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
 from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig, StateDictKey
@@ -11,8 +9,8 @@ from typing import Iterable, Dict, List
 @dataclasses.dataclass
 class Block:
     identifier: str
-    includes: List[torch.nn.Module] = dataclasses.field(default_factory=list)
-    excludes: List[torch.nn.Module] = dataclasses.field(default_factory=list)
+    modules_to_merge: List[torch.nn.Module] = dataclasses.field(default_factory=list)
+    modules_to_copy: List[torch.nn.Module] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -48,33 +46,39 @@ def create_config_from_module(
             pass
 
     config_components = {}
-    keys_to_copy = header
+    orphan_keys = header  # filtered below
     for component in components:
+        all_component_keys = {
+            k: header[k]
+            for k in state_dict_keys[module_name_map[component.module]]
+        }
+        component_orphan_keys = all_component_keys  # filtered below
         config_blocks = {}
         for block in component.blocks:
-            all_block_keys = {
+            block_keys_to_merge = {
                 k: header[k]
-                for module_to_include in block.includes
-                for k in state_dict_keys[module_name_map[module_to_include]]
+                for module_to_merge in block.modules_to_merge
+                for k in state_dict_keys[module_name_map[module_to_merge]]
             }
             block_keys_to_copy = {
                 k: header[k]
-                for module_to_exclude in block.excludes
-                for k in state_dict_keys[module_name_map[module_to_exclude]]
-            }
-            block_keys_to_merge = {
-                k: v
-                for k, v in all_block_keys.items()
-                if k not in block_keys_to_copy
-            }
-            keys_to_copy = {
-                k: v
-                for k, v in keys_to_copy.items()
+                for module_to_copy in block.modules_to_copy
+                for k in state_dict_keys[module_name_map[module_to_copy]]
                 if k not in block_keys_to_merge
             }
-            config_blocks[block.identifier] = ModelConfigBlock(block_keys_to_merge)
+            component_orphan_keys = {
+                k: v
+                for k, v in component_orphan_keys.items()
+                if k not in block_keys_to_merge and k not in block_keys_to_copy
+            }
+            config_blocks[block.identifier] = ModelConfigBlock(block_keys_to_merge, block_keys_to_copy)
 
-        config_components[component.identifier] = ModelConfigComponent(config_blocks)
+        config_components[component.identifier] = ModelConfigComponent(component_orphan_keys, config_blocks)
+        orphan_keys = {
+            k: v
+            for k, v in orphan_keys.items()
+            if k not in all_component_keys
+        }
 
     # validate merge space
     merge_space = get_identifiers(MergeSpace(merge_space))[0]
@@ -82,7 +86,7 @@ def create_config_from_module(
     return ModelConfig(
         identifier=identifier,
         merge_space=merge_space,
-        keys_to_copy=keys_to_copy,
+        orphan_keys_to_copy=orphan_keys,
         components=config_components,
     )
 

@@ -14,6 +14,7 @@ StateDictKey = str
 @dataclasses.dataclass
 class ModelConfigBlock:
     keys_to_merge: Mapping[StateDictKey, TensorMetadata]
+    keys_to_copy: Mapping[StateDictKey, TensorMetadata]
 
     def __post_init__(self):
         keys_to_merge = dict(self.keys_to_merge)
@@ -23,18 +24,47 @@ class ModelConfigBlock:
                 keys_to_merge[k] = TensorMetadata(**v)
         self.keys_to_merge = keys_to_merge
 
+        keys_to_copy = dict(self.keys_to_copy)
+        for k, v in self.keys_to_copy.items():
+            keys_to_copy[k] = v
+            if isinstance(v, dict):
+                keys_to_copy[k] = TensorMetadata(**v)
+        self.keys_to_copy = keys_to_copy
+
+    @property
+    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        return {
+            **self.keys_to_merge,
+            **self.keys_to_copy,
+        }
+
 
 @dataclasses.dataclass
 class ModelConfigComponent:
+    orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
     blocks: Mapping[str, ModelConfigBlock]
 
     def __post_init__(self):
+        orphan_keys_to_copy = dict(self.orphan_keys_to_copy)
+        for k, v in self.orphan_keys_to_copy.items():
+            orphan_keys_to_copy[k] = v
+            if isinstance(v, dict):
+                orphan_keys_to_copy[k] = TensorMetadata(**v)
+        self.orphan_keys_to_copy = orphan_keys_to_copy
+
         blocks = dict(self.blocks)
         for k, v in self.blocks.items():
             blocks[k] = v
             if isinstance(v, dict):
                 blocks[k] = ModelConfigBlock(**v)
         self.blocks = blocks
+
+    @property
+    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        return {
+            **self.keys_to_merge,
+            **self.keys_to_copy,
+        }
 
     @property
     def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
@@ -44,21 +74,29 @@ class ModelConfigComponent:
             for k, v in block.keys_to_merge.items()
         }
 
+    @property
+    def keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
+        return self.orphan_keys_to_copy | {
+            k: v
+            for block in self.blocks.values()
+            for k, v in block.keys_to_copy.items()
+        }
+
 
 @dataclasses.dataclass
 class ModelConfig:
     identifier: str
     merge_space: str
-    keys_to_copy: Mapping[StateDictKey, TensorMetadata]
+    orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
     components: Mapping[str, ModelConfigComponent]
 
     def __post_init__(self):
-        keys_to_copy = dict(self.keys_to_copy)
-        for k, v in self.keys_to_copy.items():
-            keys_to_copy[k] = v
+        orphan_keys_to_copy = dict(self.orphan_keys_to_copy)
+        for k, v in self.orphan_keys_to_copy.items():
+            orphan_keys_to_copy[k] = v
             if isinstance(v, dict):
-                keys_to_copy[k] = TensorMetadata(**v)
-        self.keys_to_copy = keys_to_copy
+                orphan_keys_to_copy[k] = TensorMetadata(**v)
+        self.orphan_keys_to_copy = orphan_keys_to_copy
 
         components = dict(self.components)
         for k, v in self.components.items():
@@ -74,7 +112,10 @@ class ModelConfig:
 
     @property
     def keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return self.keys_to_merge | self.keys_to_copy
+        return {
+            **self.keys_to_merge,
+            **self.keys_to_copy,
+        }
 
     @property
     def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
@@ -82,6 +123,14 @@ class ModelConfig:
             k: v
             for component in self.components.values()
             for k, v in component.keys_to_merge.items()
+        }
+
+    @property
+    def keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
+        return self.orphan_keys_to_copy | {
+            k: v
+            for component in self.components.values()
+            for k, v in component.keys_to_copy.items()
         }
 
 

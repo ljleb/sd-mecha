@@ -1,7 +1,7 @@
 import torch
-from builtin_models.nn_module_config import create_config_from_module, Block, Component
-from builtin_models.paths import repositories_dir
-from builtin_models.stable_diffusion_components import create_txt_component, create_vae_component, list_blocks
+from model_configs.nn_module_config import create_config_from_module, Block, Component
+from model_configs.paths import repositories_dir
+from model_configs.stable_diffusion_components import create_clip_l_component, create_vae_component, list_blocks
 from sd_mecha.extensions.model_config import ModelConfig
 from typing import Iterable
 
@@ -25,7 +25,7 @@ def create_configs() -> Iterable[ModelConfig]:
             model=model,
             components=(
                 create_unet_component(model.model.diffusion_model),
-                create_txt_component(model.conditioner.embedders[0].transformer),
+                create_clip_l_component(model.conditioner.embedders[0]),
                 create_txt2_component(model.conditioner.embedders[1].model),
                 create_vae_component(model.first_stage_model),
             ),
@@ -39,19 +39,19 @@ def create_unet_component(unet: torch.nn.Module):
         Block("mid", [unet.middle_block]),
         *list_blocks("out", unet.output_blocks.children()),
     ])
-    component.blocks[-1].includes += [unet.out]
+    component.blocks[-1].modules_to_merge += [unet.out]
     for i, block in enumerate(component.blocks):
         if not block.identifier.startswith("in") or i % 3 != 0:
-            block.includes += [unet.time_embed, unet.label_emb]
+            block.modules_to_merge += [unet.time_embed, unet.label_emb]
 
     return component
 
 
-def create_txt2_component(txt2: torch.nn.Module) -> Component:
-    component = Component("txt2", txt2, [
-        *list_blocks("in", txt2.transformer.resblocks.children()),
+def create_txt2_component(clip_g: torch.nn.Module) -> Component:
+    component = Component("clip_g", clip_g, [
+        *list_blocks("in", clip_g.transformer.resblocks.children()),
     ])
-    component.blocks[0].includes += [txt2.token_embedding, txt2.positional_embedding]
-    component.blocks[-1].includes += [txt2.ln_final, txt2.text_projection, txt2.logit_scale]
+    component.blocks[0].modules_to_merge += [clip_g.token_embedding, clip_g.positional_embedding]
+    component.blocks[-1].modules_to_merge += [clip_g.ln_final, clip_g.text_projection, clip_g.logit_scale]
 
     return component
