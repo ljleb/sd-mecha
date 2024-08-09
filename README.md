@@ -1,7 +1,7 @@
 # sd-mecha
 
 [![PyPI version](https://badge.fury.io/py/sd-mecha.svg)](https://badge.fury.io/py/sd-mecha)
-[![Discord Server](https://dcbadge.vercel.app/api/server/2EPaw6fxxm)](https://discord.gg/invite/2EPaw6fxxm)
+[![Discord Server](https://dcbadge.vercel.app/api/server/2EPaw6fxxm?style=flat)](https://discord.gg/invite/2EPaw6fxxm)
 
 sd-mecha is a memory-efficient general-purpose model merger. It can merge any model architecture given appropriate configuration:
 - diffusion models
