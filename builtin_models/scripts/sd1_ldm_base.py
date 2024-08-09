@@ -1,6 +1,7 @@
 import torch.nn
-from builtin_models.nn_module_config import create_config_from_module, Component, Block
+from builtin_models.nn_module_config import create_config_from_module, Block, Component
 from builtin_models.paths import configs_dir
+from builtin_models.stable_diffusion_components import create_txt_component, create_vae_component, list_blocks
 from sd_mecha.extensions.model_config import ModelConfig
 from typing import Iterable
 
@@ -23,16 +24,15 @@ def create_configs() -> Iterable[ModelConfig]:
             merge_space="weight",
             model=model,
             components=(
-                create_unet_component(model),
-                create_txt_component(model),
-                create_vae_component(model),
+                create_unet_component(model.model.diffusion_model),
+                create_txt_component(model.cond_stage_model.transformer),
+                create_vae_component(model.first_stage_model),
             ),
         ),
     ]
 
 
-def create_unet_component(model: torch.nn.Module):
-    unet = model.model.diffusion_model
+def create_unet_component(unet: torch.nn.Module):
     component = Component("unet", unet, [
         *list_blocks("in", unet.input_blocks.children()),
         Block("mid", [unet.middle_block]),
@@ -44,38 +44,3 @@ def create_unet_component(model: torch.nn.Module):
             block.includes += [unet.time_embed]
 
     return component
-
-
-def create_txt_component(model: torch.nn.Module) -> Component:
-    txt = model.cond_stage_model.transformer
-    component = Component("txt", txt, [
-        *list_blocks("in", txt.text_model.encoder.layers.children()),
-    ])
-    component.blocks[0].includes += [txt.text_model.embeddings.token_embedding, txt.text_model.embeddings.position_embedding]
-    component.blocks[-1].includes += [txt.text_model.final_layer_norm, txt.text_projection]
-
-    return component
-
-
-def create_vae_component(model: torch.nn.Module) -> Component:
-    vae = model.first_stage_model
-    component = Component("vae", vae, [
-        *list_blocks("in", [*vae.encoder.down.children()] + [vae.encoder.mid]),
-        *list_blocks("out", [vae.decoder.mid] + [*vae.decoder.up.children()]),
-    ], copy_only=True)
-    component.blocks[0].includes += [vae.encoder.conv_in]
-    component.blocks[4].includes += [vae.encoder.norm_out, vae.encoder.conv_out, vae.quant_conv]
-    component.blocks[5].includes += [vae.post_quant_conv, vae.decoder.conv_in]
-    component.blocks[-1].includes += [vae.decoder.norm_out, vae.decoder.conv_out]
-
-    return component
-
-
-def list_blocks(block_id_prefix: str, modules: Iterable[torch.nn.Module]):
-    return [
-        Block(
-            identifier=f"{block_id_prefix}{i}",
-            includes=[module]
-        )
-        for i, module in enumerate(modules)
-    ]

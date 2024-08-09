@@ -5,23 +5,26 @@ import torch
 # src: https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/82a973c04367123ae98bd9abdf80d9eda9b910e2/modules/sd_disable_initialization.py#L9
 class ReplaceHelper:
     def __init__(self):
-        self.replaced = []
+        self.original = []
 
     def replace(self, obj, field, func):
         original = getattr(obj, field, None)
         if original is None:
             return None
 
-        self.replaced.append((obj, field, original))
+        self.original.append((obj, field, original))
         setattr(obj, field, func)
 
         return original
 
     def restore(self):
-        for obj, field, original in self.replaced:
+        for obj, field, original in self.original:
             setattr(obj, field, original)
 
-        self.replaced.clear()
+        self.original.clear()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.restore()
 
 
 class MetaTensorMode(ReplaceHelper):
@@ -48,7 +51,7 @@ class MetaTensorMode(ReplaceHelper):
                 return f(*args, **kwargs)
 
         for module_key, module_class in (torch.nn.__dict__ | torch.__dict__).items():
-            if type(module_class) is not type or not issubclass(module_class, torch.nn.Module) or module_class is torch.nn.Module:
+            if type(module_class) is not type or not issubclass(module_class, (torch.nn.Module, torch.Tensor)) or module_class is torch.nn.Module:
                 continue
             spec = inspect.getfullargspec(module_class.__init__)
             if not spec.varkw and not any("device" in l for l in (spec.args, spec.kwonlyargs)):
@@ -61,14 +64,8 @@ class MetaTensorMode(ReplaceHelper):
 
         torch_nn_Module_to = self.replace(torch.nn.Module, 'to', lambda *args, **kwargs: to_meta_device(torch_nn_Module_to, args, kwargs))
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.restore()
-
 
 class DisableInitialization(ReplaceHelper):
-    def __init__(self):
-        super().__init__()
-
     def __enter__(self):
         def do_nothing(*args, **kwargs):
             pass
@@ -99,14 +96,9 @@ class DisableInitialization(ReplaceHelper):
                 except (ImportError, RuntimeError):
                     continue
 
-                if module_name == "AutoConfig" or not hasattr(module_class, "from_pretrained"):
-                    print(f"NOT patching 'from_pretrained' of {module_name}")
+                if not hasattr(module_class, "from_pretrained") or module_name == "AutoConfig":
                     continue
 
                 self.replace(module_class, "from_pretrained", create_model_from_config)
-                print(f"patching 'from_pretrained' of {module_name}")
         except ImportError:
             pass
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.restore()
