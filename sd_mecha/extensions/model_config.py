@@ -1,6 +1,8 @@
 import dataclasses
 import functools
 import pathlib
+import re
+
 import fuzzywuzzy.process
 import torch
 import yaml
@@ -185,6 +187,13 @@ def from_yaml(yaml_config: str) -> ModelConfig:
 def register_model_config(config: ModelConfig):
     if config.identifier in _model_configs_registry:
         raise ValueError(f"Model {config.identifier} already exists")
+    if not re.fullmatch("-".join(["[a-z0-9+]+"]*3), config.identifier):
+        raise ValueError(
+            f"Identifier of model {config.identifier} is invalid: "
+            "it must only contain lowercase alphanumerical characters or '+', "
+            "and must match the pattern '<architecture>-<implementation>-<type>'. "
+            "An example of valid identifier is 'sdxl-sgm-base'"
+        )
 
     _model_configs_registry[config.identifier] = config
 

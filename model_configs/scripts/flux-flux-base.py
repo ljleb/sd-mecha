@@ -15,7 +15,7 @@ def create_configs() -> Iterable[ModelConfig]:
 
     return [
         create_config_from_module(
-            identifier="flux_dev-flux-base",
+            identifier="flux+dev-flux-base",
             merge_space="weight",
             model=dev_model,
             components=(
@@ -26,7 +26,7 @@ def create_configs() -> Iterable[ModelConfig]:
             ),
         ),
         create_config_from_module(
-            identifier="flux_schnell-flux-base",
+            identifier="flux+schnell-flux-base",
             merge_space="weight",
             model=schnell_model,
             components=(
