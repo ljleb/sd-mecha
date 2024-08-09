@@ -2,7 +2,7 @@ import torch
 import yaml
 from model_configs.nn_module_config import create_config_from_module, Component
 from model_configs.paths import configs_dir
-from model_configs.stable_diffusion_components import list_blocks, create_clip_l_component
+from model_configs.stable_diffusion_components import list_blocks, create_clip_l_component, create_t5xxl_component, create_vae_component
 from sd_mecha.extensions.model_config import ModelConfig
 from typing import Iterable
 
@@ -81,33 +81,5 @@ def create_clip_g_component(clip_g: torch.nn.Module) -> Component:
         clip_g.transformer.text_projection,
         clip_g.logit_scale,
     ]
-
-    return component
-
-
-def create_t5xxl_component(t5xxl: torch.nn.Module) -> Component:
-    component = Component("t5xxl", t5xxl, [
-        *list_blocks("in", t5xxl.transformer.encoder.block.children()),
-    ])
-    component.blocks[0].modules_to_merge += [
-        t5xxl.transformer.shared,
-    ]
-    component.blocks[-1].modules_to_merge += [
-        t5xxl.transformer.encoder.final_layer_norm,
-        t5xxl.logit_scale,
-    ]
-
-    return component
-
-
-def create_vae_component(vae: torch.nn.Module) -> Component:
-    component = Component("vae", vae, [
-        *list_blocks("in", [*vae.encoder.down.children()] + [vae.encoder.mid], copy=True),
-        *list_blocks("out", [vae.decoder.mid] + [*vae.decoder.up.children()], copy=True),
-    ], copy_only=True)
-    component.blocks[0].modules_to_copy += [vae.encoder.conv_in]
-    component.blocks[4].modules_to_copy += [vae.encoder.norm_out, vae.encoder.conv_out]
-    component.blocks[5].modules_to_copy += [vae.decoder.conv_in]
-    component.blocks[-1].modules_to_copy += [vae.decoder.norm_out, vae.decoder.conv_out]
 
     return component

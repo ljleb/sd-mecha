@@ -1,3 +1,5 @@
+import warnings
+
 import torch.nn
 from model_configs.nn_module_config import create_config_from_module, Block, Component
 from model_configs.paths import configs_dir
@@ -16,7 +18,9 @@ def create_configs() -> Iterable[ModelConfig]:
 
     config = str(configs_dir / "sd1-ldm-base.yaml")
     config = OmegaConf.load(config).model
-    model = instantiate_from_config(config)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = instantiate_from_config(config)
 
     return [
         create_config_from_module(

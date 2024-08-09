@@ -7,3 +7,6 @@
 [submodule "model_configs/repositories/comfyui"]
 	path = model_configs/repositories/comfyui
 	url = https://github.com/comfyanonymous/ComfyUI.git
+[submodule "model_configs/repositories/flux"]
+	path = model_configs/repositories/flux
+	url = https://github.com/black-forest-labs/flux.git

@@ -21,14 +21,34 @@ def create_clip_l_component(clip_l: torch.nn.Module) -> Component:
     return component
 
 
+def create_t5xxl_component(t5xxl: torch.nn.Module) -> Component:
+    component = Component("t5xxl", t5xxl, [
+        *list_blocks("in", t5xxl.transformer.encoder.block.children()),
+    ])
+    component.blocks[0].modules_to_merge += [
+        t5xxl.transformer.shared,
+    ]
+    component.blocks[-1].modules_to_merge += [
+        t5xxl.transformer.encoder.final_layer_norm,
+    ]
+    if hasattr(t5xxl, "logit_scale"):
+        component.blocks[-1].modules_to_merge.append(t5xxl.logit_scale)
+
+    return component
+
+
 def create_vae_component(vae: torch.nn.Module) -> Component:
     component = Component("vae", vae, [
         *list_blocks("in", [*vae.encoder.down.children()] + [vae.encoder.mid], copy=True),
         *list_blocks("out", [vae.decoder.mid] + [*vae.decoder.up.children()], copy=True),
     ], copy_only=True)
     component.blocks[0].modules_to_copy += [vae.encoder.conv_in]
-    component.blocks[4].modules_to_copy += [vae.encoder.norm_out, vae.encoder.conv_out, vae.quant_conv]
-    component.blocks[5].modules_to_copy += [vae.post_quant_conv, vae.decoder.conv_in]
+    component.blocks[4].modules_to_copy += [vae.encoder.norm_out, vae.encoder.conv_out]
+    if hasattr(vae, "quant_conv"):
+        component.blocks[4].modules_to_copy.append(vae.quant_conv)
+    component.blocks[5].modules_to_copy += [vae.decoder.conv_in]
+    if hasattr(vae, "post_quant_conv"):
+        component.blocks[5].modules_to_copy.append(vae.post_quant_conv)
     component.blocks[-1].modules_to_copy += [vae.decoder.norm_out, vae.decoder.conv_out]
 
     return component

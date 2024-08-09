@@ -1,6 +1,8 @@
+import logging
+
 import torch
 from model_configs.nn_module_config import create_config_from_module, Block, Component
-from model_configs.paths import repositories_dir
+from model_configs.paths import configs_dir
 from model_configs.stable_diffusion_components import create_clip_l_component, create_vae_component, list_blocks
 from sd_mecha.extensions.model_config import ModelConfig
 from typing import Iterable
@@ -13,8 +15,11 @@ def get_venv() -> str:
 def create_configs() -> Iterable[ModelConfig]:
     from omegaconf import OmegaConf
     from sgm.util import instantiate_from_config
+    from sgm.modules.attention import logpy as attention_logging
 
-    config = str(repositories_dir / "stability-ai-generative-models" / "configs" / "inference" / "sd_xl_base.yaml")
+    attention_logging.setLevel(logging.ERROR)
+
+    config = str(configs_dir / "sdxl-sgm-base.yaml")
     config = OmegaConf.load(config).model
     model = instantiate_from_config(config)
 

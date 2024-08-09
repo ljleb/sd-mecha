@@ -28,7 +28,16 @@ class ReplaceHelper:
 
 
 class MetaTensorMode(ReplaceHelper):
+    def __init__(self):
+        super().__init__()
+
     def __enter__(self):
+        def patch_original_init(f, args, kwargs):
+            try:
+                return f(*args, **force_meta_device(kwargs))
+            except (KeyError, ValueError, TypeError):
+                return f(*args, **kwargs)
+
         def force_meta_device(kwargs):
             kwargs = kwargs.copy()
             kwargs["device"] = "meta"
@@ -43,12 +52,6 @@ class MetaTensorMode(ReplaceHelper):
             if "device" in kwargs:
                 del kwargs["device"]
             return f(*args, **kwargs)
-
-        def patch_original_init(f, args, kwargs):
-            try:
-                return f(*args, **force_meta_device(kwargs))
-            except (KeyError, ValueError, TypeError):
-                return f(*args, **kwargs)
 
         for module_key, module_class in (torch.nn.__dict__ | torch.__dict__).items():
             if type(module_class) is not type or not issubclass(module_class, (torch.nn.Module, torch.Tensor)) or module_class is torch.nn.Module:
@@ -90,6 +93,11 @@ class DisableInitialization(ReplaceHelper):
                 config = transformers.CLIPTextConfig.from_pretrained(*args, **kwargs)
                 return transformers.CLIPTextModel._from_config(config)
 
+            def t5_text_model_from_config(*args, **kwargs):
+                config = transformers.T5Config.from_pretrained(*args, **kwargs)
+                return transformers.T5EncoderModel._from_config(config)
+
             self.replace(transformers.CLIPTextModel, "from_pretrained", clip_text_model_from_config)
+            self.replace(transformers.T5EncoderModel, "from_pretrained", t5_text_model_from_config)
         except ImportError:
             pass

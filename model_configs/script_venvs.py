@@ -10,16 +10,17 @@ from typing import List, Dict
 def create_venvs():
     for venv_name, venv_config in get_venv_configs().items():
         script_venv_dir = get_script_venv(venv_name)
+
         if not script_venv_dir.exists():
             create_new_venv(script_venv_dir, venv_config.requirements)
 
 
-def create_new_venv(new_venv_dir: pathlib.Path, requirements: List[str]):
+def create_new_venv(script_venv_dir: pathlib.Path, requirements: List[str]):
     if not requirements:
         return
 
-    copy_venv_to(new_venv_dir)
-    install_packages(new_venv_dir, requirements)
+    copy_venv_to(script_venv_dir)
+    install_packages(script_venv_dir, requirements)
 
 
 def copy_venv_to(new_venv_dir: pathlib.Path):
@@ -66,5 +67,14 @@ def get_venv_configs() -> Dict[str, VenvConfig]:
                 "transformers>=4.28.1",
             ],
             sys_paths=[repositories_dir / "comfyui"],
+        ),
+        "flux": VenvConfig(
+            requirements=[
+                "huggingface-hub",
+                "invisible-watermark",
+                "transformers",
+                "sentencepiece",
+            ],
+            sys_paths=[repositories_dir / "flux" / "src"],
         ),
     }
