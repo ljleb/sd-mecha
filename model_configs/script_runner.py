@@ -2,7 +2,8 @@ import os
 import pathlib
 import subprocess
 from concurrent.futures import as_completed, ProcessPoolExecutor
-from model_configs.paths import get_script_module, get_executable, get_script_venv, module_dir, scripts_dir
+from model_configs.paths import get_script_module, get_executable, get_script_venv, module_dir, scripts_dir, \
+    shared_venv_dir
 from types import ModuleType
 
 
@@ -27,7 +28,11 @@ def generate_model_config(script_path: pathlib.Path):
 def get_module_venv(module: ModuleType) -> pathlib.Path:
     if not hasattr(module, "get_venv"):
         raise RuntimeError(f"Function `get_venv` is not defined in script {module.__file__}")
-    return get_script_venv(module.get_venv())
+
+    module_venv_dir = get_script_venv(module.get_venv())
+    if not module_venv_dir.exists():
+        return shared_venv_dir
+    return module_venv_dir
 
 
 def run_script(new_venv_dir: pathlib.Path, script_path: pathlib.Path):

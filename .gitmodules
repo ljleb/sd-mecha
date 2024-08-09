@@ -4,3 +4,6 @@
 [submodule "model_configs/repositories/stability-ai-generative-models"]
 	path = model_configs/repositories/stability-ai-generative-models
 	url = https://github.com/Stability-AI/generative-models.git
+[submodule "model_configs/repositories/comfyui"]
+	path = model_configs/repositories/comfyui
+	url = https://github.com/comfyanonymous/ComfyUI.git

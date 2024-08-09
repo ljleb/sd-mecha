@@ -60,5 +60,11 @@ def get_venv_configs() -> Dict[str, VenvConfig]:
                 "transformers==4.19.1",
             ],
             sys_paths=[repositories_dir / "stability-ai-generative-models"],
-        )
+        ),
+        "comfyui": VenvConfig(
+            requirements=[
+                "transformers>=4.28.1",
+            ],
+            sys_paths=[repositories_dir / "comfyui"],
+        ),
     }

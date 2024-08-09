@@ -26,7 +26,7 @@ def create_configs() -> Iterable[ModelConfig]:
             components=(
                 create_unet_component(model.model.diffusion_model),
                 create_clip_l_component(model.conditioner.embedders[0]),
-                create_txt2_component(model.conditioner.embedders[1].model),
+                create_clip_g_component(model.conditioner.embedders[1].model),
                 create_vae_component(model.first_stage_model),
             ),
         ),
@@ -47,7 +47,7 @@ def create_unet_component(unet: torch.nn.Module):
     return component
 
 
-def create_txt2_component(clip_g: torch.nn.Module) -> Component:
+def create_clip_g_component(clip_g: torch.nn.Module) -> Component:
     component = Component("clip_g", clip_g, [
         *list_blocks("in", clip_g.transformer.resblocks.children()),
     ])

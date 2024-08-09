@@ -1,0 +1,53 @@
+diffusion_model:
+  adm_in_channels: 2048
+  context_embedder_config:
+    params:
+      in_features: 4096
+      out_features: 1536
+    target: torch.nn.Linear
+  depth: 24
+  in_channels: 16
+  input_size: null
+  num_patches: 36864
+  out_channels: 16
+  patch_size: 2
+  pos_embed_max_size: 192
+  pos_embed_scaling_factor: null
+
+clip_l_model:
+  layer: hidden
+  layer_idx: -2
+  layer_norm_hidden_state: false
+  return_projected_pooled: false
+
+first_stage_model:
+  regularizer_config:
+    target: comfy.ldm.models.autoencoder.DiagonalGaussianRegularizer
+
+  encoder_config:
+    target: comfy.ldm.modules.diffusionmodules.model.Encoder
+    params:
+      double_z: True
+      z_channels: 16
+      resolution: 256
+      in_channels: 3
+      out_ch: 3
+      ch: 128
+      ch_mult: [ 1, 2, 4, 4 ]
+      num_res_blocks: 2
+      attn_resolutions: [ ]
+      dropout: 0.0
+
+  decoder_config:
+    target: comfy.ldm.modules.diffusionmodules.model.Decoder
+    params:
+      double_z: True
+      z_channels: 16
+      resolution: 256
+      in_channels: 3
+      out_ch: 3
+      ch: 128
+      ch_mult: [ 1, 2, 4, 4 ]
+      num_res_blocks: 2
+      attn_resolutions: [ ]
+      dropout: 0.0

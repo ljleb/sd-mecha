@@ -45,6 +45,12 @@ def create_config_from_module(
         except TypeError:
             pass
 
+    for buffer_name, buffer in model.named_buffers():
+        try:
+            module_name_map[buffer] = buffer_name
+        except TypeError:
+            pass
+
     config_components = {}
     orphan_keys = header  # filtered below
     for component in components:
@@ -121,6 +127,10 @@ def header_from_model(model: torch.nn.Module):
     for parameter_name, parameter in model.named_parameters():
         if parameter_name not in state_dict_keys:
             state_dict_keys[parameter_name] = {k for k, v in state_dict.items() if v is parameter}
+
+    for buffer_name, buffer in model.named_buffers():
+        if buffer_name not in state_dict_keys:
+            state_dict_keys[buffer_name] = {k for k, v in state_dict.items() if v is buffer}
 
     return header, state_dict_keys
 

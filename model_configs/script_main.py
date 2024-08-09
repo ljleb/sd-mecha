@@ -1,5 +1,8 @@
 import pathlib
 import sys
+
+import torch
+
 from model_configs.disable_init import MetaTensorMode, DisableInitialization
 from model_configs.paths import get_target_yaml_file, get_script_module, extra_path, target_yaml_dir
 from model_configs.script_venvs import get_venv_configs
@@ -18,7 +21,7 @@ def run_script(script_path: pathlib.Path):
         venv_config = venv_configs[module.get_venv()]
         extra_sys_paths.extend(str(path.resolve()) for path in venv_config.sys_paths)
 
-    with extra_path(*extra_sys_paths), DisableInitialization(), MetaTensorMode():
+    with extra_path(*extra_sys_paths), DisableInitialization(), MetaTensorMode(), torch.no_grad():
         model_configs = module.create_configs()
 
     for model_config in model_configs:

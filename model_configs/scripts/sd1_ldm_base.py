@@ -14,7 +14,7 @@ def create_configs() -> Iterable[ModelConfig]:
     from omegaconf import OmegaConf
     from ldm.util import instantiate_from_config
 
-    config = str(configs_dir / "v1-inference.yaml")
+    config = str(configs_dir / "sd1-ldm-base.yaml")
     config = OmegaConf.load(config).model
     model = instantiate_from_config(config)
 
