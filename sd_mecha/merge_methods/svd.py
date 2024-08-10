@@ -9,12 +9,15 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
         u, _, v = torch_svd_lowrank(a.T @ b, driver=svd_driver, q=a.shape[0] + 10)
         v_t = v.T
         del v
+        if cancel_reflection:
+            # can't use torch.det(u) * torch.det(v_t) because neither u nor v_t are square
+            # note: det(v_t @ u) = det(u @ v_t)
+            u[:, -1] /= torch.det(v_t @ u)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
-
-    if cancel_reflection:
-        u[:, -1] /= torch.det(u) * torch.det(v_t)
+        if cancel_reflection:
+            u[:, -1] /= torch.det(u) * torch.det(v_t)
 
     transform = u @ v_t
     if not torch.isfinite(u).all():

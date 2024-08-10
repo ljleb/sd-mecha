@@ -249,7 +249,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
     def __detect_model_config(self, state_dict: Mapping[str, torch.Tensor], path: pathlib.Path):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
-            unmatched_keys = set(model_config.keys).difference(set(state_dict.keys()))
+            unmatched_keys = set(state_dict.keys()).difference(model_config.keys)
             configs_affinity[model_config.identifier] = len(unmatched_keys)
 
         best_config = min(configs_affinity, key=configs_affinity.get)

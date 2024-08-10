@@ -1,4 +1,6 @@
 import torch.nn
+
+from model_configs.lycoris_config import create_lycoris_configs
 from model_configs.nn_module_config import create_config_from_module, Component
 from model_configs.stable_diffusion_components import create_clip_l_component, create_t5xxl_component, create_vae_component, list_blocks
 from sd_mecha.extensions.model_config import ModelConfig
@@ -15,7 +17,7 @@ def create_configs() -> Iterable[ModelConfig]:
 
     return [
         create_config_from_module(
-            identifier="flux+dev-flux-base",
+            identifier="flux_dev-flux-base",
             merge_space="weight",
             model=dev_model,
             components=(
@@ -26,15 +28,19 @@ def create_configs() -> Iterable[ModelConfig]:
             ),
         ),
         create_config_from_module(
-            identifier="flux+dev+unet-flux-base",
+            identifier="flux_dev_unet_only-flux-base",
             merge_space="weight",
             model=dev_model.model.diffusion_model,
             components=(
                 create_unet_component(dev_model.model.diffusion_model),
             ),
         ),
+        *create_lycoris_configs(
+            identifier="flux_dev",
+            model=schnell_model,
+        ),
         create_config_from_module(
-            identifier="flux+schnell-flux-base",
+            identifier="flux_schnell-flux-base",
             merge_space="weight",
             model=schnell_model,
             components=(
@@ -45,12 +51,16 @@ def create_configs() -> Iterable[ModelConfig]:
             ),
         ),
         create_config_from_module(
-            identifier="flux+schnell+unet-flux-base",
+            identifier="flux_schnell_unet_only-flux-base",
             merge_space="weight",
             model=schnell_model.model.diffusion_model,
             components=(
                 create_unet_component(schnell_model.model.diffusion_model),
             ),
+        ),
+        *create_lycoris_configs(
+            identifier="flux_schnell",
+            model=schnell_model,
         ),
     ]
 

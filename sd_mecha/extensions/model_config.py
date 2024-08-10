@@ -187,12 +187,13 @@ def from_yaml(yaml_config: str) -> ModelConfig:
 def register_model_config(config: ModelConfig):
     if config.identifier in _model_configs_registry:
         raise ValueError(f"Model {config.identifier} already exists")
-    if not re.fullmatch("-".join(["[a-z0-9+]+"]*3), config.identifier):
+    if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+-[a-z0-9+]+", config.identifier):
         raise ValueError(
             f"Identifier of model {config.identifier} is invalid: "
-            "it must only contain lowercase alphanumerical characters or '+', "
+            "it must only contain lowercase alphanumerical characters or '+' or '_', "
             "and must match the pattern '<architecture>-<implementation>-<type>'. "
-            "An example of valid identifier is 'sdxl-sgm-base'"
+            "(note that <type> cannot contain '_') "
+            "An example of valid identifier is 'flux_dev-flux-base'"
         )
 
     _model_configs_registry[config.identifier] = config
