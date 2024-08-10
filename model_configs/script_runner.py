@@ -9,7 +9,7 @@ from types import ModuleType
 
 def generate_model_configs():
     script_paths = scripts_dir.glob('*.py')
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(1) as executor:
         futures = [executor.submit(generate_model_config, path) for path in script_paths]
         for future in as_completed(futures):
             if future.exception() is not None:

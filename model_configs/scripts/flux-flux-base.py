@@ -15,17 +15,25 @@ def create_configs() -> Iterable[ModelConfig]:
     dev_model = EntireFluxModel("flux-dev")
     schnell_model = EntireFluxModel("flux-schnell")
 
+    dev_components = (
+        create_unet_component(dev_model.model.diffusion_model),
+        create_clip_l_component(dev_model.text_encoders.clip_l),
+        create_t5xxl_component(dev_model.text_encoders.t5xxl),
+        create_vae_component(dev_model.vae),
+    )
+    schnell_components = (
+        create_unet_component(schnell_model.model.diffusion_model),
+        create_clip_l_component(schnell_model.text_encoders.clip_l),
+        create_t5xxl_component(schnell_model.text_encoders.t5xxl),
+        create_vae_component(schnell_model.vae),
+    )
+
     return [
         create_config_from_module(
             identifier="flux_dev-flux-base",
             merge_space="weight",
             model=dev_model,
-            components=(
-                create_unet_component(dev_model.model.diffusion_model),
-                create_clip_l_component(dev_model.text_encoders.clip_l),
-                create_t5xxl_component(dev_model.text_encoders.t5xxl),
-                create_vae_component(dev_model.vae),
-            ),
+            components=dev_components,
         ),
         create_config_from_module(
             identifier="flux_dev_unet_only-flux-base",
@@ -37,18 +45,14 @@ def create_configs() -> Iterable[ModelConfig]:
         ),
         *create_lycoris_configs(
             identifier="flux_dev",
-            model=schnell_model,
+            model=dev_model,
+            components=dev_components,
         ),
         create_config_from_module(
             identifier="flux_schnell-flux-base",
             merge_space="weight",
             model=schnell_model,
-            components=(
-                create_unet_component(schnell_model.model.diffusion_model),
-                create_clip_l_component(schnell_model.text_encoders.clip_l),
-                create_t5xxl_component(schnell_model.text_encoders.t5xxl),
-                create_vae_component(schnell_model.vae),
-            ),
+            components=schnell_components,
         ),
         create_config_from_module(
             identifier="flux_schnell_unet_only-flux-base",
@@ -61,6 +65,7 @@ def create_configs() -> Iterable[ModelConfig]:
         *create_lycoris_configs(
             identifier="flux_schnell",
             model=schnell_model,
+            components=schnell_components,
         ),
     ]
 

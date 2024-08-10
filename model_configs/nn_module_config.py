@@ -1,9 +1,11 @@
 import dataclasses
+import functools
+
 import torch
 from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
-from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig, StateDictKey
+from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig
 from sd_mecha.streaming import TensorMetadata
-from typing import Iterable, Dict, List
+from typing import Iterable, Dict, List, Optional
 
 
 @dataclasses.dataclass
@@ -16,7 +18,7 @@ class Block:
 @dataclasses.dataclass
 class Component:
     identifier: str
-    module: torch.nn.Module
+    module: Optional[torch.nn.Module]
     blocks: List[Block] = dataclasses.field(default_factory=list)
     copy_only: bool = False
 
@@ -30,33 +32,54 @@ def create_config_from_module(
     if not isinstance(components, Iterable):
         components = [components]
 
-    header, state_dict_keys = header_from_model(model)
+    state_dict_cache = {}
 
-    module_name_map = {}
-    for module_name, module in model.named_modules():
-        try:
-            module_name_map[module] = module_name
-        except TypeError:
-            pass
+    def cache_state_dict(module: torch.nn.Module, prefix: str = ""):
+        for child_name, child in module.named_children():
+            cache_state_dict(child, prefix=f"{prefix}{child_name}.")
 
-    for parameter_name, parameter in model.named_parameters():
-        try:
-            module_name_map[parameter] = parameter_name
-        except TypeError:
-            pass
+        state_dict_cache[module] = module.state_dict(prefix=prefix)
+        for k, v in state_dict_cache[module].items():
+            state_dict_cache[v] = {k: v}
+        for k, v in module.named_parameters(prefix=prefix):
+            state_dict_cache[v] = {k: v}
+            state_dict_cache[v.data] = {k: v}
+        for k, v in module.named_buffers(prefix=prefix):
+            state_dict_cache[v] = {k: v}
 
-    for buffer_name, buffer in model.named_buffers():
-        try:
-            module_name_map[buffer] = buffer_name
-        except TypeError:
-            pass
+        def state_dict_cached(*args, destination=None, __original_function, **kwargs):
+            if destination is None and args:
+                destination = args[0]
+
+            if module not in state_dict_cache:
+                state_dict_cache[module] = __original_function(*args, destination=destination, **kwargs).copy()
+
+            res = state_dict_cache[module]
+            if destination is not None:
+                destination.update(res)
+
+            return res
+
+        module.state_dict = functools.partial(state_dict_cached, __original_function=module.state_dict)
+
+    cache_state_dict(model)
+    state_dict = model.state_dict()
+    header = header_from_state_dict(state_dict)
+
+    def get_state_dict_keys(module: torch.nn.Module | torch.Tensor) -> Iterable[str]:
+        return state_dict_cache[module]
 
     config_components = {}
     orphan_keys = header  # filtered below
     for component in components:
         all_component_keys = {
             k: header[k]
-            for k in state_dict_keys[module_name_map[component.module]]
+            for k in get_state_dict_keys(component.module)
+        } if component.module is not None else {
+            k: header[k]
+            for block in component.blocks
+            for module in block.modules_to_merge + block.modules_to_copy
+            for k in get_state_dict_keys(module)
         }
         component_orphan_keys = all_component_keys  # filtered below
         config_blocks = {}
@@ -64,12 +87,12 @@ def create_config_from_module(
             block_keys_to_merge = {
                 k: header[k]
                 for module_to_merge in block.modules_to_merge
-                for k in state_dict_keys[module_name_map[module_to_merge]]
+                for k in get_state_dict_keys(module_to_merge)
             }
             block_keys_to_copy = {
                 k: header[k]
                 for module_to_copy in block.modules_to_copy
-                for k in state_dict_keys[module_name_map[module_to_copy]]
+                for k in get_state_dict_keys(module_to_copy)
                 if k not in block_keys_to_merge
             }
             component_orphan_keys = {
@@ -95,44 +118,6 @@ def create_config_from_module(
         orphan_keys_to_copy=orphan_keys,
         components=config_components,
     )
-
-
-def header_from_model(model: torch.nn.Module):
-    state_dict = model.state_dict(keep_vars=True)
-    state_dict_keys: Dict[str, Iterable[StateDictKey]] = {}
-    state_dict_hooks = {}
-
-    def create_direct_state_dict_hook(module_name):
-        def hook(module, partial_state_dict, _prefix, _local_metadata):
-            nonlocal state_dict_keys, state_dict, state_dict_hooks
-            state_dict_hooks.pop(module_name).remove()
-
-            module_state_dict_values = module.state_dict(keep_vars=True).values()
-            direct_keys = set(
-                k
-                for k, v in state_dict.items()
-                if any(v is v2 for v2 in module_state_dict_values)
-            )
-            if direct_keys:
-                state_dict_keys[module_name] = direct_keys
-
-            return partial_state_dict
-        return hook
-
-    for name, module in model.named_modules():
-        state_dict_hooks[name] = module._register_state_dict_hook(create_direct_state_dict_hook(name))
-
-    header = header_from_state_dict(model.state_dict(keep_vars=True))
-
-    for parameter_name, parameter in model.named_parameters():
-        if parameter_name not in state_dict_keys:
-            state_dict_keys[parameter_name] = {k for k, v in state_dict.items() if v is parameter}
-
-    for buffer_name, buffer in model.named_buffers():
-        if buffer_name not in state_dict_keys:
-            state_dict_keys[buffer_name] = {k for k, v in state_dict.items() if v is buffer}
-
-    return header, state_dict_keys
 
 
 def header_from_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, TensorMetadata]:
