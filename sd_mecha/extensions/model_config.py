@@ -6,8 +6,7 @@ import fuzzywuzzy.process
 import torch
 import yaml
 from sd_mecha.streaming import TensorMetadata
-from typing import Dict, List, Iterable, Mapping
-
+from typing import Dict, List, Iterable, Mapping, Sized, Optional
 
 StateDictKey = str
 
@@ -252,12 +251,88 @@ def resolve(identifier: str) -> ModelConfig:
     try:
         return _model_configs_registry[identifier]
     except KeyError:
-        suggestion = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry.keys())[0]
-        raise ValueError(f"unknown model implementation: {identifier}. Nearest match is '{suggestion}'")
+        pass
+
+    config_ids = []
+    for config in get_all():
+        if config.identifier == identifier:
+            return config
+        else:
+            config_ids.append(config.identifier)
+
+    suggestion = fuzzywuzzy.process.extractOne(identifier, config_ids)[0]
+    raise ValueError(f"unknown model implementation: {identifier}. Nearest match is '{suggestion}'")
 
 
 def get_all() -> List[ModelConfig]:
+    return get_all_base() + get_all_lycoris()
+
+
+def get_all_base() -> List[ModelConfig]:
     return list(_model_configs_registry.values())
+
+
+def get_all_lycoris() -> List[ModelConfig]:
+    base_configs = get_all_base()
+    lycoris_configs = []
+    for base_config in base_configs:
+        lycoris_configs.append(to_lycoris_config(base_config, "lora"))
+
+    return lycoris_configs
+
+
+def to_lycoris_config(base_config: ModelConfig, algorithms: Optional[str | Iterable[str]] = None) -> ModelConfig:
+    if algorithms is None:
+        algorithms = "lora"  # all algos
+    if isinstance(algorithms, str):
+        algorithms = [algorithms]
+    if not isinstance(algorithms, Sized):
+        algorithms = list(algorithms)
+
+    if "lora" not in algorithms or len(algorithms) != 1:
+        raise ValueError(f"unknown lycoris algorithms {algorithms}")
+
+    return dataclasses.replace(
+        base_config,
+        components={
+            component_id: dataclasses.replace(
+                component,
+                blocks={
+                    block_id: dataclasses.replace(
+                        block,
+                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms),
+                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms),
+                    )
+                    for block_id, block in component.blocks.items()
+                },
+            )
+            for component_id, component in base_config.components.items()
+        },
+    )
+
+
+def _to_lycoris_keys(
+    keys: Mapping[StateDictKey, TensorMetadata],
+    algorithms: Iterable[str],
+    prefix: str = "lycoris",
+) -> Dict[StateDictKey, TensorMetadata]:
+    lycoris_keys = {}
+
+    # ignore `algorithms` for now, assume lora only
+    for key, meta in keys.items():
+        if key.endswith("bias"):
+            continue
+
+        key = key.split('.')
+        if key[-1] == "weight":
+            key = key[:-1]
+        key = "_".join(key)
+
+        for suffix in ("lora_up.weight", "lora_down.weight", "alpha"):
+            lycoris_key = f"{prefix}_{key}.{suffix}"
+            lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=None)
+
+    return lycoris_keys
 
 
 _register_builtin_model_configs()

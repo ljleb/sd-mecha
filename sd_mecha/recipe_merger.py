@@ -243,7 +243,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
                     break
 
         cache_key = str(path.resolve())
-        if path not in self.dicts_cache:
+        if cache_key not in self.dicts_cache:
             matching_formats = []
             for model_format in all_model_formats():
                 if model_format.matches(path):
@@ -261,12 +261,12 @@ class LoadInputDictsVisitor(RecipeVisitor):
     def __detect_model_config(self, state_dict: Iterable[str], path: pathlib.Path):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
-            unmatched_keys = set(state_dict).difference(model_config.keys)
-            configs_affinity[model_config.identifier] = len(unmatched_keys)
+            matched_keys = set(state_dict).intersection(model_config.keys)
+            configs_affinity[model_config.identifier] = len(matched_keys)
 
-        best_config = min(configs_affinity, key=configs_affinity.get)
+        best_config = max(configs_affinity, key=configs_affinity.get)
         best_config = extensions.model_config.resolve(best_config)
-        if configs_affinity[best_config.identifier] == len(best_config.keys):
+        if configs_affinity[best_config.identifier] == 0:
             raise ValueError(f"No configuration matches any key of {path}")
 
         return best_config

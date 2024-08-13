@@ -105,7 +105,7 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
 
 @dataclasses.dataclass
 class TensorMetadata:
-    shape: torch.Size
+    shape: Optional[torch.Size]
     dtype: torch.dtype
 
     def __post_init__(self):
@@ -115,6 +115,9 @@ class TensorMetadata:
             self.dtype = getattr(torch, self.dtype)
 
     def safetensors_header_value(self, data_offset: int):
+        if self.shape is None:
+            raise RuntimeError("invalid operation: metadata doesn't have shape")
+
         return {
             "shape": list(self.shape),
             "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
@@ -128,6 +131,9 @@ class TensorMetadata:
         return DTYPE_REVERSE_MAPPING[self.dtype][1]
 
     def numel(self) -> int:
+        if self.shape is None:
+            raise RuntimeError("invalid operation: metadata doesn't have shape")
+
         return functools.reduce(operator.mul, list(self.shape), 1)
 
 
