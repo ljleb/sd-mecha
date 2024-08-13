@@ -1,6 +1,5 @@
 import logging
 import torch
-from model_configs.lycoris_config import create_lycoris_configs
 from model_configs.nn_module_config import create_config_from_module, Block, Component
 from model_configs.paths import configs_dir
 from model_configs.stable_diffusion_components import create_clip_l_component, create_vae_component, list_blocks
@@ -29,17 +28,11 @@ def create_configs() -> Iterable[ModelConfig]:
         create_clip_g_component(model.conditioner.embedders[1].model),
         create_vae_component(model.first_stage_model),
     )
-    lycoris_components = components[:-1]
 
     return [
         create_config_from_module(
-            identifier="sdxl-sgm-base",
+            identifier="sdxl-sgm",
             merge_space="weight",
-            model=model,
-            components=components,
-        ),
-        *create_lycoris_configs(
-            arch_impl_identifier="sdxl-sgm",
             model=model,
             components=components,
         ),

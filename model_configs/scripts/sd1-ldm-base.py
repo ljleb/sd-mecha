@@ -1,6 +1,5 @@
 import torch.nn
 import warnings
-from model_configs.lycoris_config import create_lycoris_configs
 from model_configs.nn_module_config import create_config_from_module, Block, Component
 from model_configs.paths import configs_dir
 from model_configs.stable_diffusion_components import create_clip_l_component, create_vae_component, list_blocks
@@ -27,19 +26,13 @@ def create_configs() -> Iterable[ModelConfig]:
         create_clip_l_component(model.cond_stage_model),
         create_vae_component(model.first_stage_model),
     )
-    lycoris_components = components[:-1]
 
     return [
         create_config_from_module(
-            identifier="sd1-ldm-base",
+            identifier="sd1-ldm",
             merge_space="weight",
             model=model,
             components=components,
-        ),
-        *create_lycoris_configs(
-            arch_impl_identifier="sd1-ldm",
-            model=model,
-            components=lycoris_components,
         ),
     ]
 

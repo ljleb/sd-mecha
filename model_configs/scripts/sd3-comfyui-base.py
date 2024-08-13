@@ -18,7 +18,7 @@ def create_configs() -> Iterable[ModelConfig]:
 
     return [
         create_config_from_module(
-            identifier="sd3-comfyui-base",
+            identifier="sd3-comfyui",
             merge_space="weight",
             model=model,
             components=(

@@ -19,7 +19,7 @@ def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: 
                 if key not in block.keys_to_merge:
                     continue
 
-                hyper_id = f"{model_config.identifier}_{component_id}_block_{block_id}"
+                hyper_id = model_config.get_hyper_block_key(component_id, block_id)
                 value = hyper.get(hyper_id)
                 if value is not None:
                     result += value
@@ -31,7 +31,7 @@ def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: 
         for component_id, component in model_config.components.items():
             if key in component.keys_to_merge:
                 try:
-                    return hyper[f"{model_config.identifier}_{component_id}_default"]
+                    return hyper[model_config.get_hyper_default_key(component_id)]
                 except KeyError:
                     continue
 
@@ -86,8 +86,8 @@ def blocks(model_config: str | ModelConfig, model_component: str, *args, strict:
         raise ValueError("`args` and `kwargs` cannot be used at the same time. Either use positional or keyword arguments, but not both.")
     if args:
         identifiers = list(
-            k for k in model_config.hyper_keys()
-            if k.startswith(f"{model_config.identifier}_{model_component}_block_")
+            model_config.get_hyper_block_key(model_component, block_id)
+            for block_id in model_config.components[model_component].blocks
         )
         if strict and len(args) != len(identifiers):
             raise ValueError(f"blocks() got {len(args)} block{'s' if len(args) > 1 else ''} but {len(identifiers)} are expected. Use keyword arguments to pass only a few (i.e. 'in0=1, out3=0.5, ...') or pass strict=False.")
@@ -95,8 +95,8 @@ def blocks(model_config: str | ModelConfig, model_component: str, *args, strict:
         identifiers.sort(key=natural_sort_key)
         return dict(zip(identifiers, args))
     return {
-        f"{model_config.identifier}_{model_component}_block_{k}": v
-        for k, v in kwargs.items()
+        model_config.get_hyper_block_key(model_component, block_id): v
+        for block_id, v in kwargs.items()
     }
 
 

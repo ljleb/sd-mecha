@@ -109,7 +109,21 @@ class ModelConfig:
     def hyper_keys(self) -> Iterable[str]:
         for component_name, component in self.components.items():
             for block_name in component.blocks.keys():
-                yield f"{self.identifier}_{component_name}_block_{block_name}"
+                yield self.get_hyper_block_key(component_name, block_name)
+
+    def get_hyper_block_key(self, component_identifier, block_identifier):
+        if component_identifier not in self.components:
+            raise ValueError(f"no such component: {component_identifier}")
+        if block_identifier not in self.components[component_identifier].blocks:
+            raise ValueError(f"no such block in component {component_identifier}: {block_identifier}")
+
+        return f"{self.identifier}-{component_identifier}_block_{block_identifier}"
+
+    def get_hyper_default_key(self, component_identifier):
+        if component_identifier not in self.components:
+            raise ValueError(f"no such component: {component_identifier}")
+
+        return f"{self.identifier}-{component_identifier}_default"
 
     @property
     def keys(self) -> Dict[StateDictKey, TensorMetadata]:
@@ -189,13 +203,12 @@ def from_yaml(yaml_config: str) -> ModelConfig:
 def register_model_config(config: ModelConfig):
     if config.identifier in _model_configs_registry:
         raise ValueError(f"Model {config.identifier} already exists")
-    if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+-[a-z0-9+]+", config.identifier):
+    if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", config.identifier):
         raise ValueError(
             f"Identifier of model {config.identifier} is invalid: "
             "it must only contain lowercase alphanumerical characters or '+' or '_', "
-            "and must match the pattern '<architecture>-<implementation>-<type>'. "
-            "(note that <type> cannot contain '_') "
-            "An example of valid identifier is 'flux_dev-flux-base'"
+            "and must match the pattern '<architecture>-<implementation>'. "
+            "An example of valid identifier is 'flux_dev-flux'"
         )
 
     _model_configs_registry[config.identifier] = config

@@ -1,6 +1,5 @@
 import torch.nn
 import warnings
-from model_configs.lycoris_config import create_lycoris_configs
 from model_configs.nn_module_config import create_config_from_module, Block, Component
 from model_configs.stable_diffusion_components import create_clip_l_component, list_blocks
 from sd_mecha.extensions.model_config import ModelConfig
@@ -17,27 +16,19 @@ def create_configs() -> Iterable[ModelConfig]:
         pipeline = create_model_pipeline()
 
     model = SD1Diffusers(pipeline)
-    lycoris_model = SD1Diffusers(pipeline, is_lycoris=True)
 
     components = (
         create_unet_component(model.unet),
         create_clip_l_component(model.text_encoder),
         create_vae_component(model.vae),
     )
-    lycoris_components = components[:-1]
 
     return [
         create_config_from_module(
-            identifier="sd1-diffusers-base",
+            identifier="sd1-diffusers",
             merge_space="weight",
             model=model,
             components=components,
-        ),
-        *create_lycoris_configs(
-            arch_impl_identifier="sd1-diffusers",
-            model=lycoris_model,
-            components=lycoris_components,
-            add_kohya=True,
         ),
     ]
 
@@ -97,14 +88,11 @@ def create_model_pipeline():
 
 
 class SD1Diffusers(torch.nn.Module):
-    def __init__(self, pipeline, *, is_lycoris: bool = False):
+    def __init__(self, pipeline):
         super().__init__()
         self.pipeline = pipeline
         self.vae = pipeline.vae
-        if is_lycoris:
-            self.te = pipeline.text_encoder
-        else:
-            self.text_encoder = pipeline.text_encoder
+        self.text_encoder = pipeline.text_encoder
         self.tokenizer = pipeline.tokenizer
         self.unet = pipeline.unet
         self.scheduler = pipeline.scheduler
