@@ -66,6 +66,8 @@ class MetaTensorMode(ReplaceHelper):
             )
 
         torch_nn_Module_to = self.replace(torch.nn.Module, 'to', lambda *args, **kwargs: to_meta_device(torch_nn_Module_to, args, kwargs))
+        self.replace(torch.Tensor, 'cpu', lambda t, *args, **kwargs: t)
+        self.replace(torch.Tensor, 'clone', lambda t, *args, **kwargs: t)
 
 
 class DisableInitialization(ReplaceHelper):

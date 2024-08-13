@@ -2,7 +2,6 @@ import dataclasses
 import functools
 import pathlib
 import re
-
 import fuzzywuzzy.process
 import torch
 import yaml
@@ -136,6 +135,9 @@ class ModelConfig:
         }
 
 
+_model_configs_registry: Dict[str, ModelConfig] = {}
+
+
 def serialize(obj):
     if dataclasses.is_dataclass(obj):
         return {
@@ -199,17 +201,38 @@ def register_model_config(config: ModelConfig):
     _model_configs_registry[config.identifier] = config
 
 
+# run only once
 @functools.cache
 def _register_builtin_model_configs():
     yaml_directory = pathlib.Path(__file__).parent.parent / "model_configs"
     for yaml_config_path in yaml_directory.glob("*.yaml"):
-        with open(yaml_config_path, "r") as f:
+        register_model_config(LazyModelConfig(yaml_config_path))
+
+
+class LazyModelConfig(ModelConfig):
+    def __init__(self, yaml_config_file: pathlib.Path):
+        self.yaml_config_file = yaml_config_file
+        self.underlying_config = None
+
+    @property
+    def identifier(self) -> str:
+        return self.yaml_config_file.stem
+
+    def __getattr__(self, item):
+        if item in self.__dict__:
+            return self.__dict__[item]
+
+        self._ensure_config()
+        return getattr(self.underlying_config, item)
+
+    def _load_config(self):
+        if self.underlying_config is not None:
+            return
+
+        with open(self.yaml_config_file, "r") as f:
             yaml_config = f.read()
-        model_config = from_yaml(yaml_config)
-        register_model_config(model_config)
 
-
-_model_configs_registry: Dict[str, ModelConfig] = {}
+        self.underlying_config = from_yaml(yaml_config)
 
 
 def resolve(identifier: str) -> ModelConfig:

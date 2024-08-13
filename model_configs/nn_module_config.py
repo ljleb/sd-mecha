@@ -1,6 +1,5 @@
 import dataclasses
 import functools
-
 import torch
 from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
 from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig

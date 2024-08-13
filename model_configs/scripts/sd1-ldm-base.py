@@ -1,6 +1,6 @@
 import torch.nn
 import warnings
-from model_configs.lycoris_config import create_lycoris_configs, create_kohya_config
+from model_configs.lycoris_config import create_lycoris_configs
 from model_configs.nn_module_config import create_config_from_module, Block, Component
 from model_configs.paths import configs_dir
 from model_configs.stable_diffusion_components import create_clip_l_component, create_vae_component, list_blocks
@@ -37,14 +37,8 @@ def create_configs() -> Iterable[ModelConfig]:
             components=components,
         ),
         *create_lycoris_configs(
-            identifier="sd1",
+            arch_impl_identifier="sd1-ldm",
             model=model,
-            components=lycoris_components,
-        ),
-        create_kohya_config(
-            identifier="sd1",
-            model=model,
-            text_encoders=model.cond_stage_model,
             components=lycoris_components,
         ),
     ]

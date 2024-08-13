@@ -8,7 +8,8 @@ import threading
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.recipe_nodes import RecipeVisitor
-from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict, TensorMetadata
+from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata
+from sd_mecha.extensions.model_format import get_all as all_model_formats
 from sd_mecha import extensions, recipe_nodes, recipe_serializer, hypers
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Callable, Tuple, Set, Dict
@@ -241,21 +242,32 @@ class LoadInputDictsVisitor(RecipeVisitor):
                     path = path_attempt
                     break
 
+        cache_key = str(path.resolve())
         if path not in self.dicts_cache:
-            self.dicts_cache[str(path)] = InSafetensorsDict(path, self.buffer_size_per_dict)
+            matching_formats = []
+            for model_format in all_model_formats():
+                if model_format.matches(path):
+                    matching_formats.append(model_format)
 
-        return self.dicts_cache[str(path)], path
+            if len(matching_formats) > 1:
+                raise RuntimeError(f"ambiguous format ({', '.join(f.identifier for f in matching_formats)}) for model {path}")
+            if len(matching_formats) < 1:
+                raise RuntimeError(f"no matching format found for model {path}")
 
-    def __detect_model_config(self, state_dict: Mapping[str, torch.Tensor], path: pathlib.Path):
+            self.dicts_cache[cache_key] = matching_formats[0].get_read_dict(path, self.buffer_size_per_dict)
+
+        return self.dicts_cache[cache_key], path
+
+    def __detect_model_config(self, state_dict: Iterable[str], path: pathlib.Path):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
-            unmatched_keys = set(state_dict.keys()).difference(model_config.keys)
+            unmatched_keys = set(state_dict).difference(model_config.keys)
             configs_affinity[model_config.identifier] = len(unmatched_keys)
 
         best_config = min(configs_affinity, key=configs_affinity.get)
         best_config = extensions.model_config.resolve(best_config)
         if configs_affinity[best_config.identifier] == len(best_config.keys):
-            raise ValueError(f"No configuration matches any key from {path}")
+            raise ValueError(f"No configuration matches any key of {path}")
 
         return best_config
 

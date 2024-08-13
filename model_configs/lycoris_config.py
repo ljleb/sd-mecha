@@ -2,62 +2,111 @@ import functools
 
 import lycoris
 import torch.nn
+from lycoris.wrapper import network_module_dict
 from model_configs.nn_module_config import Component, create_config_from_module, Block
-from typing import Iterable, List
-
+from typing import Iterable
 from sd_mecha.extensions.model_config import ModelConfig
 
 
 def create_lycoris_configs(
-    identifier: str,
+    arch_impl_identifier: str,
     model: torch.nn.Module,
     components: Component | Iterable[Component],
+    add_kohya: bool = False,
 ):
+    assert arch_impl_identifier.count("-") == 1, "both the architecture and implementation separated by '-' need to be specified"
     configs = []
-    for algo in ["lora"]:  # replace with loop over algos
-        lycoris_wrapper = lycoris.create_lycoris(
-            model,
-            1.0,
-            linear_dim=16,
-            linear_alpha=1.0,
-            algo=algo,
-        )
-        lycoris_wrapper.apply_to()
-        configs.append(create_config_from_lycoris_module(
-            f"{identifier}-lycoris-{algo}",
+
+    def add_to_configs(lycoris_impl_identifier: str, lycoris_wrapper, algo):
+        config = create_config_from_lycoris_module(
+            f"{arch_impl_identifier}_{lycoris_impl_identifier}-{algo}",
             merge_space="delta",
             lycoris_model=lycoris_wrapper,
             components=components,
-        ))
+        )
+        configs.append(config)
+
+    for algo, create_lycoris in lycoris_map.items():
+        lycoris_wrapper = create_lycoris(model)
+        lycoris_wrapper.apply_to()
+        add_to_configs("lycoris", lycoris_wrapper, algo)
         lycoris_wrapper.restore()
+        if add_kohya and algo == "lora":
+            lycoris_wrapper.LORA_PREFIX = "lora"
+            lycoris_wrapper.apply_to()
+            add_to_configs("kohya", lycoris_wrapper, algo)
+            lycoris_wrapper.restore()
 
     return configs
 
 
-def create_kohya_config(
-    identifier: str,
-    model: torch.nn.Module,
-    text_encoders: torch.nn.Module | List[torch.nn.Module],
-    components: Component | Iterable[Component],
-):
-    kohya_wrapper = lycoris.kohya.create_network(
-        1.0,
-        16,
-        1.0,
-        model.first_stage_model,
-        text_encoders,
-        model.model.diffusion_model,
-    )
-    kohya_wrapper.apply_to(text_encoders, model.model.diffusion_model, apply_text_encoder=True, apply_unet=True)
-    try:
-        return create_config_from_lycoris_module(
-            f"{identifier}-kohya-lora",
-            merge_space="delta",
-            lycoris_model=kohya_wrapper,
-            components=components,
-        )
-    finally:
-        kohya_wrapper.restore()
+lycoris_map = {
+    "lora": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="lora",
+        train_norm=True,
+    ),
+    "loha": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="loha",
+        train_norm=True,
+    ),
+    "lokr": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="lokr",
+        train_norm=True,
+    ),
+    "dylora": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="dylora",
+        train_norm=True,
+    ),
+    "glora": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="glora",
+        train_norm=True,
+    ),
+    "full": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="full",
+        train_norm=True,
+    ),
+    "doft": functools.partial(
+        lycoris.create_lycoris,
+        multiplier=1.0,
+        linear_dim=4,
+        linear_alpha=1.0,
+        algo="diag-oft",
+        train_norm=True,
+    ),
+    # "boft": functools.partial(
+    #     lycoris.create_lycoris,
+    #     multiplier=1.0,
+    #     linear_dim=8,
+    #     conv_dim=8,
+    #     linear_alpha=1.0,
+    #     algo="boft",
+    #     train_norm=True,
+    # ),
+}
 
 
 def create_config_from_lycoris_module(

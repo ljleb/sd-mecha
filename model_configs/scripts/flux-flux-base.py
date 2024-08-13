@@ -44,9 +44,9 @@ def create_configs() -> Iterable[ModelConfig]:
             ),
         ),
         *create_lycoris_configs(
-            identifier="flux_dev",
+            arch_impl_identifier="flux_dev-flux",
             model=dev_model,
-            components=dev_components,
+            components=dev_components[:-1],
         ),
         create_config_from_module(
             identifier="flux_schnell-flux-base",
@@ -63,9 +63,9 @@ def create_configs() -> Iterable[ModelConfig]:
             ),
         ),
         *create_lycoris_configs(
-            identifier="flux_schnell",
+            arch_impl_identifier="flux_schnell-flux",
             model=schnell_model,
-            components=schnell_components,
+            components=schnell_components[:-1],
         ),
     ]
 

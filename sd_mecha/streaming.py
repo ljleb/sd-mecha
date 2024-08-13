@@ -12,133 +12,10 @@ import numpy
 import torch
 import warnings
 from collections import OrderedDict
-from typing import Optional, Dict, Mapping
+from typing import Optional, Dict, Mapping, Iterator, Iterable, Tuple
 from tqdm import tqdm
 
-
-class DiffusersInSafetensorsDict(Mapping[str, torch.Tensor]):
-    def __init__(self, dir_path: pathlib.Path, model_arch, buffer_size: int):
-        self.file_path = dir_path
-        self.dicts = {
-            component: InSafetensorsDict(find_best_safetensors_path(dir_path / component), buffer_size // len(model_arch.components))
-            for component in model_arch.components
-        }
-        self.model_arch = model_arch
-
-    def __del__(self):
-        self.close()
-
-    def __getitem__(self, item):
-        component, key = item.split(".", maxcount=1)
-        if key in self.dicts[component]:
-            return self.dicts[component][key]
-
-        raise KeyError(item)
-
-    def __iter__(self):
-        return iter(self.keys())
-
-    def __len__(self):
-        return sum(len(d) for d in self.dicts)
-
-    def close(self):
-        for d in self.dicts:
-            d.close()
-
-    def keys(self):
-        for component, d in self.dicts.items():
-            for key in d:
-                if key != "__metadata__":
-                    yield f"{component}.{key}"
-
-    def values(self):
-        for key in self.keys():
-            yield self[key]
-
-    def items(self):
-        for key in self.keys():
-            yield key, self[key]
-
-
-def find_best_safetensors_path(dir_path: pathlib.Path) -> pathlib.Path:
-    best_file = None
-    for file in dir_path.iterdir():
-        if file.is_file() and "model" in file.name and file.suffix == ".safetensors":
-            if best_file is None or "fp16" in str(best_file.name):
-                best_file = file
-
-    if best_file is None:
-        raise RuntimeError(f"could not find safetensors model file under {dir_path}")
-
-    return best_file
-
-
-@dataclasses.dataclass
-class TensorMetadata:
-    shape: torch.Size
-    dtype: torch.dtype
-
-    def __post_init__(self):
-        if isinstance(self.shape, list):
-            self.shape = torch.Size(self.shape)
-        if isinstance(self.dtype, str):
-            self.dtype = getattr(torch, self.dtype)
-
-    def safetensors_header_value(self, data_offset: int):
-        return {
-            "shape": list(self.shape),
-            "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
-            "data_offsets": [data_offset, data_offset + self.get_byte_size()]
-        }
-
-    def get_byte_size(self):
-        return self.numel() * self.get_dtype_size()
-
-    def get_dtype_size(self):
-        return DTYPE_REVERSE_MAPPING[self.dtype][1]
-
-    def numel(self) -> int:
-        return functools.reduce(operator.mul, list(self.shape), 1)
-
-
-class DiffusersOutSafetensorsDict:
-    def __init__(
-        self,
-        dir_path: pathlib.Path,
-        model_arch,
-        template_header: Dict[str, TensorMetadata],
-        mecha_recipe: str,
-        minimum_buffer_size: int,
-    ):
-        dir_path.mkdir(exist_ok=True)
-        for component in model_arch.components:
-            (dir_path / component).mkdir(exist_ok=True)
-
-        self.file_path = dir_path
-        self.dicts = {
-            component: OutSafetensorsDict(
-                dir_path / component / "model.safetensors",
-                {k.split(".", maxsplit=1)[1]: v for k, v in template_header.items() if k.startswith(component + ".")},
-                mecha_recipe,
-                minimum_buffer_size // len(model_arch.components),
-            )
-            for component in model_arch.components
-        }
-        self.model_arch = model_arch
-
-    def __del__(self):
-        self.close()
-
-    def __setitem__(self, item, value):
-        component, key = item.split(".", maxcount=1)
-        self.dicts[component][key] = value
-
-    def __len__(self):
-        return sum(len(d) for d in self.dicts)
-
-    def close(self):
-        for d in self.dicts:
-            d.close()
+from sd_mecha.typing import WriteOnlyMapping
 
 
 class InSafetensorsDict(Mapping[str, torch.Tensor]):
@@ -157,15 +34,15 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
     def __del__(self):
         self.close()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> torch.Tensor:
         if key not in self.header or key == "__metadata__":
             raise KeyError(key)
         return self._load_tensor(key)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(self.keys())
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.header)
 
     def close(self):
@@ -174,18 +51,18 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
         self.buffer = None
         self.header = None
 
-    def keys(self):
+    def keys(self) -> Iterable[str]:
         return (
             key
             for key in self.header.keys()
             if key != "__metadata__"
         )
 
-    def values(self):
+    def values(self) -> Iterable[torch.Tensor]:
         for key in self.keys():
             yield self[key]
 
-    def items(self):
+    def items(self) -> Iterable[Tuple[str, torch.Tensor]]:
         for key in self.keys():
             yield key, self[key]
 
@@ -227,13 +104,41 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
 
 
 @dataclasses.dataclass
+class TensorMetadata:
+    shape: torch.Size
+    dtype: torch.dtype
+
+    def __post_init__(self):
+        if isinstance(self.shape, list):
+            self.shape = torch.Size(self.shape)
+        if isinstance(self.dtype, str):
+            self.dtype = getattr(torch, self.dtype)
+
+    def safetensors_header_value(self, data_offset: int):
+        return {
+            "shape": list(self.shape),
+            "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
+            "data_offsets": [data_offset, data_offset + self.get_byte_size()]
+        }
+
+    def get_byte_size(self) -> int:
+        return self.numel() * self.get_dtype_size()
+
+    def get_dtype_size(self) -> int:
+        return DTYPE_REVERSE_MAPPING[self.dtype][1]
+
+    def numel(self) -> int:
+        return functools.reduce(operator.mul, list(self.shape), 1)
+
+
+@dataclasses.dataclass
 class OutSafetensorsDictThreadState:
     buffer: bytearray
     memory_used: int = dataclasses.field(default=0)
     sub_header: dict = dataclasses.field(default_factory=dict)
 
 
-class OutSafetensorsDict:
+class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
     def __init__(
         self,
         file_path: pathlib.Path,
@@ -259,7 +164,7 @@ class OutSafetensorsDict:
         self.thread_states = None
         self.header = None
 
-    def __setitem__(self, key: str, tensor: torch.Tensor):
+    def __setitem__(self, key: str, tensor: torch.Tensor) -> None:
         tid = threading.current_thread().ident
         if tid not in self.thread_states:
             self.thread_states[tid] = OutSafetensorsDictThreadState(bytearray(self.minimum_buffer_size))
@@ -282,7 +187,7 @@ class OutSafetensorsDict:
             "data_offsets": [local_offset, local_offset + tensor_size]
         }
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.header)
 
     def _init_buffer(self, header: Dict[str, TensorMetadata]) -> int:

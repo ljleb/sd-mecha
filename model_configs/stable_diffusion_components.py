@@ -4,17 +4,22 @@ from typing import Iterable
 
 
 def create_clip_l_component(clip_l: torch.nn.Module) -> Component:
+    if hasattr(clip_l, "transformer"):
+        clip_l_transformer = clip_l.transformer
+    else:
+        clip_l_transformer = clip_l
+
     component = Component("clip_l", clip_l, [
-        *list_blocks("in", clip_l.transformer.text_model.encoder.layers.children()),
+        *list_blocks("in", clip_l_transformer.text_model.encoder.layers.children()),
     ])
     component.blocks[0].modules_to_merge += [
-        clip_l.transformer.text_model.embeddings.token_embedding,
-        clip_l.transformer.text_model.embeddings.position_embedding,
+        clip_l_transformer.text_model.embeddings.token_embedding,
+        clip_l_transformer.text_model.embeddings.position_embedding,
     ]
-    if hasattr(clip_l.transformer.text_model, "final_layer_norm"):
-        component.blocks[-1].modules_to_merge.append(clip_l.transformer.text_model.final_layer_norm)
-    if hasattr(clip_l.transformer, "text_projection"):
-        component.blocks[-1].modules_to_merge.append(clip_l.transformer.text_projection)
+    if hasattr(clip_l_transformer.text_model, "final_layer_norm"):
+        component.blocks[-1].modules_to_merge.append(clip_l_transformer.text_model.final_layer_norm)
+    if hasattr(clip_l_transformer, "text_projection"):
+        component.blocks[-1].modules_to_merge.append(clip_l_transformer.text_projection)
     if hasattr(clip_l, "logit_scale"):
         component.blocks[-1].modules_to_merge.append(clip_l.logit_scale)
 

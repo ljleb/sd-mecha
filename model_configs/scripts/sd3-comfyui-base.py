@@ -32,30 +32,6 @@ def create_configs() -> Iterable[ModelConfig]:
     ]
 
 
-class SD3Model(torch.nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        from comfy.supported_models import SD3
-        from comfy.ldm.models.autoencoder import AutoencodingEngine
-
-        self.model = SD3(config["diffusion_model"]).get_model({})
-        self.first_stage_model = AutoencodingEngine(**config["first_stage_model"])
-        self.text_encoders = SD3TextEncoders(config)
-
-
-class SD3TextEncoders(torch.nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        from comfy import sd1_clip, sdxl_clip
-        from comfy.text_encoders import sd3_clip
-
-        self.clip_l = sd1_clip.SDClipModel(**config["clip_l_model"])
-        self.clip_g = sdxl_clip.SDXLClipG()
-        self.t5xxl = sd3_clip.T5XXLModel()
-
-
 def create_unet_component(unet: torch.nn.Module):
     component = Component("unet", unet, [
         *list_blocks("in", unet.joint_blocks.children()),
@@ -83,3 +59,27 @@ def create_clip_g_component(clip_g: torch.nn.Module) -> Component:
     ]
 
     return component
+
+
+class SD3Model(torch.nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        from comfy.supported_models import SD3
+        from comfy.ldm.models.autoencoder import AutoencodingEngine
+
+        self.model = SD3(config["diffusion_model"]).get_model({})
+        self.first_stage_model = AutoencodingEngine(**config["first_stage_model"])
+        self.text_encoders = SD3TextEncoders(config)
+
+
+class SD3TextEncoders(torch.nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        from comfy import sd1_clip, sdxl_clip
+        from comfy.text_encoders import sd3_clip
+
+        self.clip_l = sd1_clip.SDClipModel(**config["clip_l_model"])
+        self.clip_g = sdxl_clip.SDXLClipG()
+        self.t5xxl = sd3_clip.T5XXLModel()
