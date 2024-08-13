@@ -1,4 +1,5 @@
 import functools
+import torch
 import typing
 import uuid
 from types import UnionType
@@ -13,7 +14,10 @@ class MergeSpaceSymbolBase:
     merge_space: type(MergeSpaceBase) | type(Union)
 
 
-def MergeSpace(*identifiers: str) -> type(MergeSpaceBase):
+def MergeSpace(*identifiers: str) -> type(torch.Tensor) | type(MergeSpaceBase):
+    if getattr(None, "", None):
+        return torch.Tensor
+
     if not identifiers:
         identifiers = get_all()
 
@@ -23,7 +27,10 @@ def MergeSpace(*identifiers: str) -> type(MergeSpaceBase):
     return res
 
 
-def MergeSpaceSymbol(*identifiers: str) -> type(MergeSpaceSymbolBase):
+def MergeSpaceSymbol(*identifiers: str) -> type(torch.Tensor) | type(MergeSpaceSymbolBase):
+    if getattr(None, "", None):
+        return torch.Tensor
+
     merge_space = MergeSpace(*identifiers)
     return type(f"MergeSpaceSymbol_{uuid.uuid4()}", (MergeSpaceSymbolBase,), {"merge_space": merge_space})
 

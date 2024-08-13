@@ -8,7 +8,7 @@ import threading
 import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sd_mecha.recipe_nodes import RecipeVisitor
-from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata
+from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from sd_mecha.extensions.model_format import get_all as all_model_formats
 from sd_mecha import extensions, recipe_nodes, recipe_serializer, hypers
 from tqdm import tqdm
@@ -171,7 +171,10 @@ class RecipeMerger:
 
         @functools.wraps(f)
         def track_output(*args, **kwargs):
-            output[key] = f(*args, **kwargs).to(**to_kwargs)
+            try:
+                output[key] = f(*args, **kwargs).to(**to_kwargs)
+            except StateDictKeyError as k:
+                logging.debug(f"skipping key {k}")
         return track_output
 
     def __track_progress(self, f, key, key_shape, progress):
@@ -228,7 +231,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
     def __load_dict(self, node: recipe_nodes.ModelRecipeNode):
         if node.state_dict is not None:
-            return node.state_dict
+            return node.state_dict, node.path
 
         path = node.path
         if not isinstance(path, pathlib.Path):
@@ -328,7 +331,10 @@ class KeyVisitor(RecipeVisitor, abc.ABC):
     default_dtype: torch.dtype
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
-        return node.state_dict[self.key]
+        try:
+            return node.state_dict[self.key]
+        except KeyError as e:
+            raise StateDictKeyError(str(e)) from e
 
     @abc.abstractmethod
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
@@ -352,7 +358,7 @@ class KeyMergeVisitor(KeyVisitor):
                 node.device if node.device is not None else self.default_device,
                 node.dtype if node.dtype is not None else self.default_dtype,
             )
-        except KeyError:
+        except StateDictKeyError:
             for n, m in zip(node.models, merged):
                 if m is not None and n.merge_space == node.merge_space:
                     return m
@@ -378,7 +384,7 @@ class KeyPassthroughVisitor(KeyVisitor):
         for model in node.models:
             try:
                 return model.accept(self)
-            except KeyError:
+            except StateDictKeyError:
                 continue
 
-        raise KeyError(f"No model has key '{self.key}'")
+        raise StateDictKeyError(f"No model has key '{self.key}'")

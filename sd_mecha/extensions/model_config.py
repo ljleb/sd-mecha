@@ -237,7 +237,7 @@ class LazyModelConfig(ModelConfig):
         self._ensure_config()
         return getattr(self.underlying_config, item)
 
-    def _load_config(self):
+    def _ensure_config(self):
         if self.underlying_config is not None:
             return
 
@@ -292,8 +292,10 @@ def to_lycoris_config(base_config: ModelConfig, algorithms: Optional[str | Itera
     if "lora" not in algorithms or len(algorithms) != 1:
         raise ValueError(f"unknown lycoris algorithms {algorithms}")
 
-    return dataclasses.replace(
-        base_config,
+    return ModelConfig(
+        identifier=f"{base_config.identifier}_{'_'.join(algorithms)}",
+        merge_space="delta",
+        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms),
         components={
             component_id: dataclasses.replace(
                 component,

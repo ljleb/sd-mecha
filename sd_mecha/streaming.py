@@ -36,7 +36,7 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
 
     def __getitem__(self, key: str) -> torch.Tensor:
         if key not in self.header or key == "__metadata__":
-            raise KeyError(key)
+            raise StateDictKeyError(key)
         return self._load_tensor(key)
 
     def __iter__(self) -> Iterator[str]:
@@ -101,6 +101,10 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
                 self._ensure_buffer(absolute_start_pos, total_bytes)
                 buffer_offset = absolute_start_pos - self.buffer_start_offset
                 return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).reshape(shape)
+
+
+class StateDictKeyError(KeyError):
+    pass
 
 
 @dataclasses.dataclass
