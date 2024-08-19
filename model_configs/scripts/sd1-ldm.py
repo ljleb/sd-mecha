@@ -22,9 +22,9 @@ def create_configs() -> Iterable[ModelConfig]:
         model = instantiate_from_config(config)
 
     components = (
-        create_unet_component(model.model.diffusion_model),
         create_clip_l_component(model.cond_stage_model),
         create_vae_component(model.first_stage_model),
+        create_unet_component(model.model.diffusion_model),
     )
 
     return [

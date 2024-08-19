@@ -1,5 +1,7 @@
 import dataclasses
 import functools
+from collections import OrderedDict
+
 import torch
 from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
 from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig
@@ -30,6 +32,9 @@ def create_config_from_module(
 ) -> ModelConfig:
     if not isinstance(components, Iterable):
         components = [components]
+
+    # validate merge space
+    merge_space = get_identifiers(MergeSpace[merge_space])[0]
 
     state_dict_cache = {}
 
@@ -65,51 +70,46 @@ def create_config_from_module(
     state_dict = model.state_dict()
     header = header_from_state_dict(state_dict)
 
-    def get_state_dict_keys(module: torch.nn.Module | torch.Tensor) -> Iterable[str]:
-        return state_dict_cache[module]
-
-    config_components = {}
+    config_components = OrderedDict()
     orphan_keys = header  # filtered below
     for component in components:
-        all_component_keys = {
-            k: header[k]
-            for k in get_state_dict_keys(component.module)
-        } if component.module is not None else {
-            k: header[k]
+        all_component_keys = OrderedDict(
+            (k, header[k])
+            for k in state_dict_cache[component.module]
+        ) if component.module is not None else OrderedDict(
+            (k, header[k])
             for block in component.blocks
             for module in block.modules_to_merge + block.modules_to_copy
-            for k in get_state_dict_keys(module)
-        }
+            for k in state_dict_cache[module]
+        )
         component_orphan_keys = all_component_keys  # filtered below
-        config_blocks = {}
+        config_blocks = OrderedDict()
         for block in component.blocks:
-            block_keys_to_merge = {
-                k: header[k]
+            block_keys_to_merge = OrderedDict(
+                (k, header[k])
                 for module_to_merge in block.modules_to_merge
-                for k in get_state_dict_keys(module_to_merge)
-            }
-            block_keys_to_copy = {
-                k: header[k]
+                for k in state_dict_cache[module_to_merge]
+            )
+            block_keys_to_copy = OrderedDict(
+                (k, header[k])
                 for module_to_copy in block.modules_to_copy
-                for k in get_state_dict_keys(module_to_copy)
+                for k in state_dict_cache[module_to_copy]
                 if k not in block_keys_to_merge
-            }
-            component_orphan_keys = {
-                k: v
+            )
+            component_orphan_keys = OrderedDict(
+                (k, v)
                 for k, v in component_orphan_keys.items()
                 if k not in block_keys_to_merge and k not in block_keys_to_copy
-            }
+            )
             config_blocks[block.identifier] = ModelConfigBlock(block_keys_to_merge, block_keys_to_copy)
 
+        config_blocks = OrderedDict(config_blocks.items())
         config_components[component.identifier] = ModelConfigComponent(component_orphan_keys, config_blocks)
-        orphan_keys = {
-            k: v
+        orphan_keys = OrderedDict(
+            (k, v)
             for k, v in orphan_keys.items()
             if k not in all_component_keys
-        }
-
-    # validate merge space
-    merge_space = get_identifiers(MergeSpace(merge_space))[0]
+        )
 
     return ModelConfig(
         identifier=identifier,
@@ -120,4 +120,4 @@ def create_config_from_module(
 
 
 def header_from_state_dict(state_dict: Dict[str, torch.Tensor]) -> Dict[str, TensorMetadata]:
-    return {k: TensorMetadata(v.shape, v.dtype) for k, v in state_dict.items()}
+    return OrderedDict((k, TensorMetadata(v.shape, v.dtype)) for k, v in state_dict.items())

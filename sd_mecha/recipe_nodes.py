@@ -1,11 +1,13 @@
 import abc
 import pathlib
 import torch
+from collections import OrderedDict
 from typing import Optional, Dict, Any, Mapping
 from torch import Tensor
 from sd_mecha import extensions
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.hypers import validate_hyper, Hyper
+from sd_mecha.streaming import TensorMetadata, MemoryDict
 
 
 class RecipeNode(abc.ABC):
@@ -24,6 +26,10 @@ class RecipeNode(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
+        pass
+
+    @abc.abstractmethod
     def __contains__(self, item):
         pass
 
@@ -36,7 +42,7 @@ class ModelRecipeNode(RecipeNode):
     ):
         if isinstance(state_dict, Mapping):
             self.path = "<memory>"
-            self.state_dict = state_dict
+            self.state_dict = MemoryDict(state_dict)
         else:
             self.path = state_dict
             self.state_dict = None
@@ -58,6 +64,14 @@ class ModelRecipeNode(RecipeNode):
     @model_config.setter
     def model_config(self, value: Optional[ModelConfig]):
         self.__model_config = value
+
+    def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
+        all_keys = self.model_config.compute_keys()
+        return OrderedDict(
+            (k, v)
+            for k, v in self.state_dict.metadata()
+            if k in all_keys
+        )
 
     def __contains__(self, item):
         if isinstance(item, ModelRecipeNode):
@@ -104,6 +118,16 @@ class MergeRecipeNode(RecipeNode):
                 return None
 
         return model_config
+
+    def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
+        res = OrderedDict()
+        for model in self.models:
+            for k, v in model.compute_keys().items():
+                if k not in res:
+                    res[k] = v
+                elif res[k].shape != v.shape:
+                    raise RuntimeError(f"key {k} has ambiguous shape. candidates are {res[k].shape} and {v.shape}")
+        return res
 
     def __contains__(self, item):
         if isinstance(item, MergeRecipeNode):

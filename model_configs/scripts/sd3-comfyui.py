@@ -22,11 +22,11 @@ def create_configs() -> Iterable[ModelConfig]:
             merge_space="weight",
             model=model,
             components=(
-                create_unet_component(model.model.diffusion_model),
                 create_clip_l_component(model.text_encoders.clip_l),
                 create_clip_g_component(model.text_encoders.clip_g),
                 create_t5xxl_component(model.text_encoders.t5xxl),
                 create_vae_component(model.first_stage_model),
+                create_unet_component(model.model.diffusion_model),
             ),
         ),
     ]

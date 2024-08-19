@@ -14,8 +14,68 @@ import warnings
 from collections import OrderedDict
 from typing import Optional, Dict, Mapping, Iterator, Iterable, Tuple
 from tqdm import tqdm
-
 from sd_mecha.typing import WriteOnlyMapping
+
+
+@dataclasses.dataclass
+class TensorMetadata:
+    shape: Optional[torch.Size]
+    dtype: torch.dtype
+
+    def __post_init__(self):
+        if isinstance(self.shape, list):
+            self.shape = torch.Size(self.shape)
+        if isinstance(self.dtype, str):
+            self.dtype = getattr(torch, self.dtype)
+
+    def safetensors_header_value(self, data_offset: int):
+        if self.shape is None:
+            raise RuntimeError("invalid operation: metadata doesn't have shape")
+
+        return {
+            "shape": list(self.shape),
+            "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
+            "data_offsets": [data_offset, data_offset + self.get_byte_size()]
+        }
+
+    def get_byte_size(self) -> int:
+        return self.numel() * self.get_dtype_size()
+
+    def get_dtype_size(self) -> int:
+        return DTYPE_REVERSE_MAPPING[self.dtype][1]
+
+    def numel(self) -> int:
+        if self.shape is None:
+            raise RuntimeError("invalid operation: metadata doesn't have shape")
+
+        return functools.reduce(operator.mul, list(self.shape), 1)
+
+
+class MemoryDict(Mapping[str, torch.Tensor]):
+    def __init__(self, underlying_dict: Mapping[str, torch.Tensor]):
+        self.underlying_dict = underlying_dict
+
+    def __getitem__(self, key) -> torch.Tensor:
+        return self.underlying_dict[key]
+
+    def __len__(self) -> int:
+        return len(self.underlying_dict)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.underlying_dict)
+
+    def keys(self) -> Iterable[str]:
+        return self.underlying_dict.keys()
+
+    def metadata(self) -> Iterable[Tuple[str, TensorMetadata]]:
+        for key in self.keys():
+            yield key, TensorMetadata(self.underlying_dict[key].shape,  self.underlying_dict[key].dtype)
+
+    def values(self) -> Iterable[torch.Tensor]:
+        return self.underlying_dict.values()
+
+    def items(self) -> Iterable[Tuple[str, torch.Tensor]]:
+        return self.underlying_dict.items()
 
 
 class InSafetensorsDict(Mapping[str, torch.Tensor]):
@@ -43,7 +103,7 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
         return iter(self.keys())
 
     def __len__(self) -> int:
-        return len(self.header)
+        return len(self.header) - int("__metadata__" in self.header)
 
     def close(self):
         if hasattr(self, "file"):
@@ -57,6 +117,10 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
             for key in self.header.keys()
             if key != "__metadata__"
         )
+
+    def metadata(self) -> Iterable[Tuple[str, TensorMetadata]]:
+        for key in self.keys():
+            yield key, TensorMetadata(self.header[key]["shape"],  DTYPE_MAPPING[self.header[key]["dtype"]][0])
 
     def values(self) -> Iterable[torch.Tensor]:
         for key in self.keys():
@@ -105,40 +169,6 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
 
 class StateDictKeyError(KeyError):
     pass
-
-
-@dataclasses.dataclass
-class TensorMetadata:
-    shape: Optional[torch.Size]
-    dtype: torch.dtype
-
-    def __post_init__(self):
-        if isinstance(self.shape, list):
-            self.shape = torch.Size(self.shape)
-        if isinstance(self.dtype, str):
-            self.dtype = getattr(torch, self.dtype)
-
-    def safetensors_header_value(self, data_offset: int):
-        if self.shape is None:
-            raise RuntimeError("invalid operation: metadata doesn't have shape")
-
-        return {
-            "shape": list(self.shape),
-            "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
-            "data_offsets": [data_offset, data_offset + self.get_byte_size()]
-        }
-
-    def get_byte_size(self) -> int:
-        return self.numel() * self.get_dtype_size()
-
-    def get_dtype_size(self) -> int:
-        return DTYPE_REVERSE_MAPPING[self.dtype][1]
-
-    def numel(self) -> int:
-        if self.shape is None:
-            raise RuntimeError("invalid operation: metadata doesn't have shape")
-
-        return functools.reduce(operator.mul, list(self.shape), 1)
 
 
 @dataclasses.dataclass

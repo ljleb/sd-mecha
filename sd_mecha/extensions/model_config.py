@@ -5,8 +5,10 @@ import re
 import fuzzywuzzy.process
 import torch
 import yaml
+from collections import OrderedDict
 from sd_mecha.streaming import TensorMetadata
-from typing import Dict, List, Iterable, Mapping, Sized, Optional
+from typing import Dict, List, Iterable, Mapping
+
 
 StateDictKey = str
 
@@ -17,26 +19,25 @@ class ModelConfigBlock:
     keys_to_copy: Mapping[StateDictKey, TensorMetadata]
 
     def __post_init__(self):
-        keys_to_merge = dict(self.keys_to_merge)
+        keys_to_merge = OrderedDict(self.keys_to_merge)
         for k, v in self.keys_to_merge.items():
             keys_to_merge[k] = v
             if isinstance(v, dict):
                 keys_to_merge[k] = TensorMetadata(**v)
         self.keys_to_merge = keys_to_merge
 
-        keys_to_copy = dict(self.keys_to_copy)
+        keys_to_copy = OrderedDict(self.keys_to_copy)
         for k, v in self.keys_to_copy.items():
             keys_to_copy[k] = v
             if isinstance(v, dict):
                 keys_to_copy[k] = TensorMetadata(**v)
         self.keys_to_copy = keys_to_copy
 
-    @property
-    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return {
+    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        return OrderedDict(
             **self.keys_to_merge,
             **self.keys_to_copy,
-        }
+        )
 
 
 @dataclasses.dataclass
@@ -45,14 +46,14 @@ class ModelConfigComponent:
     blocks: Mapping[str, ModelConfigBlock]
 
     def __post_init__(self):
-        orphan_keys_to_copy = dict(self.orphan_keys_to_copy)
+        orphan_keys_to_copy = OrderedDict(self.orphan_keys_to_copy)
         for k, v in self.orphan_keys_to_copy.items():
             orphan_keys_to_copy[k] = v
             if isinstance(v, dict):
                 orphan_keys_to_copy[k] = TensorMetadata(**v)
         self.orphan_keys_to_copy = orphan_keys_to_copy
 
-        blocks = dict(self.blocks)
+        blocks = OrderedDict(self.blocks)
         for k, v in self.blocks.items():
             blocks[k] = v
             if isinstance(v, dict):
@@ -61,26 +62,24 @@ class ModelConfigComponent:
 
     @property
     def keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return {
-            **self.keys_to_merge,
-            **self.keys_to_copy,
-        }
+        return OrderedDict(
+            **self.compute_keys_to_merge(),
+            **self.compute_keys_to_copy(),
+        )
 
-    @property
-    def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
-        return {
-            k: v
+    def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
+        return OrderedDict(
+            (k, v)
             for block in self.blocks.values()
             for k, v in block.keys_to_merge.items()
-        }
+        )
 
-    @property
-    def keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
-        return self.orphan_keys_to_copy | {
-            k: v
+    def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
+        return self.orphan_keys_to_copy | OrderedDict(
+            (k, v)
             for block in self.blocks.values()
             for k, v in block.keys_to_copy.items()
-        }
+        )
 
 
 @dataclasses.dataclass
@@ -91,19 +90,33 @@ class ModelConfig:
     components: Mapping[str, ModelConfigComponent]
 
     def __post_init__(self):
-        orphan_keys_to_copy = dict(self.orphan_keys_to_copy)
+        if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", self.identifier):
+            raise ValueError(
+                f"Identifier of model {self.identifier} is invalid: "
+                "it must only contain lowercase alphanumerical characters or '+' or '_', "
+                "and must match the pattern '<architecture>-<implementation>'. "
+                "An example of valid identifier is 'flux_dev-flux'"
+            )
+
+        orphan_keys_to_copy = OrderedDict(self.orphan_keys_to_copy)
         for k, v in self.orphan_keys_to_copy.items():
             orphan_keys_to_copy[k] = v
             if isinstance(v, dict):
                 orphan_keys_to_copy[k] = TensorMetadata(**v)
         self.orphan_keys_to_copy = orphan_keys_to_copy
 
-        components = dict(self.components)
+        components = OrderedDict(self.components)
         for k, v in self.components.items():
             components[k] = v
             if isinstance(v, dict):
                 components[k] = ModelConfigComponent(**v)
         self.components = components
+
+    def get_architecture_identifier(self):
+        return self.identifier.split("-")[0]
+
+    def get_implementation_identifier(self):
+        return self.identifier.split("-")[1]
 
     def hyper_keys(self) -> Iterable[str]:
         for component_name, component in self.components.items():
@@ -124,28 +137,25 @@ class ModelConfig:
 
         return f"{self.identifier}-{component_identifier}_default"
 
-    @property
-    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return {
-            **self.keys_to_merge,
-            **self.keys_to_copy,
-        }
+    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        return OrderedDict(
+            **self.compute_keys_to_merge(),
+            **self.compute_keys_to_copy(),
+        )
 
-    @property
-    def keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
-        return {
-            k: v
+    def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
+        return OrderedDict(
+            (k, v)
             for component in self.components.values()
-            for k, v in component.keys_to_merge.items()
-        }
+            for k, v in component.compute_keys_to_merge().items()
+        )
 
-    @property
-    def keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
-        return self.orphan_keys_to_copy | {
-            k: v
+    def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
+        return self.orphan_keys_to_copy | OrderedDict(
+            (k, v)
             for component in self.components.values()
-            for k, v in component.keys_to_copy.items()
-        }
+            for k, v in component.compute_keys_to_copy().items()
+        )
 
 
 _model_configs_registry: Dict[str, ModelConfig] = {}
@@ -202,13 +212,6 @@ def from_yaml(yaml_config: str) -> ModelConfig:
 def register_model_config(config: ModelConfig):
     if config.identifier in _model_configs_registry:
         raise ValueError(f"Model {config.identifier} already exists")
-    if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", config.identifier):
-        raise ValueError(
-            f"Identifier of model {config.identifier} is invalid: "
-            "it must only contain lowercase alphanumerical characters or '+' or '_', "
-            "and must match the pattern '<architecture>-<implementation>'. "
-            "An example of valid identifier is 'flux_dev-flux'"
-        )
 
     _model_configs_registry[config.identifier] = config
 
@@ -221,7 +224,7 @@ def _register_builtin_model_configs():
         register_model_config(LazyModelConfig(yaml_config_path))
 
 
-class LazyModelConfig(ModelConfig):
+class LazyModelConfig:
     def __init__(self, yaml_config_file: pathlib.Path):
         self.yaml_config_file = yaml_config_file
         self.underlying_config = None
@@ -253,88 +256,12 @@ def resolve(identifier: str) -> ModelConfig:
     except KeyError:
         pass
 
-    config_ids = []
-    for config in get_all():
-        if config.identifier == identifier:
-            return config
-        else:
-            config_ids.append(config.identifier)
-
-    suggestion = fuzzywuzzy.process.extractOne(identifier, config_ids)[0]
+    suggestion = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry.keys())[0]
     raise ValueError(f"unknown model implementation: {identifier}. Nearest match is '{suggestion}'")
 
 
 def get_all() -> List[ModelConfig]:
-    return get_all_base() + get_all_lycoris()
-
-
-def get_all_base() -> List[ModelConfig]:
     return list(_model_configs_registry.values())
-
-
-def get_all_lycoris() -> List[ModelConfig]:
-    base_configs = get_all_base()
-    lycoris_configs = []
-    for base_config in base_configs:
-        lycoris_configs.append(to_lycoris_config(base_config, "lora"))
-
-    return lycoris_configs
-
-
-def to_lycoris_config(base_config: ModelConfig, algorithms: Optional[str | Iterable[str]] = None) -> ModelConfig:
-    if algorithms is None:
-        algorithms = "lora"  # all algos
-    if isinstance(algorithms, str):
-        algorithms = [algorithms]
-    if not isinstance(algorithms, Sized):
-        algorithms = list(algorithms)
-
-    if "lora" not in algorithms or len(algorithms) != 1:
-        raise ValueError(f"unknown lycoris algorithms {algorithms}")
-
-    return ModelConfig(
-        identifier=f"{base_config.identifier}_{'_'.join(algorithms)}",
-        merge_space="delta",
-        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms),
-        components={
-            component_id: dataclasses.replace(
-                component,
-                blocks={
-                    block_id: dataclasses.replace(
-                        block,
-                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms),
-                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms),
-                    )
-                    for block_id, block in component.blocks.items()
-                },
-            )
-            for component_id, component in base_config.components.items()
-        },
-    )
-
-
-def _to_lycoris_keys(
-    keys: Mapping[StateDictKey, TensorMetadata],
-    algorithms: Iterable[str],
-    prefix: str = "lycoris",
-) -> Dict[StateDictKey, TensorMetadata]:
-    lycoris_keys = {}
-
-    # ignore `algorithms` for now, assume lora only
-    for key, meta in keys.items():
-        if key.endswith("bias"):
-            continue
-
-        key = key.split('.')
-        if key[-1] == "weight":
-            key = key[:-1]
-        key = "_".join(key)
-
-        for suffix in ("lora_up.weight", "lora_down.weight", "alpha"):
-            lycoris_key = f"{prefix}_{key}.{suffix}"
-            lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=None)
-
-    return lycoris_keys
 
 
 _register_builtin_model_configs()

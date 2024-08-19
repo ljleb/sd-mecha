@@ -5,8 +5,11 @@ import gc
 import logging
 import pathlib
 import threading
+from contextlib import nullcontext
+from types import SimpleNamespace
+
 import torch
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from sd_mecha.extensions.model_format import get_all as all_model_formats
@@ -55,6 +58,9 @@ class RecipeMerger:
         elif not isinstance(fallback_model, (recipe_nodes.ModelRecipeNode, Mapping, type(None))):
             raise ValueError(f"fallback_model should be a simple model or None, not {type(fallback_model)}")
 
+        if threads is not None and (threads < 0 or threads != int(threads)):
+            raise RuntimeError("threads should be a non-negative integer")
+
         fallback_is_recipe = isinstance(fallback_model, recipe_nodes.ModelRecipeNode)
         total_files_open = (
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
@@ -82,23 +88,30 @@ class RecipeMerger:
                 raise ValueError(f"fallback_model ({fallback_model.model_config.identifier}) must have the same config as the recipe ({model_config.identifier})")
             fallback_model = fallback_model.state_dict
 
+        recipe_keys = recipe.compute_keys()
+        keys_to_merge = model_config.compute_keys_to_merge()
         output = self.__normalize_output_to_dict(
             output,
-            model_config.keys,
-            model_config.keys_to_merge,
+            recipe_keys,
+            keys_to_merge,
             recipe_serializer.serialize(recipe),
-            buffer_size_per_file // threads,
+            buffer_size_per_file // max(1, threads),
             save_dtype,
         )
+        if threads == 0:
+            thread_local_data = SimpleNamespace()
+            executor = ThisThreadExecutor()
+        else:
+            thread_local_data = threading.local()
+            executor = ThreadPoolExecutor(max_workers=threads)
 
-        thread_local_data = threading.local()
-        progress = self.__tqdm(total=len(model_config.keys), desc="Merging recipe")
-        with ThreadPoolExecutor(max_workers=threads) as executor:
+        progress = self.__tqdm(total=len(recipe_keys), desc="Merging recipe")
+        with executor:
             futures = []
-            for key in model_config.keys:
-                key_merger = self.__get_key_merger(key, recipe, fallback_model)
+            for key in recipe_keys:
+                key_merger = self.__get_key_merger(key, recipe, keys_to_merge, fallback_model)
                 key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
-                key_merger = self.__track_progress(key_merger, key, model_config.keys[key].shape, progress)
+                key_merger = self.__track_progress(key_merger, key, recipe_keys[key].shape, progress)
                 key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
                 futures.append(executor.submit(key_merger))
 
@@ -148,14 +161,14 @@ class RecipeMerger:
             )
         return output
 
-    def __get_key_merger(self, key, recipe, fallback_model):
+    def __get_key_merger(self, key, recipe, keys_to_merge, fallback_model):
         key_merger = KeyMerger(
             recipe,
             fallback_model,
             self.__default_device,
             self.__default_dtype,
         )
-        if key in recipe.model_config.keys_to_merge:
+        if key in keys_to_merge:
             return functools.partial(key_merger.merge_and_save, key)
         else:
             return functools.partial(key_merger.forward_and_save, key)
@@ -191,13 +204,20 @@ class RecipeMerger:
         def thread_context(*args, **kwargs):
             if torch.cuda.is_available():
                 if not hasattr(ctx, 'cuda_stream'):
-                    ctx.cuda_stream = torch.cuda.Stream()
+                    setattr(ctx, "cuda_stream", torch.cuda.Stream())
                 with torch.cuda.stream(ctx.cuda_stream):
                     return f(*args, **kwargs)
             else:
                 return f(*args, **kwargs)
 
         return thread_context
+
+
+class ThisThreadExecutor(nullcontext):
+    def submit(self, fn, /, *args, **kwargs):
+        result = Future()
+        result.set_result(fn(*args, **kwargs))
+        return result
 
 
 @dataclasses.dataclass
@@ -264,7 +284,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
     def __detect_model_config(self, state_dict: Iterable[str], path: pathlib.Path):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
-            matched_keys = set(state_dict).intersection(model_config.keys)
+            matched_keys = set(state_dict).intersection(model_config.compute_keys())
             configs_affinity[model_config.identifier] = len(matched_keys)
 
         best_config = max(configs_affinity, key=configs_affinity.get)

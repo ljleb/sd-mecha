@@ -1,9 +1,10 @@
 import functools
-import torch
 import typing
 import uuid
 from types import UnionType
-from typing import List, Union
+from typing import List, Union, Tuple, TypeVar
+
+import torch
 
 
 class MergeSpaceBase:
@@ -14,25 +15,35 @@ class MergeSpaceSymbolBase:
     merge_space: type(MergeSpaceBase) | type(Union)
 
 
-def MergeSpace(*identifiers: str) -> type(torch.Tensor) | type(MergeSpaceBase):
-    if getattr(None, "", None):
-        return torch.Tensor
+class MergeSpace:
+    def __init__(self):
+        raise RuntimeError(f"Cannot instantiate {MergeSpace.__name__}")
 
-    if not identifiers:
-        identifiers = get_all()
+    def __class_getitem__(cls, identifiers: str | Tuple[str, ...]) -> type(MergeSpaceBase):
+        if isinstance(identifiers, (str, TypeVar)):
+            identifiers = identifiers,
 
-    res = _merge_space_registry[identifiers[0]]
-    for identifier in identifiers[1:]:
-        res |= _merge_space_registry[identifier]
-    return res
+        identifiers = [
+            identifier.__name__ if isinstance(identifier, TypeVar) else identifier
+            for identifier in identifiers
+        ]
+
+        if not identifiers:
+            identifiers = get_all()
+
+        res = _merge_space_registry[identifiers[0]]
+        for identifier in identifiers[1:]:
+            res |= _merge_space_registry[identifier]
+        return res
 
 
-def MergeSpaceSymbol(*identifiers: str) -> type(torch.Tensor) | type(MergeSpaceSymbolBase):
-    if getattr(None, "", None):
-        return torch.Tensor
+class MergeSpaceSymbol:
+    def __init__(self):
+        raise RuntimeError(f"Cannot instantiate {MergeSpaceSymbol.__name__}")
 
-    merge_space = MergeSpace(*identifiers)
-    return type(f"MergeSpaceSymbol_{uuid.uuid4()}", (MergeSpaceSymbolBase,), {"merge_space": merge_space})
+    def __class_getitem__(cls, identifiers: str | Tuple[str, ...]) -> type(MergeSpaceSymbolBase):
+        merge_space = MergeSpace[identifiers]
+        return type(f"MergeSpaceSymbol_{uuid.uuid4()}", (MergeSpaceSymbolBase,), {"merge_space": merge_space})
 
 
 def register_merge_space(identifier: str):
@@ -40,13 +51,6 @@ def register_merge_space(identifier: str):
         raise ValueError(f"MergeSpace {identifier} already exists")
     new_class = type(f"MergeSpace_{identifier}", (MergeSpaceBase,), {"identifier": identifier})
     _merge_space_registry[identifier] = new_class
-
-
-@functools.cache
-def _register_builtin_merge_spaces():
-    global builtin_merge_spaces
-    for builtin_merge_space in builtin_merge_spaces:
-        register_merge_space(builtin_merge_space)
 
 
 def get_identifiers(merge_space: type) -> List[str]:
@@ -73,11 +77,21 @@ def get_all() -> List[str]:
     return list(_merge_space_registry.keys())
 
 
+@functools.cache
+def _register_builtin_merge_spaces():
+    global _builtin_merge_spaces
+    for builtin_merge_space in _builtin_merge_spaces:
+        register_merge_space(builtin_merge_space)
+
+
 _merge_space_registry = {}
-builtin_merge_spaces = (
-    "weight",
-    "delta",
-)
+
+weight = TypeVar("weight")
+delta = TypeVar("delta")
+_builtin_merge_spaces = [
+    weight.__name__,
+    delta.__name__,
+]
 
 
 _register_builtin_merge_spaces()

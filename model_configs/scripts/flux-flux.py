@@ -14,16 +14,16 @@ def create_configs() -> Iterable[ModelConfig]:
     schnell_model = EntireFluxModel("flux-schnell")
 
     dev_components = (
-        create_unet_component(dev_model.model.diffusion_model),
         create_clip_l_component(dev_model.text_encoders.clip_l),
         create_t5xxl_component(dev_model.text_encoders.t5xxl),
         create_vae_component(dev_model.vae),
+        create_unet_component(dev_model.model.diffusion_model),
     )
     schnell_components = (
-        create_unet_component(schnell_model.model.diffusion_model),
         create_clip_l_component(schnell_model.text_encoders.clip_l),
         create_t5xxl_component(schnell_model.text_encoders.t5xxl),
         create_vae_component(schnell_model.vae),
+        create_unet_component(schnell_model.model.diffusion_model),
     )
 
     return [
@@ -62,9 +62,9 @@ class EntireFluxModel(torch.nn.Module):
     def __init__(self, model_id: str):
         super().__init__()
         from flux.util import load_ae
-        self.model = FluxDiffusionModel(model_id)
         self.text_encoders = FluxTextEncoders()
         self.vae = load_ae(model_id, hf_download=False)
+        self.model = FluxDiffusionModel(model_id)
 
 
 class FluxDiffusionModel(torch.nn.Module):

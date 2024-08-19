@@ -18,9 +18,9 @@ def create_configs() -> Iterable[ModelConfig]:
     model = SD1Diffusers(pipeline)
 
     components = (
-        create_unet_component(model.unet),
         create_clip_l_component(model.text_encoder),
         create_vae_component(model.vae),
+        create_unet_component(model.unet),
     )
 
     return [
@@ -91,8 +91,8 @@ class SD1Diffusers(torch.nn.Module):
     def __init__(self, pipeline):
         super().__init__()
         self.pipeline = pipeline
-        self.vae = pipeline.vae
         self.text_encoder = pipeline.text_encoder
         self.tokenizer = pipeline.tokenizer
+        self.vae = pipeline.vae
         self.unet = pipeline.unet
         self.scheduler = pipeline.scheduler

@@ -112,13 +112,13 @@ class MergeMethod:
             if annotation:
                 varargs_merge_space, _ = self.__extract_merge_space(annotation, varargs_name)
 
-        return [MergeSpace(*m) for m in merge_spaces], varargs_merge_space
+        return [MergeSpace[tuple(m)] for m in merge_spaces], varargs_merge_space
 
-    def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[Set[str], str]:
+    def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[List[str], str]:
         if annotation is not None and typing.get_origin(annotation) is UnionType:
             key = param_name if issubclass(typing.get_origin(annotation), MergeSpaceBase) else typing.get_args(annotation)[-1].__name__
-            return set(get_identifiers(annotation)), key
-        return set(get_all()), param_name
+            return get_identifiers(annotation), key
+        return get_all(), param_name
 
     def get_model_names(self) -> List[str]:
         return inspect.getfullargspec(self.__f).args

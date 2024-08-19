@@ -1,7 +1,7 @@
 import sd_mecha
 import torch
 from sd_mecha.extensions.merge_method import convert_to_recipe
-from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol
+from sd_mecha.extensions.merge_space import MergeSpace, weight
 from sd_mecha import Hyper
 
 
@@ -14,7 +14,7 @@ sd_mecha.set_log_level()
 def custom_sum(
     # Each positional argument is a single tensor from one of the input models.
     # Merge methods are called once for each key that all input models have in common.
-    # We use a type system trick to specify the expected merge space of each model: `Tensor | MergeSpace(...)`
+    # We use a type system trick to specify the expected merge space of each model: `Tensor | MergeSpace[...]`
     # We can represent complex constraints where multiple models must be in the exact same merge space using MergeSpaceSymbol:
     #    ```
     #    SameSpace = MergeSpaceSymbol("weight", "delta")
@@ -28,8 +28,8 @@ def custom_sum(
     # In this code, `a` and `b` must be in the same space, either in "weight" space or "delta" space.
     # The return merge space is exactly the merge space that satisfies `a` and `b` at the same time.
     # For more examples, see /sd_mecha/merge_methods.py
-    a: torch.Tensor | MergeSpace("weight"),
-    b: torch.Tensor | MergeSpace("weight"),
+    a: torch.Tensor | MergeSpace["weight"],
+    b: torch.Tensor | MergeSpace["weight"],
     *,
     # hyperparameters go here
     # `Hyper` is an union type of `float`, `int` and `dict` (the dict case is for a different weight per block MBW), which is what the caller of the method excpects.
@@ -39,7 +39,7 @@ def custom_sum(
     # `@convert_to_recipe` introduces additional kwargs: `device=` and `dtype=`
     # We must put `**kwargs` to satisfy the type system:
     **kwargs,
-) -> torch.Tensor | MergeSpace("weight"):
+) -> torch.Tensor | MergeSpace["weight"]:
 
     # to call an existing `@convert_to_recipe` merge method inside another one (i.e. this one),
     #  we use the `__wrapped__` attribute that returns the original unwrapped function

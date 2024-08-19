@@ -29,7 +29,7 @@ def get_hyper(hyper: Hyper, key: str, model_config: ModelConfig, default_value: 
             return result / total
 
         for component_id, component in model_config.components.items():
-            if key in component.keys_to_merge:
+            if key in component.compute_keys_to_merge():
                 try:
                     return hyper[model_config.get_hyper_default_key(component_id)]
                 except KeyError:

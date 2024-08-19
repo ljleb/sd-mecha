@@ -2,14 +2,13 @@ import os
 import pathlib
 import subprocess
 from concurrent.futures import as_completed, ProcessPoolExecutor
-from model_configs.paths import get_script_module, get_executable, get_script_venv, module_dir, scripts_dir, \
-    shared_venv_dir
+from model_configs.paths import get_script_module, get_executable, get_script_venv, module_dir, scripts_dir, shared_venv_dir
 from types import ModuleType
 
 
 def generate_model_configs():
     script_paths = scripts_dir.glob('*.py')
-    with ProcessPoolExecutor(1) as executor:
+    with ProcessPoolExecutor() as executor:
         futures = [executor.submit(generate_model_config, path) for path in script_paths]
         for future in as_completed(futures):
             if future.exception() is not None:
