@@ -3,13 +3,13 @@ from model_configs.nn_module_config import Block, Component
 from typing import Iterable
 
 
-def create_clip_l_component(clip_l: torch.nn.Module) -> Component:
+def create_clip_l_component(clip_l: torch.nn.Module, component_identifier: str = "clip_l") -> Component:
     if hasattr(clip_l, "transformer"):
         clip_l_transformer = clip_l.transformer
     else:
         clip_l_transformer = clip_l
 
-    component = Component("clip_l", clip_l, [
+    component = Component(component_identifier, clip_l, [
         *list_blocks("in", clip_l_transformer.text_model.encoder.layers.children()),
     ])
     component.blocks[0].modules_to_merge += [

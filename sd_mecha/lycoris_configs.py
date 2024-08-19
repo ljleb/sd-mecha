@@ -25,16 +25,16 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
     return ModelConfig(
         identifier=f"{base_config.identifier}_{lycoris_identifier}_{'_'.join(algorithms)}",
         merge_space="delta",
-        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, prefix),
+        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix),
         components={
             component_id: dataclasses.replace(
                 component,
-                orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, prefix),
+                orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix),
                 blocks={
                     block_id: dataclasses.replace(
                         block,
-                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, prefix),
-                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, prefix),
+                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, lycoris_identifier, prefix),
+                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, lycoris_identifier, prefix),
                     )
                     for block_id, block in component.blocks.items()
                 },
@@ -47,9 +47,11 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
 def _to_lycoris_keys(
     keys: Mapping[StateDictKey, TensorMetadata],
     algorithms: Iterable[str],
+    lycoris_identifier: str,
     prefix: str,
 ) -> Dict[StateDictKey, TensorMetadata]:
     lycoris_keys = {}
+    multiple_text_encoders = any(key.startswith("text_encoder2") for key in keys)
 
     for algorithm in algorithms:
         for key, meta in keys.items():
@@ -59,6 +61,11 @@ def _to_lycoris_keys(
             key = key.split('.')
             if key[-1] == "weight":
                 key = key[:-1]
+            if lycoris_identifier == "kohya":
+                if key[0] == "text_encoder":
+                    key[0] = "te1" if multiple_text_encoders else "te"
+                if key[0] == "text_encoder2":
+                    key[0] = "te2"
             key = "_".join(key)
 
             for suffix in lycoris_algorithms[algorithm]:
@@ -83,7 +90,7 @@ class LazyLycorisModelConfig:
 
     @property
     def identifier(self) -> str:
-        return f"{self.base_config.identifier}_{self.prefix}_{'_'.join(self.algorithms)}"
+        return f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
 
     def __getattr__(self, item):
         if item in self.__dict__:
