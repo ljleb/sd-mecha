@@ -5,10 +5,9 @@ import gc
 import logging
 import pathlib
 import threading
+import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
-
-import torch
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
@@ -80,8 +79,8 @@ class RecipeMerger:
             fallback_model.accept(load_input_dicts_visitor)
 
         model_config = recipe.model_config
-        if recipe.merge_space != model_config.merge_space:
-            raise ValueError(f"recipe should be in merge space '{model_config.merge_space}', not '{recipe.merge_space}'")
+        if recipe.merge_space != "weight":
+            raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
 
         if fallback_is_recipe:
             if model_config is not fallback_model.model_config:

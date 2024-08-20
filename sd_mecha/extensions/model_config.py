@@ -84,9 +84,11 @@ class ModelConfigComponent:
 @dataclasses.dataclass
 class ModelConfig:
     identifier: str
-    merge_space: str
     orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
     components: Mapping[str, ModelConfigComponent]
+
+    def __class_getitem__(cls, item):
+        return type(f"{item}ModelConfigTag", (), {})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", self.identifier):

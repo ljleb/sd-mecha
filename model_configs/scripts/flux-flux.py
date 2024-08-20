@@ -29,13 +29,11 @@ def create_configs() -> Iterable[ModelConfig]:
     return [
         create_config_from_module(
             identifier="flux_dev-flux",
-            merge_space="weight",
             model=dev_model,
             components=dev_components,
         ),
         create_config_from_module(
             identifier="flux_dev_unet_only-flux",
-            merge_space="weight",
             model=dev_model.model.diffusion_model,
             components=(
                 create_unet_component(dev_model.model.diffusion_model),
@@ -43,13 +41,11 @@ def create_configs() -> Iterable[ModelConfig]:
         ),
         create_config_from_module(
             identifier="flux_schnell-flux",
-            merge_space="weight",
             model=schnell_model,
             components=schnell_components,
         ),
         create_config_from_module(
             identifier="flux_schnell_unet_only-flux",
-            merge_space="weight",
             model=schnell_model.model.diffusion_model,
             components=(
                 create_unet_component(schnell_model.model.diffusion_model),

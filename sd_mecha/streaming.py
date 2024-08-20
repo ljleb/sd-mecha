@@ -20,7 +20,7 @@ from sd_mecha.typing import WriteOnlyMapping
 @dataclasses.dataclass
 class TensorMetadata:
     shape: Optional[torch.Size]
-    dtype: torch.dtype
+    dtype: Optional[torch.dtype]
 
     def __post_init__(self):
         if isinstance(self.shape, list):
@@ -32,6 +32,9 @@ class TensorMetadata:
         if self.shape is None:
             raise RuntimeError("invalid operation: metadata doesn't have shape")
 
+        if self.dtype is None:
+            raise RuntimeError("invalid operation: metadata doesn't have dtype")
+
         return {
             "shape": list(self.shape),
             "dtype": DTYPE_REVERSE_MAPPING[self.dtype][0],
@@ -42,6 +45,9 @@ class TensorMetadata:
         return self.numel() * self.get_dtype_size()
 
     def get_dtype_size(self) -> int:
+        if self.dtype is None:
+            raise RuntimeError("invalid operation: metadata doesn't have dtype")
+
         return DTYPE_REVERSE_MAPPING[self.dtype][1]
 
     def numel(self) -> int:

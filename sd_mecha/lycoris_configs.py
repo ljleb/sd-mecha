@@ -1,13 +1,17 @@
 import dataclasses
 import functools
-from typing import Iterable, Mapping, Dict
-from sd_mecha.extensions.model_config import ModelConfig, get_all, StateDictKey, register_model_config
+from typing import Iterable, Mapping, Dict, Any
+
+import torch
+
+from sd_mecha import MergeSpace
+from sd_mecha.extensions.model_config import ModelConfig, get_all, StateDictKey, register_model_config, resolve
 from sd_mecha.streaming import TensorMetadata
 
 
 # run once
 @functools.cache
-def _register_all_lycoris():
+def _register_all_lycoris_configs():
     base_configs = get_all()
     for base_config in base_configs:
         register_model_config(LazyLycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)))
@@ -88,6 +92,7 @@ class LazyLycorisModelConfig:
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
         self.algorithms = algorithms
+        self.multiple_text_encoders = any(key.startswith("text_encoder_2") for key in base_config.compute_keys())
         self.underlying_config = None
 
     @property
@@ -107,5 +112,34 @@ class LazyLycorisModelConfig:
 
         self.underlying_config = to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
 
+    def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
+        return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.lycoris_identifier, self.prefix, self.multiple_text_encoders)
 
-_register_all_lycoris()
+
+_register_all_lycoris_configs()
+
+
+@register_config_conversion
+def sd1_diffusers_lora_to_base(
+    lora: Mapping[str, torch.Tensor] | ModelConfig["sd1-diffusers_lycoris"],
+    **kwargs,
+) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
+    key = kwargs["key"]
+    source_config: LazyLycorisModelConfig = resolve("sd1-diffusers_lycoris")
+    lycoris_key = next(iter(source_config.to_lycoris_keys(key)))
+    return compose_lora_up_down(lora, lycoris_key.split(".")[0])
+
+
+def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
+    up_weight = state_dict[f"{key}.lora_up.weight"]
+    down_weight = state_dict[f"{key}.lora_down.weight"]
+    alpha = state_dict[f"{key}.alpha"]
+    dim = down_weight.size()[0]
+
+    if len(down_weight.size()) == 2:  # linear
+        res = up_weight @ down_weight
+    elif down_weight.size()[2:4] == (1, 1):  # conv2d 1x1
+        res = (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3)
+    else:  # conv2d 3x3
+        res = torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3)
+    return res * (alpha / dim)

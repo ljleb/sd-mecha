@@ -27,7 +27,6 @@ def create_configs() -> Iterable[ModelConfig]:
     return [
         create_config_from_module(
             identifier="sdxl-diffusers",
-            merge_space="weight",
             model=model,
             components=components,
         ),

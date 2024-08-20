@@ -19,7 +19,6 @@ def create_configs() -> Iterable[ModelConfig]:
     return [
         create_config_from_module(
             identifier="sd3-comfyui",
-            merge_space="weight",
             model=model,
             components=(
                 create_clip_l_component(model.text_encoders.clip_l),

@@ -30,7 +30,6 @@ def create_configs() -> Iterable[ModelConfig]:
     return [
         create_config_from_module(
             identifier="sd1-ldm",
-            merge_space="weight",
             model=model,
             components=components,
         ),

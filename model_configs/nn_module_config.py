@@ -26,15 +26,11 @@ class Component:
 
 def create_config_from_module(
     identifier: str,
-    merge_space: str,
     model: torch.nn.Module,
     components: Component | Iterable[Component] = (),
 ) -> ModelConfig:
     if not isinstance(components, Iterable):
         components = [components]
-
-    # validate merge space
-    merge_space = get_identifiers(MergeSpace[merge_space])[0]
 
     state_dict_cache = {}
 
@@ -113,7 +109,6 @@ def create_config_from_module(
 
     return ModelConfig(
         identifier=identifier,
-        merge_space=merge_space,
         orphan_keys_to_copy=orphan_keys,
         components=config_components,
     )
