@@ -60,8 +60,7 @@ class ModelConfigComponent:
                 blocks[k] = ModelConfigBlock(**v)
         self.blocks = blocks
 
-    @property
-    def keys(self) -> Dict[StateDictKey, TensorMetadata]:
+    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
         return OrderedDict(
             **self.compute_keys_to_merge(),
             **self.compute_keys_to_copy(),

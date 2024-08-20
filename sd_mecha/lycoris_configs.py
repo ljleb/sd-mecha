@@ -19,22 +19,24 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
         algorithms = [algorithms]
     algorithms = list(sorted(algorithms))
 
+    multiple_text_encoders = any(key.startswith("text_encoder_2") for key in base_config.compute_keys())
+
     if "lora" not in algorithms or len(algorithms) != 1:
         raise ValueError(f"unknown lycoris algorithms {algorithms}")
 
     return ModelConfig(
         identifier=f"{base_config.identifier}_{lycoris_identifier}_{'_'.join(algorithms)}",
         merge_space="delta",
-        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix),
+        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
         components={
             component_id: dataclasses.replace(
                 component,
-                orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix),
+                orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
                 blocks={
                     block_id: dataclasses.replace(
                         block,
-                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, lycoris_identifier, prefix),
-                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, lycoris_identifier, prefix),
+                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
+                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
                     )
                     for block_id, block in component.blocks.items()
                 },
@@ -49,9 +51,9 @@ def _to_lycoris_keys(
     algorithms: Iterable[str],
     lycoris_identifier: str,
     prefix: str,
+    multiple_text_encoders: bool,
 ) -> Dict[StateDictKey, TensorMetadata]:
     lycoris_keys = {}
-    multiple_text_encoders = any(key.startswith("text_encoder2") for key in keys)
 
     for algorithm in algorithms:
         for key, meta in keys.items():
@@ -64,7 +66,7 @@ def _to_lycoris_keys(
             if lycoris_identifier == "kohya":
                 if key[0] == "text_encoder":
                     key[0] = "te1" if multiple_text_encoders else "te"
-                if key[0] == "text_encoder2":
+                if key[0] == "text_encoder_2":
                     key[0] = "te2"
             key = "_".join(key)
 
