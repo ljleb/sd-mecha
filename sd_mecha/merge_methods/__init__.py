@@ -472,8 +472,10 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
     if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
 
-    # normalize tilt to the range [0, 2]
-    tilt -= math.floor(tilt // 2 * 2)
+    # normalize tilt to the range [0, 4]
+    tilt -= math.floor(tilt // 4 * 4)
+    if tilt > 2:
+        alpha = 1 - alpha
 
     gradients = list(reversed([
         torch.linspace(0, 1, s, device=device)
@@ -492,11 +494,17 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
     else:
         mesh = gradients[0]
 
-    if tilt < EPSILON or abs(tilt - 2) < EPSILON:
+    if tilt < EPSILON or abs(tilt - 4) < EPSILON:
         dft_filter = (mesh > 1 - alpha).float()
+    elif abs(tilt - 2) < EPSILON:
+        dft_filter = (mesh < 1 - alpha).float()
     else:
         tilt_cot = 1 / math.tan(math.pi * tilt / 2)
-        dft_filter = torch.clamp(mesh*tilt_cot + alpha*tilt_cot + alpha - tilt_cot, 0, 1)
+        if tilt <= 1 or 2 < tilt <= 3:
+            dft_filter = mesh*tilt_cot + alpha*tilt_cot + alpha - tilt_cot
+        else:  # 1 < tilt <= 2 or 3 < tilt
+            dft_filter = mesh*tilt_cot - alpha*tilt_cot + alpha
+        dft_filter = dft_filter.clip(0, 1)
 
     return dft_filter
 
@@ -520,10 +528,8 @@ def rotate(
     is_conv = len(a.shape) == 4 and a.shape[-1] != 1
     if is_conv:
         shape_2d = (-1, functools.reduce(operator.mul, a.shape[2:]))
-    elif len(a.shape) == 4:
-        shape_2d = (-1, functools.reduce(operator.mul, a.shape[1:]))
     else:
-        shape_2d = (-1, a.shape[-1])
+        shape_2d = (a.shape[0], a.shape[1:].numel())
 
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)
@@ -657,7 +663,7 @@ def ties_sum_with_dropout(
 
     # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
     # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$
-    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability)) for delta in deltas]
+    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability, device=delta.device, dtype=delta.dtype)) for delta in deltas]
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
     deltas = ties_sum_extended.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
@@ -782,7 +788,7 @@ def geometric_median_list_of_array(models, eps, maxiter, ftol):
     objective_value = geometric_median_objective(median, models, weights)
 
     # Weiszfeld iterations
-    for _ in range(maxiter):
+    for _ in range(max(0, round(maxiter))):
         prev_obj_value = objective_value
         denom = torch.stack([l2distance(p, median) for p in models])
         new_weights = weights / torch.clamp(denom, min=eps) 
@@ -791,7 +797,7 @@ def geometric_median_list_of_array(models, eps, maxiter, ftol):
         objective_value = geometric_median_objective(median, models, weights)
         if abs(prev_obj_value - objective_value) <= ftol * objective_value:
             break
-        
+
     return weighted_average(models, new_weights)
 
 

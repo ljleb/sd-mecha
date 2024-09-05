@@ -4,7 +4,7 @@ from typing import Optional, Tuple, Dict
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
-    if a.shape[0] + 10 < a.shape[1]:
+    if not cancel_reflection and a.shape[0] + 10 < a.shape[1]:
         svd_driver = "gesvdj" if a.is_cuda else None
         u, _, v = torch_svd_lowrank(a.T @ b, driver=svd_driver, q=a.shape[0] + 10)
         v_t = v.T
@@ -12,9 +12,8 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
-
-    if cancel_reflection:
-        u[:, -1] /= torch.det(u) * torch.det(v_t)
+        if cancel_reflection:
+            u[:, -1] /= torch.det(u) * torch.det(v_t)
 
     transform = u @ v_t
     if not torch.isfinite(u).all():
@@ -22,7 +21,7 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
             f"determinant error: {torch.det(transform)}. "
             'This can happen when merging on the CPU with the "rotate" method. '
             "Consider merging on a cuda device, "
-            "or try setting alpha to 1 for the problematic blocks. "
+            "or try setting `alignment` to 1 for the problematic blocks. "
             "See this related discussion for more info: "
             "https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"
         )
