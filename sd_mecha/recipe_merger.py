@@ -9,6 +9,8 @@ import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
+
+from sd_mecha.hypers import validate_hyper
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from sd_mecha.extensions.model_format import get_all as all_model_formats
@@ -77,6 +79,8 @@ class RecipeMerger:
         recipe.accept(load_input_dicts_visitor)
         if fallback_is_recipe:
             fallback_model.accept(load_input_dicts_visitor)
+
+        recipe.accept(ValidateConfigVisitor())
 
         model_config = recipe.model_config
         if recipe.merge_space != "weight":
@@ -221,8 +225,6 @@ class ThisThreadExecutor(nullcontext):
 
 @dataclasses.dataclass
 class ValidateConfigVisitor(RecipeVisitor):
-    node_paths: Set[str]
-
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         pass
 
@@ -231,6 +233,11 @@ class ValidateConfigVisitor(RecipeVisitor):
         for m in node.models:
             if m.model_config.identifier != first_config.identifier:
                 raise ValueError(f"Incompatible models found as input to recipe: {first_config.identifier} and {m.model_config.identifier}")
+
+            m.accept(self)
+
+        for hyper_v in node.hypers.values():
+            validate_hyper(hyper_v, first_config)
 
 
 @dataclasses.dataclass

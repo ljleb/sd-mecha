@@ -53,7 +53,7 @@ class ModelRecipeNode(RecipeNode):
 
     @property
     def merge_space(self) -> str:
-        return self.model_config.merge_space
+        return "weight"
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
@@ -92,8 +92,6 @@ class MergeRecipeNode(RecipeNode):
     ):
         self.merge_method = merge_method
         self.models = models
-        for hyper_v in hypers.values():
-            validate_hyper(hyper_v, self.model_config)
         self.hypers = hypers
         self.volatile_hypers = volatile_hypers
         self.device = device

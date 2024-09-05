@@ -471,8 +471,10 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
     if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
 
-    # normalize tilt to the range [0, 2]
-    tilt -= math.floor(tilt // 2 * 2)
+    # normalize tilt to the range [0, 4]
+    tilt -= math.floor(tilt // 4 * 4)
+    if tilt > 2:
+        alpha = 1 - alpha
 
     gradients = list(reversed([
         torch.linspace(0, 1, s, device=device)
@@ -491,11 +493,17 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
     else:
         mesh = gradients[0]
 
-    if tilt < EPSILON or abs(tilt - 2) < EPSILON:
+    if tilt < EPSILON or abs(tilt - 4) < EPSILON:
         dft_filter = (mesh > 1 - alpha).float()
+    elif abs(tilt - 2) < EPSILON:
+        dft_filter = (mesh < 1 - alpha).float()
     else:
         tilt_cot = 1 / math.tan(math.pi * tilt / 2)
-        dft_filter = torch.clamp(mesh*tilt_cot + alpha*tilt_cot + alpha - tilt_cot, 0, 1)
+        if tilt <= 1 or 2 < tilt <= 3:
+            dft_filter = mesh*tilt_cot + alpha*tilt_cot + alpha - tilt_cot
+        else:  # 1 < tilt <= 2 or 3 < tilt
+            dft_filter = mesh*tilt_cot - alpha*tilt_cot + alpha
+        dft_filter = dft_filter.clip(0, 1)
 
     return dft_filter
 

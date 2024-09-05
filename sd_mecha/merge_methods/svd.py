@@ -4,31 +4,32 @@ from typing import Optional, Tuple, Dict
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
+    if a.shape != b.shape:
+        raise ValueError(f"a {tuple(a.shape)} and b {tuple(b.shape)} must have the same shape")
+
     if a.shape[0] + 10 < a.shape[1]:
         svd_driver = "gesvdj" if a.is_cuda else None
-        u, _, v = torch_svd_lowrank(a.T @ b, driver=svd_driver, q=a.shape[0] + 10)
-        v_t = v.T
-        del v
-        if cancel_reflection:
-            # can't use torch.det(u) * torch.det(v_t) because neither u nor v_t are square
-            # note: det(v_t @ u) = det(u @ v_t)
-            u[:, -1] /= torch.det(v_t @ u)
+        u, _, v_t = torch_svd_lowrank(a.T @ b, q=a.shape[0] + 10, driver=svd_driver, full_matrices=cancel_reflection)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, v_t = torch.linalg.svd(a.T @ b, driver=svd_driver)
-        if cancel_reflection:
-            u[:, -1] /= torch.det(u) * torch.det(v_t)
 
     transform = u @ v_t
-    if not torch.isfinite(u).all():
-        raise ValueError(
-            f"determinant error: {torch.det(transform)}. "
+    transform_det = torch.linalg.det(transform)
+    if torch.isclose(transform_det, torch.tensor(0, device=transform_det.device, dtype=transform_det.dtype)):
+        raise RuntimeError(
+            f"determinant error: {transform_det}. "
             'This can happen when merging on the CPU with the "rotate" method. '
             "Consider merging on a cuda device, "
-            "or try setting alpha to 1 for the problematic blocks. "
+            "or try setting `alignment` to 1 for the problematic blocks. "
             "See this related discussion for more info: "
             "https://github.com/s1dlx/meh/pull/50#discussion_r1429469484"
         )
+
+    if cancel_reflection:
+        transform_det = torch.linalg.det(transform)
+        if transform_det < 0:
+            transform -= 2 * u[:, -1:] * v_t[-1:]
 
     return transform
 
@@ -60,59 +61,40 @@ torch_complex_dtype_map = {
 }
 
 
-# need to redefine torch.svd_lowrank to specify the svd driver
+# need to redefine torch.svd_lowrank to specify the svd driver and for full_matrices support
 def torch_svd_lowrank(
     A: Tensor,
     q: Optional[int] = 6,
     niter: Optional[int] = 2,
-    M: Optional[Tensor] = None,
     driver: Optional[str] = None,
+    full_matrices: Optional[bool] = True,
 ) -> Tuple[Tensor, Tensor, Tensor]:
     q = 6 if q is None else q
     m, n = A.shape[-2:]
-    if M is None:
-        M_t = None
-    else:
-        M_t = transpose(M)
+    M_t = None
     A_t = transpose(A)
 
     # Algorithm 5.1 in Halko et al 2009, slightly modified to reduce
     # the number conjugate and transpose operations
-    if m < n or n > q:
-        # computing the SVD approximation of a transpose in
-        # order to keep B shape minimal (the m < n case) or the V
-        # shape small (the n > q case)
-        Q = get_approximate_basis(A_t, q, niter=niter, M=M_t)
-        Q_c = conjugate(Q)
-        if M is None:
-            B_t = matmul(A, Q_c)
-        else:
-            B_t = matmul(A, Q_c) - matmul(M, Q_c)
-        assert B_t.shape[-2] == m, (B_t.shape, m)
-        assert B_t.shape[-1] == q, (B_t.shape, q)
-        assert B_t.shape[-1] <= B_t.shape[-2], B_t.shape
-        U, S, Vh = torch.linalg.svd(B_t, driver=driver, full_matrices=False)
-        V = Vh.mH
-        V = Q.matmul(V)
-    else:
-        Q = get_approximate_basis(A, q, niter=niter, M=M)
-        Q_c = conjugate(Q)
-        if M is None:
-            B = matmul(A_t, Q_c)
-        else:
-            B = matmul(A_t, Q_c) - matmul(M_t, Q_c)
-        B_t = transpose(B)
-        assert B_t.shape[-2] == q, (B_t.shape, q)
-        assert B_t.shape[-1] == n, (B_t.shape, n)
-        assert B_t.shape[-1] <= B_t.shape[-2], B_t.shape
-        U, S, Vh = torch.linalg.svd(B_t, driver=driver, full_matrices=False)
-        V = Vh.mH
-        U = Q.matmul(U)
+    assert m < n or n > q
+    # computing the SVD approximation of a transpose in
+    # order to keep B shape minimal (the m < n case) or the V
+    # shape small (the n > q case)
+    Q = get_approximate_basis(A_t, q, niter=niter)
+    Q_c = conjugate(Q)
+    B_t = matmul(A, Q_c)
+    assert B_t.shape[-2] == m, (B_t.shape, m)
+    assert B_t.shape[-1] == q, (B_t.shape, q)
+    assert B_t.shape[-1] <= B_t.shape[-2], B_t.shape
+    U, S, Vh = torch.linalg.svd(B_t, driver=driver, full_matrices=full_matrices)
+    V = Q.matmul(Vh.mH)
+    if full_matrices:
+        V = orthogonal_extend(V)
 
-    return U, S, V
+    return U, S, V.mH
 
 
-def get_approximate_basis(A: Tensor, q: int, niter: Optional[int] = 2, M: Optional[Tensor] = None) -> Tensor:
+def get_approximate_basis(A: Tensor, q: int, niter: Optional[int] = 2) -> Tensor:
     """Return tensor :math:`Q` with :math:`q` orthonormal columns such
     that :math:`Q Q^H A` approximates :math:`A`. If :math:`M` is
     specified, then :math:`Q` is such that :math:`Q Q^H (A - M)`
@@ -144,9 +126,6 @@ def get_approximate_basis(A: Tensor, q: int, niter: Optional[int] = 2, M: Option
                                nonnegative integer. In most cases, the
                                default value 2 is more than enough.
 
-        M (Tensor, optional): the input tensor's mean of size
-                              :math:`(*, 1, n)`.
-
     References::
         - Nathan Halko, Per-Gunnar Martinsson, and Joel Tropp, Finding
           structure with randomness: probabilistic algorithms for
@@ -161,22 +140,24 @@ def get_approximate_basis(A: Tensor, q: int, niter: Optional[int] = 2, M: Option
 
     R = torch.randn(n, q, dtype=dtype, device=A.device)
 
-    # The following code could be made faster using torch.geqrf + torch.ormqr
-    # but geqrf is not differentiable
     A_H = transjugate(A)
-    if M is None:
-        Q = torch.linalg.qr(matmul(A, R)).Q
-        for i in range(niter):
-            Q = torch.linalg.qr(matmul(A_H, Q)).Q
-            Q = torch.linalg.qr(matmul(A, Q)).Q
-    else:
-        M_H = transjugate(M)
-        Q = torch.linalg.qr(matmul(A, R) - matmul(M, R)).Q
-        for i in range(niter):
-            Q = torch.linalg.qr(matmul(A_H, Q) - matmul(M_H, Q)).Q
-            Q = torch.linalg.qr(matmul(A, Q) - matmul(M, Q)).Q
+    Q = torch.linalg.qr(matmul(A, R)).Q
+    for i in range(niter):
+        Q = torch.linalg.qr(matmul(A_H, Q)).Q
+        Q = torch.linalg.qr(matmul(A, Q)).Q
 
     return Q
+
+
+def orthogonal_extend(A: torch.Tensor) -> torch.Tensor:
+    m, n = A.shape
+    if m <= n:
+        return A
+
+    proj = torch.eye(m, device=A.device, dtype=A.dtype) - A @ A.mH
+    proj @= torch.randn(m, m - n, device=A.device, dtype=A.dtype)
+    A_extension = torch.linalg.householder_product(*torch.geqrf(proj))
+    return torch.cat((A, A_extension), dim=1)
 
 
 def transjugate(A):

@@ -54,7 +54,7 @@ class TensorMetadata:
         if self.shape is None:
             raise RuntimeError("invalid operation: metadata doesn't have shape")
 
-        return functools.reduce(operator.mul, list(self.shape), 1)
+        return self.shape.numel()
 
 
 class MemoryDict(Mapping[str, torch.Tensor]):
@@ -112,8 +112,9 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
         return len(self.header) - int("__metadata__" in self.header)
 
     def close(self):
-        if hasattr(self, "file"):
+        if getattr(self, "file", None) is not None:
             self.file.close()
+        self.file = None
         self.buffer = None
         self.header = None
 
