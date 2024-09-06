@@ -376,7 +376,7 @@ def ties_with_dare(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
     probability: Hyper = 0.9,
-    no_rescale: Hyper = 0.0,
+    rescale: Hyper = 1.0,
     alpha: Hyper = 0.5,
     seed: Optional[Hyper] = None,
     k: Hyper = 0.2,
@@ -386,7 +386,7 @@ def ties_with_dare(
     apply_median: Hyper = 0.0,
     eps: Hyper = 1e-6,    
     maxiter: Hyper = 100, 
-    ftol: Hyper =1e-20,
+    ftol: Hyper = 1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -404,7 +404,7 @@ def ties_with_dare(
     res = ties_sum_with_dropout(
         *deltas, 
         probability=probability,
-        no_rescale=no_rescale,
+        rescale=rescale,
         k=k,
         vote_sgn=vote_sgn,
         seed=seed, 

@@ -609,6 +609,7 @@ def dropout(  # aka n-supermario
     delta0: Tensor | LiftFlag[MergeSpace.DELTA],
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
+    rescale: Hyper = 1.0,
     overlap: Hyper = 1.0,
     overlap_emphasis: Hyper = 0.0,
     seed: Hyper = -1,
@@ -636,7 +637,13 @@ def dropout(  # aka n-supermario
     final_delta = torch.zeros_like(delta0)
     for mask, delta in zip(masks, deltas):
         final_delta[mask] += delta[mask]
-    return final_delta / masks.sum(0).clamp(1) / (1 - probability)
+
+    if probability == 1.0:
+        rescalar = 1.0
+    else:
+        rescalar = (1.0 - probability) ** rescale
+        rescalar = rescalar if math.isfinite(rescalar) else 1
+    return final_delta / masks.sum(0).clamp(1) / rescalar
 
 
 # Part of TIES w/ DARE
@@ -647,7 +654,7 @@ def dropout(  # aka n-supermario
 def ties_sum_with_dropout(
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
-    no_rescale: Hyper = 0.0,
+    rescale: Hyper = 1.0,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
@@ -659,31 +666,29 @@ def ties_sum_with_dropout(
     seed: Hyper = -1,
     **kwargs,
 ) -> Tensor | LiftFlag[MergeSpace.DELTA]:
-    # Set seed
+    if not deltas or probability == 1:
+        return 0
+
     if seed < 0:
         seed = None
     else:
         seed = int(seed)
-    torch.manual_seed(seed)
+    generator = torch.Generator(deltas[0].device)
+    generator.manual_seed(seed)
 
     # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
     # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$
-    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability, device=delta.device, dtype=delta.dtype)) for delta in deltas]
+    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability, device=delta.device, dtype=delta.dtype), generator=generator) for delta in deltas]
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
     deltas = ties_sum_extended.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
 
     if probability == 1.0:
-        # Corner case
-        return deltas * 0.0
-    elif no_rescale <= 0.0:
-        # Rescale
-        # $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
-        return deltas / (1.0 - probability)
+        rescalar = 1.0
     else:
-        # No rescale
-        # $$ \hat{\delta}^t = \tilde{\delta}^t $$
-        return deltas
+        rescalar = (1.0 - probability) ** rescale
+        rescalar = rescalar if math.isfinite(rescalar) else 1
+    return deltas / rescalar
 
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
