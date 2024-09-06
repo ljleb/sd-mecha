@@ -669,12 +669,9 @@ def ties_sum_with_dropout(
     if not deltas or probability == 1:
         return 0
 
-    if seed < 0:
-        seed = None
-    else:
-        seed = int(seed)
     generator = torch.Generator(deltas[0].device)
-    generator.manual_seed(seed)
+    if seed is not None and seed >= 0:
+        generator.manual_seed(round(seed))
 
     # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
     # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$

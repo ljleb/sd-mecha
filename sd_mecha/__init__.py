@@ -378,7 +378,7 @@ def ties_with_dare(
     probability: Hyper = 0.9,
     rescale: Hyper = 1.0,
     alpha: Hyper = 0.5,
-    seed: Optional[Hyper] = None,
+    seed: Hyper = -1,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
     apply_stock: Hyper = 0.0,
