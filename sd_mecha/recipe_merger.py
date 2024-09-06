@@ -46,9 +46,10 @@ class RecipeMerger:
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
+        strict_weight_space: bool = True,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
-        if recipe.merge_space != recipe_nodes.MergeSpace.BASE:
+        if strict_weight_space and recipe.merge_space != recipe_nodes.MergeSpace.BASE:
             raise ValueError(f"recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
