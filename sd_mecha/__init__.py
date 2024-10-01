@@ -361,12 +361,14 @@ ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
 
 
 # latex notes in reference to original implementation: https://arxiv.org/abs/2311.03099
+# Added DELLA. "(MAG)Prune > Merge (TIES) > Rescale". See https://arxiv.org/abs/2406.11617
 # Notice that this is "TIES Merging w/ DARE", which is "Prune > Merge (TIES) > Rescale"
 # See https://slgero.medium.com/merge-large-language-models-29897aeb1d1a for details
 # - `base`: $$ \theta_{PRE} $$
 # - `*models`: $$ \theta_{SFT}^{t_k} $$
 # - `deltas`: $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
 # - `probability`: $$ p $$
+# - `della_eps`: $$ \epsilon $$ for DELLA
 # - `res`: $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
 # - `alpha`: $$ \lambda $$
 # - `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ ) in TIES paper
@@ -376,6 +378,7 @@ def ties_with_dare(
     base: RecipeNodeOrPath,
     *models: RecipeNodeOrPath,
     probability: Hyper = 0.9,
+    della_eps: Hyper = 0.0,
     rescale: Hyper = 1.0,
     alpha: Hyper = 0.5,
     seed: Hyper = -1,
@@ -404,6 +407,7 @@ def ties_with_dare(
     res = ties_sum_with_dropout(
         *deltas, 
         probability=probability,
+        della_eps=della_eps,
         rescale=rescale,
         k=k,
         vote_sgn=vote_sgn,
