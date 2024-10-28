@@ -7,7 +7,6 @@ from typing import Iterable, Dict, List, Mapping, Callable, Tuple, Optional
 from sd_mecha.extensions.model_arch import ModelArch
 from sd_mecha.hypers import get_hyper
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, ParameterRecipeNode, MergeRecipeNode, DepthRecipeVisitor, RecipeVisitor
-from sd_mecha.streaming import InSafetensorsDict
 
 
 @dataclasses.dataclass
