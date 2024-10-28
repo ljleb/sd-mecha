@@ -52,9 +52,6 @@ class ModelType:
                     if k != "__metadata__"
                 }
 
-            def _create_fake_tensor(*shape, dtype):
-                return torch.empty(shape, dtype=dtype)
-
             if self.strict_suffixes:
                 for sd_key in state_dict:
                     if sd_key == "__metadata__":
@@ -68,7 +65,7 @@ class ModelType:
 
             with FakeTensorMode():
                 fake_state_dict = {
-                    k: _create_fake_tensor(*h["shape"], dtype=DTYPE_MAPPING[h["dtype"]][0])
+                    k: torch.empty(tuple(h["shape"]), dtype=DTYPE_MAPPING[h["dtype"]][0])
                     for k, h in state_dict.header.items()
                     if k != "__metadata__" and (self.key_suffixes is None or k.endswith(self.key_suffixes))
                 }

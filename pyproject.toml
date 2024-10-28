@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sd-mecha"
-version = "0.0.26"
+version = "0.0.27"
 description = "State dict recipe merger"
 readme = "README.md"
 authors = [{ name = "ljleb" }]
