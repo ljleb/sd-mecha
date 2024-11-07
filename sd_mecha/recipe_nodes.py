@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any, Mapping
 from torch import Tensor
 from sd_mecha import extensions
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.hypers import validate_hyper, Hyper
+from sd_mecha.hypers import Hyper
 from sd_mecha.streaming import TensorMetadata, MemoryDict
 
 
@@ -111,6 +111,7 @@ class MergeRecipeNode(RecipeNode):
         if not self.models:
             return None
 
+        model_configs = None
         for model in self.models:
             if (model_config := model.model_config) is None:
                 return None

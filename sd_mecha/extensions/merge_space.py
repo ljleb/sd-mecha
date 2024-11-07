@@ -4,8 +4,6 @@ import uuid
 from types import UnionType
 from typing import List, Union, Tuple, TypeVar
 
-import torch
-
 
 class MergeSpaceBase:
     identifier: str
