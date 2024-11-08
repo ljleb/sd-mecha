@@ -15,10 +15,9 @@ from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.hypers import validate_hyper
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
-from sd_mecha.extensions.model_format import get_all as all_model_formats
 from sd_mecha import extensions, recipe_nodes, recipe_serializer, hypers
 from tqdm import tqdm
-from typing import Optional, Mapping, MutableMapping, List, Iterable, Callable, Tuple, Set, Dict
+from typing import Optional, Mapping, MutableMapping, List, Iterable, Callable, Tuple, Dict
 
 
 class RecipeMerger:
@@ -275,7 +274,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         cache_key = str(path.resolve())
         if cache_key not in self.dicts_cache:
             matching_formats = []
-            for model_format in all_model_formats():
+            for model_format in extensions.model_format.get_all():
                 if model_format.matches(path):
                     matching_formats.append(model_format)
 
