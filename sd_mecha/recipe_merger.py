@@ -56,8 +56,6 @@ class RecipeMerger:
         strict_weight_space: bool = True,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
-        if strict_weight_space and recipe.merge_space != "weight":
-            raise ValueError(f"recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
         elif not isinstance(fallback_model, (recipe_nodes.ModelRecipeNode, Mapping, type(None))):
@@ -87,7 +85,7 @@ class RecipeMerger:
         recipe.accept(ValidateConfigVisitor())
 
         model_config = recipe.model_config
-        if recipe.merge_space != "weight":
+        if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
 
         if fallback_is_recipe:

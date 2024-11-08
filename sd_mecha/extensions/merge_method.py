@@ -184,7 +184,7 @@ class MergeMethod:
             annotation = type_hints.get(param)
             if annotation:
                 merge_space, _ = self.__extract_merge_space(annotation, param)
-                merge_spaces.append(merge_space)
+                merge_spaces.append(MergeSpace[tuple(merge_space)])
 
         varargs_name = self.get_input_varargs_name()
         varargs_merge_space = None
@@ -192,8 +192,9 @@ class MergeMethod:
             annotation = type_hints.get(varargs_name)
             if annotation:
                 varargs_merge_space, _ = self.__extract_merge_space(annotation, varargs_name)
+                varargs_merge_space = MergeSpace[tuple(varargs_merge_space)]
 
-        return [MergeSpace[tuple(m)] for m in merge_spaces], varargs_merge_space
+        return merge_spaces, varargs_merge_space
 
     def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[List[str], str]:
         if typing.get_origin(annotation) is UnionType:

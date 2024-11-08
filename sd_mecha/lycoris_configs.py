@@ -1,11 +1,11 @@
 import dataclasses
 import functools
 import torch
-from typing import Iterable, Mapping, Dict, Any
+from typing import Iterable, Mapping, Dict
 from sd_mecha import MergeSpace, extensions
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
 from sd_mecha.extensions.model_config import StateDictKey, ModelConfig
-from sd_mecha.streaming import TensorMetadata
+from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 
 
 # run once
@@ -23,7 +23,7 @@ class LycorisLazyModelConfig:
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
         self.algorithms = algorithms
-        self.multiple_text_encoders = any(key.startswith("text_encoder_2") for key in base_config.compute_keys())
+        self.multiple_text_encoders = None
         self.underlying_config = None
 
     @property
@@ -42,6 +42,7 @@ class LycorisLazyModelConfig:
             return
 
         self.underlying_config = to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
+        self.multiple_text_encoders = any(key.startswith("text_encoder_2") for key in self.base_config.compute_keys())
 
     def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
         return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.lycoris_identifier, self.prefix, self.multiple_text_encoders)
@@ -117,15 +118,24 @@ lycoris_algorithms = {
 _register_all_lycoris_configs()
 
 
-@convert_to_recipe
-def sd1_diffusers_lora_to_base(
-    lora: StateDict | ModelConfig["sd1-diffusers_lycoris"],
-    **kwargs,
-) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
-    key = kwargs["key"]
-    source_config: LycorisLazyModelConfig = lora.model_config
-    lycoris_key = next(iter(source_config.to_lycoris_keys(key)))
-    return compose_lora_up_down(lora, lycoris_key.split(".")[0])
+try:
+    extensions.model_config.resolve("sd1-diffusers_kohya_lora")
+except ValueError:
+    pass
+else:
+    @convert_to_recipe
+    def sd1_diffusers_lora_to_base(
+        lora: StateDict | ModelConfig["sd1-diffusers_kohya_lora"] | MergeSpace["weight"],
+        **kwargs,
+    ) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
+        key = kwargs["key"]
+        source_config: LycorisLazyModelConfig = lora.model_config
+        lycoris_keys = source_config.to_lycoris_keys(key)
+        if not lycoris_keys:
+            raise StateDictKeyError(key)
+
+        lycoris_key = next(iter(lycoris_keys))
+        return compose_lora_up_down(lora, lycoris_key.split(".")[0])
 
 
 def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):

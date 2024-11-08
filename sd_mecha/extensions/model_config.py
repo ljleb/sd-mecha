@@ -264,8 +264,11 @@ def resolve(identifier: str) -> ModelConfig:
     except KeyError:
         pass
 
-    suggestion = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry.keys())[0]
-    raise ValueError(f"unknown model implementation: {identifier}. Nearest match is '{suggestion}'")
+    suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry.keys())
+    postfix = ""
+    if suggestions is not None:
+        postfix = f". Nearest match is '{suggestions[0]}'"
+    raise ValueError(f"unknown model implementation: {identifier}{postfix}")
 
 
 def get_all() -> List[ModelConfig]:

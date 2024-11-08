@@ -120,7 +120,7 @@ class MergeRecipeNode(RecipeNode):
                     res[k] = v
                 elif res[k].shape != v.shape:
                     raise RuntimeError(f"key {k} has ambiguous shape. candidates are {res[k].shape} and {v.shape}")
-        return res
+        return OrderedDict(self.model_config.compute_keys())
 
     def __contains__(self, item):
         if isinstance(item, MergeRecipeNode):

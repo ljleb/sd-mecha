@@ -9,7 +9,7 @@ from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
-# import sd_mecha.lycoris_configs
+import sd_mecha.lycoris_configs
 
 
 def serialize_and_save(
@@ -42,8 +42,8 @@ def add_difference(
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a: recipe_nodes.RecipeNode = extensions.merge_method.path_to_node(a)
-    b: recipe_nodes.RecipeNode = extensions.merge_method.path_to_node(b)
+    a = extensions.merge_method.path_to_node(a)
+    b = extensions.merge_method.path_to_node(b)
     original_b = b
 
     if c is not None:
