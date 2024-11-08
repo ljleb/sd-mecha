@@ -140,12 +140,20 @@ class MergeMethod:
             "key": key,
         }
 
+    def get_input_types(self) -> List[type]:
+        return [
+            annotation if annotation is None or typing.get_origin(annotation) is not UnionType else
+            typing.get_args(annotation)[0]  # validation ensures the input type is index 0
+            for k, annotation in typing.get_type_hints(self.__f).items()
+            if k in self.get_input_names()
+        ]
+
     def get_return_merge_space(self, merge_spaces_args: List[str]) -> str:
         type_hints = typing.get_type_hints(self.__f)
-        model_names = self.get_model_names()
-        varargs_name = self.get_model_varargs_name()
+        model_names = self.get_input_names()
+        varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
-            model_names.extend([varargs_name]*(len(merge_spaces_args) - len(model_names)))
+            model_names.extend([varargs_name] * max(0, len(merge_spaces_args) - len(model_names)))
 
         resolved_input_spaces = {}
         for param_name, merge_space_arg in zip(model_names, merge_spaces_args):
@@ -170,7 +178,7 @@ class MergeMethod:
 
     def get_input_merge_spaces(self) -> Tuple[List[type], Optional[type]]:
         type_hints = typing.get_type_hints(self.__f)
-        model_names = self.get_model_names()
+        model_names = self.get_input_names()
         merge_spaces = []
         for param in model_names:
             annotation = type_hints.get(param)
@@ -178,7 +186,7 @@ class MergeMethod:
                 merge_space, _ = self.__extract_merge_space(annotation, param)
                 merge_spaces.append(merge_space)
 
-        varargs_name = self.get_model_varargs_name()
+        varargs_name = self.get_input_varargs_name()
         varargs_merge_space = None
         if varargs_name:
             annotation = type_hints.get(varargs_name)
@@ -206,15 +214,44 @@ class MergeMethod:
             merge_space_ids = extensions.merge_space.get_all()
         return merge_space_ids, key
 
-    def get_input_types(self) -> List[type]:
-        return [
-            annotation if annotation is None or typing.get_origin(annotation) is not UnionType else
-            typing.get_args(annotation)[0]  # validation ensures the input type is index 0
-            for k, annotation in typing.get_type_hints(self.__f).items()
-            if k in self.get_model_names()
-        ]
+    def get_return_config(self, arg_configs: List[ModelConfig]) -> ModelConfig:
+        type_hints = typing.get_type_hints(self.__f)
+        params = self.get_input_names()
+        varargs_name = self.get_input_varargs_name()
+        if varargs_name is not None:
+            params.extend([varargs_name] * max(0, len(arg_configs) - len(params)))
 
-    def get_model_names(self) -> List[str]:
+        return_type_hint = type_hints.get("return")
+        default_config = self.__extract_model_config(return_type_hint)
+
+        for param, arg_config in zip(params, arg_configs):
+            annotation = type_hints.get(param)
+            param_config = self.__extract_model_config(annotation)
+            if param_config is None:
+                param_config = default_config
+            if param_config is None:
+                param_config = arg_config
+                default_config = arg_config
+            if param_config.identifier != arg_config.identifier:
+                raise ValueError(f"Recipe received an incompatible input: expected model config {param_config.identifier} but instead got {arg_config.identifier}")
+
+        return default_config
+
+    def __extract_model_config(self, annotation) -> Optional[ModelConfig]:
+        if typing.get_origin(annotation) is UnionType:
+            type_args = typing.get_args(annotation)
+        elif annotation is not None:
+            type_args = (annotation,)
+        else:
+            type_args = ()
+
+        for type_arg in type_args:
+            if issubclass(type_arg, ModelConfigTag):
+                return type_arg.config
+
+        return None
+
+    def get_input_names(self) -> List[str]:
         return inspect.getfullargspec(self.__f).args
 
     def get_hyper_names(self) -> Set[str]:
@@ -226,7 +263,7 @@ class MergeMethod:
     def get_default_hypers(self) -> Dict[str, Hyper]:
         return inspect.getfullargspec(self.__f).kwonlydefaults or {}
 
-    def get_model_varargs_name(self) -> Optional[str]:
+    def get_input_varargs_name(self) -> Optional[str]:
         return inspect.getfullargspec(self.__f).varargs
 
     def get_name(self) -> str:
@@ -253,7 +290,7 @@ def __convert_to_recipe_impl(
 
     model_params = "".join(
         f"{model_name}: {MergeRecipeNode.__name__}, "
-        for model_name in merge_method.get_model_names()
+        for model_name in merge_method.get_input_names()
     )
     hyper_params = "".join(
         f"{hyper_name}: {Hyper.__name__} = default_hypers[\"{hyper_name}\"], "
@@ -264,7 +301,7 @@ def __convert_to_recipe_impl(
 
     model_args = "".join(
         f"{path_to_node.__name__}({model_name}), "
-        for model_name in merge_method.get_model_names()
+        for model_name in merge_method.get_input_names()
     )
     hyper_args = "".join(
         f"{hyper_name}={hyper_name}, "

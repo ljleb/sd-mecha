@@ -122,7 +122,7 @@ class SerializerVisitor(RecipeVisitor):
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
         models = [
             f"&{model.accept(self)}"
-            for model in node.models
+            for model in node.inputs
         ]
 
         hypers = []

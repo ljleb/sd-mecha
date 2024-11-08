@@ -9,7 +9,7 @@ from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
-import sd_mecha.lycoris_configs
+# import sd_mecha.lycoris_configs
 
 
 def serialize_and_save(

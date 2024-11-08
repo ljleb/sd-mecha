@@ -234,15 +234,11 @@ class ValidateConfigVisitor(RecipeVisitor):
         pass
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        first_config = node.models[0].model_config
-        for m in node.models:
-            if m.model_config.identifier != first_config.identifier:
-                raise ValueError(f"Incompatible models found as input to recipe: {first_config.identifier} and {m.model_config.identifier}")
-
+        for m in node.inputs:
             m.accept(self)
 
         for hyper_v in node.hypers.values():
-            validate_hyper(hyper_v, first_config)
+            validate_hyper(hyper_v, node.model_config)
 
 
 @dataclasses.dataclass
@@ -257,7 +253,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
             node.model_config = self.__detect_model_config(node.state_dict, node_path)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in node.models:
+        for model in node.inputs:
             model.accept(self)
 
     def __load_dict(self, node: recipe_nodes.ModelRecipeNode):
@@ -314,7 +310,7 @@ class CloseInputDictsVisitor(RecipeVisitor):
         node.state_dict = None
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in node.models:
+        for model in node.inputs:
             model.accept(self)
 
 
@@ -377,9 +373,9 @@ class KeyMergeVisitor(KeyVisitor):
     passthrough_callback: Callable[[str], torch.Tensor]
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
-        merged: List[Optional[torch.Tensor]] = [None] * len(node.models)
+        merged: List[Optional[torch.Tensor]] = [None] * len(node.inputs)
         try:
-            self.__visit_deeper_first(node.models, merged, node.merge_method)
+            self.__visit_deeper_first(node.inputs, merged, node.merge_method)
             return node.merge_method(
                 merged,
                 {
@@ -391,7 +387,7 @@ class KeyMergeVisitor(KeyVisitor):
                 node.dtype if node.dtype is not None else self.default_dtype,
             )
         except StateDictKeyError:
-            for n, m in zip(node.models, merged):
+            for n, m in zip(node.inputs, merged):
                 if isinstance(m, torch.Tensor) and n.merge_space == node.merge_space:
                     return m
             return self.passthrough_callback(self.key)
@@ -432,12 +428,7 @@ class MergeNodeMappingWrapper(StateDict):
         return self
 
     def __getitem__(self, key):
-        if key in self.compute_keys_to_merge():
-            key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
-        elif key in self.compute_keys_to_copy():
-            key_merger = KeyPassthroughVisitor(key, self.original_merge_visitor.default_device, self.original_merge_visitor.default_dtype)
-        else:
-            raise StateDictKeyError(key)
+        key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
         return self.merge_node.accept(key_merger).to(*self.to_args[0], **self.to_args[1])
 
     def __len__(self):
@@ -472,7 +463,7 @@ class MergeNodeMappingWrapper(StateDict):
 @dataclasses.dataclass
 class KeyPassthroughVisitor(KeyVisitor):
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
-        for model in node.models:
+        for model in node.inputs:
             try:
                 return model.accept(self)
             except StateDictKeyError:

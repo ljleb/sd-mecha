@@ -84,14 +84,14 @@ class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
         merge_method,
-        *models: RecipeNode,
+        *inputs: RecipeNode,
         hypers: Dict[str, Hyper],
         volatile_hypers: Dict[str, Any],
         device: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
     ):
         self.merge_method = merge_method
-        self.models = models
+        self.inputs = inputs
         self.hypers = hypers
         self.volatile_hypers = volatile_hypers
         self.device = device
@@ -103,24 +103,18 @@ class MergeRecipeNode(RecipeNode):
     @property
     def merge_space(self) -> str:
         return self.merge_method.get_return_merge_space([
-            model.merge_space for model in self.models
+            input.merge_space for input in self.inputs
         ])
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
-        if not self.models:
-            return None
-
-        model_configs = None
-        for model in self.models:
-            if (model_config := model.model_config) is None:
-                return None
-
-        return model_config
+        return self.merge_method.get_return_config([
+            input.model_config for input in self.inputs
+        ])
 
     def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
         res = OrderedDict()
-        for model in self.models:
+        for model in self.inputs:
             for k, v in model.compute_keys().items():
                 if k not in res:
                     res[k] = v
@@ -132,7 +126,7 @@ class MergeRecipeNode(RecipeNode):
         if isinstance(item, MergeRecipeNode):
             return self is item or any(
                 item in model
-                for model in self.models
+                for model in self.inputs
             )
         else:
             return False
@@ -155,7 +149,7 @@ class DepthRecipeVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode):
         return max(
             model.accept(self)
-            for model in node.models
+            for model in node.inputs
         ) + 1
 
 
@@ -171,7 +165,7 @@ class ModelsCountVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode):
         return sum(
             model.accept(self)
-            for model in node.models
+            for model in node.inputs
         )
 
 
@@ -185,7 +179,7 @@ class ParameterResolverVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode) -> RecipeNode:
         return MergeRecipeNode(
             node.merge_method,
-            *(node.accept(self) for node in node.models),
+            *(node.accept(self) for node in node.inputs),
             hypers=node.hypers,
             volatile_hypers=node.volatile_hypers,
             device=node.device,
