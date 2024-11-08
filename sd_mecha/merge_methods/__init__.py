@@ -10,19 +10,27 @@ from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, weight, delta
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
 
+
 EPSILON = 1e-10
-SameMergeSpace = MergeSpaceSymbol["weight", "delta"]
+SameMergeSpace = MergeSpaceSymbol[()]
 
 
 @convert_to_recipe
 def weighted_sum(
-    a: Tensor | SameMergeSpace,
-    b: Tensor | SameMergeSpace,
+    a: StateDict | SameMergeSpace,
+    b: StateDict | SameMergeSpace,
     *,
     alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    return (1 - alpha) * a + alpha * b
+    key = kwargs["key"]
+
+    if math.isclose(alpha, 0.0):
+        return a[key]
+    elif math.isclose(alpha, 1.0):
+        return b[key]
+
+    return (1 - alpha) * a[key] + alpha * b[key]
 
 
 @convert_to_recipe
@@ -135,107 +143,6 @@ def add_cosine_b(
 def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -> Tensor:
     k = 1 - torch.clamp(similarity - alpha, 0, 1)
     return weighted_sum.__wrapped__(a, b, alpha=k)
-
-
-# Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
-# Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
-@convert_to_recipe
-def ties_sum_extended(  # aka add_difference_ties
-    *models: Tensor | MergeSpace["delta"],
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    apply_stock: Hyper = 0.0,
-    cos_eps: Hyper = 1e-6,
-    apply_median: Hyper = 0.0,
-    eps: Hyper = 1e-6,
-    maxiter: Hyper = 100,
-    ftol: Hyper =1e-20,
-    **kwargs,
-) -> Tensor | MergeSpace["delta"]:
-    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
-
-    if apply_median <= 0.0:
-        # Model Stock
-        t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
-
-        filtered_delta = filtered_delta.sum(dim=0)
-
-        # $$ \tau_m $$
-        return torch.nan_to_num(filtered_delta * t / param_counts)
-    else:
-        # $$ \tau_m $$, but in geometric median instead of arithmetic mean. Considered to replace model stock.
-        filtered_delta = geometric_median_list_of_array(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
-
-        return torch.nan_to_num(filtered_delta)
-
-
-# latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
-# - `delta`: $$ \hat{\tau}_t $$
-# - `signs`: $$ \gamma_t $$
-# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$
-# - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
-# - `param_counts`: $$ |A^p| $$
-# - `filtered_delta`: $$ \Sigma_{t\in{A^p}} \hat{\tau}_t^p $$
-# - `return`: $$ \lambda * \tau_m $$
-# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
-# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
-@convert_to_recipe
-def ties_sum(  # aka add_difference_ties
-    *models: Tensor | MergeSpace["delta"],
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    **kwargs,
-) -> Tensor | MergeSpace["delta"]:
-    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
-
-    # $$ \tau_m $$
-    return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts)
-
-
-def ties_sum_deltas(
-    *models: Tensor,
-    k: float = 0.2,
-    vote_sgn: float = 0.0,
-):
-    # Step 1: Trim redundant parameters
-
-    # $$ \hat{\tau}_t $$ O(N) in space
-    deltas = [
-        # $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
-        filter_top_k(m, k)
-        for m in models
-    ]
-    deltas = torch.stack(deltas, dim=0)
-
-    # Step 2: Elect Final Signs.
-
-    # $$ \gamma_t $$
-    signs = torch.sign(deltas)
-
-    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
-    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
-    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0))
-
-    # Step 3: Disjoint merge.
-
-    # $$ \{ \gamma_t^p = \gamma_m^p \} $$
-    delta_filters = (signs == final_sign).float()
-
-    # $$ |A^p| $$
-    param_counts = torch.sum(delta_filters, dim=0)
-
-    # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
-    # (note that the sum is not performed here directly)
-    filtered_delta = deltas * delta_filters
-
-    return filtered_delta, param_counts
-
-
-def filter_top_k(a: Tensor, k: float):
-    k = max(int((1 - k) * torch.numel(a)), 1)
-    k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
-    top_k_filter = (torch.abs(a) >= k_value).float()
-    return a * top_k_filter
 
 
 @convert_to_recipe
@@ -609,6 +516,107 @@ def copy_distribution(
     **kwargs,
 ) -> Tensor | MergeSpace["weight"]:
     return torch.randn_like(a) * a.std(correction=0) + a.mean()
+
+
+# Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
+# Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
+@convert_to_recipe
+def ties_sum_extended(  # aka add_difference_ties
+    *models: Tensor | MergeSpace["delta"],
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    apply_stock: Hyper = 0.0,
+    cos_eps: Hyper = 1e-6,
+    apply_median: Hyper = 0.0,
+    eps: Hyper = 1e-6,
+    maxiter: Hyper = 100,
+    ftol: Hyper =1e-20,
+    **kwargs,
+) -> Tensor | MergeSpace["delta"]:
+    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
+
+    if apply_median <= 0.0:
+        # Model Stock
+        t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
+
+        filtered_delta = filtered_delta.sum(dim=0)
+
+        # $$ \tau_m $$
+        return torch.nan_to_num(filtered_delta * t / param_counts)
+    else:
+        # $$ \tau_m $$, but in geometric median instead of arithmetic mean. Considered to replace model stock.
+        filtered_delta = geometric_median_list_of_array(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
+
+        return torch.nan_to_num(filtered_delta)
+
+
+# latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
+# - `delta`: $$ \hat{\tau}_t $$
+# - `signs`: $$ \gamma_t $$
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$
+# - `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
+# - `param_counts`: $$ |A^p| $$
+# - `filtered_delta`: $$ \Sigma_{t\in{A^p}} \hat{\tau}_t^p $$
+# - `return`: $$ \lambda * \tau_m $$
+# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+# - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
+@convert_to_recipe
+def ties_sum(  # aka add_difference_ties
+    *models: Tensor | MergeSpace["delta"],
+    k: Hyper = 0.2,
+    vote_sgn: Hyper = 0.0,
+    **kwargs,
+) -> Tensor | MergeSpace["delta"]:
+    filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
+
+    # $$ \tau_m $$
+    return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts)
+
+
+def ties_sum_deltas(
+    *models: Tensor,
+    k: float = 0.2,
+    vote_sgn: float = 0.0,
+):
+    # Step 1: Trim redundant parameters
+
+    # $$ \hat{\tau}_t $$ O(N) in space
+    deltas = [
+        # $$ keep_topk_reset_rest_to_zero(\tau_t, k) $$
+        filter_top_k(m, k)
+        for m in models
+    ]
+    deltas = torch.stack(deltas, dim=0)
+
+    # Step 2: Elect Final Signs.
+
+    # $$ \gamma_t $$
+    signs = torch.sign(deltas)
+
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
+    # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
+    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0))
+
+    # Step 3: Disjoint merge.
+
+    # $$ \{ \gamma_t^p = \gamma_m^p \} $$
+    delta_filters = (signs == final_sign).float()
+
+    # $$ |A^p| $$
+    param_counts = torch.sum(delta_filters, dim=0)
+
+    # $$ \Sigma_{t\in{A^P}} \hat{\tau}_t^p $$
+    # (note that the sum is not performed here directly)
+    filtered_delta = deltas * delta_filters
+
+    return filtered_delta, param_counts
+
+
+def filter_top_k(a: Tensor, k: float):
+    k = max(int((1 - k) * torch.numel(a)), 1)
+    k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
+    top_k_filter = (torch.abs(a) >= k_value).float()
+    return a * top_k_filter
 
 
 @convert_to_recipe

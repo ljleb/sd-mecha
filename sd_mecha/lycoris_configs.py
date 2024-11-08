@@ -1,9 +1,7 @@
 import dataclasses
 import functools
-from typing import Iterable, Mapping, Dict, Any
-
 import torch
-
+from typing import Iterable, Mapping, Dict, Any
 from sd_mecha import MergeSpace, extensions
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
 from sd_mecha.extensions.model_config import StateDictKey, ModelConfig
@@ -15,11 +13,11 @@ from sd_mecha.streaming import TensorMetadata
 def _register_all_lycoris_configs():
     base_configs = extensions.model_config.get_all()
     for base_config in base_configs:
-        extensions.model_config.register(LazyLycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)))
-        extensions.model_config.register(LazyLycorisModelConfig(base_config, "kohya", "lora", ["lora"]))
+        extensions.model_config.register(LycorisLazyModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)))
+        extensions.model_config.register(LycorisLazyModelConfig(base_config, "kohya", "lora", ["lora"]))
 
 
-class LazyLycorisModelConfig:
+class LycorisLazyModelConfig:
     def __init__(self, base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[str]):
         self.base_config = base_config
         self.lycoris_identifier = lycoris_identifier
@@ -119,15 +117,15 @@ lycoris_algorithms = {
 _register_all_lycoris_configs()
 
 
-# @convert_to_recipe
-# def sd1_diffusers_lora_to_base(
-#     lora: StateDict | ModelConfig["sd1-diffusers_lycoris"],
-#     **kwargs,
-# ) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
-#     key = kwargs["key"]
-#     source_config: LazyLycorisModelConfig = extensions.model_config.resolve("sd1-diffusers_lycoris")
-#     lycoris_key = next(iter(source_config.to_lycoris_keys(key)))
-#     return compose_lora_up_down(lora, lycoris_key.split(".")[0])
+@convert_to_recipe
+def sd1_diffusers_lora_to_base(
+    lora: StateDict | ModelConfig["sd1-diffusers_lycoris"],
+    **kwargs,
+) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
+    key = kwargs["key"]
+    source_config: LycorisLazyModelConfig = lora.model_config
+    lycoris_key = next(iter(source_config.to_lycoris_keys(key)))
+    return compose_lora_up_down(lora, lycoris_key.split(".")[0])
 
 
 def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):

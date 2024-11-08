@@ -29,6 +29,25 @@ class StateDict(typing.Mapping[str, torch.Tensor], abc.ABC):
         pass
 
 
+AnyMergeSpaceBase = MergeSpaceBase | MergeSpaceSymbolBase
+_common_valid_type_permutations = (
+    (torch.Tensor,),
+    (torch.Tensor, AnyMergeSpaceBase),
+)
+_valid_return_type_permutations = _common_valid_type_permutations + (
+    (torch.Tensor, ModelConfigTag),
+    (torch.Tensor, ModelConfigTag, AnyMergeSpaceBase),
+    (torch.Tensor, AnyMergeSpaceBase, ModelConfigTag),
+)
+_valid_param_type_permutations = _common_valid_type_permutations + (
+    (StateDict,),
+    (StateDict, ModelConfigTag),
+    (StateDict, AnyMergeSpaceBase),
+    (StateDict, ModelConfigTag, AnyMergeSpaceBase),
+    (StateDict, AnyMergeSpaceBase, ModelConfigTag),
+)
+
+
 class MergeMethod:
     create_recipe: Callable
 
@@ -54,37 +73,32 @@ class MergeMethod:
         if spec.varkw is None:
             raise TypeError(f"**kwargs must be included in the function parameters")
 
-        AnyMergeSpaceBase = MergeSpaceBase | MergeSpaceSymbolBase
-        valid_return_type_combinations = [
-            (torch.Tensor,),
-            (torch.Tensor, AnyMergeSpaceBase),
-        ]
-        valid_type_combinations = valid_return_type_combinations + [
-            (StateDict,),
-            (StateDict, ModelConfigTag),
-            (StateDict, AnyMergeSpaceBase),
-            (StateDict, ModelConfigTag, AnyMergeSpaceBase),
-            (StateDict, AnyMergeSpaceBase, ModelConfigTag),
-        ]
+        def type_to_str(a: type):
+            if typing.get_origin(a) is UnionType or issubclass(a, AnyMergeSpaceBase):
+                return "MergeSpace[...]"
+            elif issubclass(a, ModelConfigTag):
+                return "ModelConfig[...]"
+            else:
+                return a.__name__
 
-        def validate_type_combination(parameter_name, parameter_types, type_combs):
+        def validate_type_permutation(parameter_name, parameter_types, type_perms):
             is_valid_type_combination = any(
                 len(valid_type_combination) == len(parameter_types) and
                 all(issubclass(t, p) for t, p in zip(parameter_types, valid_type_combination))
-                for valid_type_combination in type_combs
+                for valid_type_combination in type_perms
             )
             if not is_valid_type_combination:
                 raise TypeError(
                     f"The type annotation for '{parameter_name}' is invalid. \n"
-                    f"Got: {parameter_types}\n"
-                    "Valid choices are:\n\t" + "\n\t".join(map(str, type_combs))
+                    f"Got: {' | '.join(map(type_to_str, parameter_types))}\n"
+                    "Valid choices are:\n\t" + "\n\t".join(" | ".join(map(type_to_str, type_comb)) for type_comb in type_perms)
                 )
 
         for model_name in spec.args + ["return"]:
             model_type = hints[model_name]
             union_types = typing.get_args(model_type) if typing.get_origin(model_type) is UnionType else (model_type,)
-            type_combs = valid_type_combinations if model_name != "return" else valid_return_type_combinations
-            validate_type_combination(model_name, union_types, type_combs)
+            type_perms = _valid_param_type_permutations if model_name != "return" else _valid_return_type_permutations
+            validate_type_permutation(model_name, union_types, type_perms)
 
         for hyper in spec.kwonlyargs:
             if hyper in self.__volatile_hypers:
