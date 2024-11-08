@@ -8,8 +8,7 @@ from typing import Tuple, Dict, Optional
 from sd_mecha.hypers import Hyper
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, weight, delta
-from sd_mecha.extensions.merge_method import convert_to_recipe
-
+from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
 
 EPSILON = 1e-10
 SameMergeSpace = MergeSpaceSymbol["weight", "delta"]
@@ -334,13 +333,14 @@ def train_difference(
 
 @convert_to_recipe
 def add_opposite(
-    a: Tensor | SameMergeSpace,
+    a: StateDict | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
     alpha: Hyper = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
+    a = a[kwargs['key']]
     mask = 2 * torch.nan_to_num((a - b).abs() / ((a - b).abs() + (a + b - 2*c).abs()), nan=0)
     return a + (b - c) * alpha * mask
 

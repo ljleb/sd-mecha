@@ -4,18 +4,19 @@ from typing import Iterable, Mapping, Dict, Any
 
 import torch
 
-from sd_mecha import MergeSpace
-from sd_mecha.extensions.model_config import ModelConfig, get_all, StateDictKey, register_model_config, resolve
+from sd_mecha import MergeSpace, extensions
+from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
+from sd_mecha.extensions.model_config import StateDictKey, ModelConfig
 from sd_mecha.streaming import TensorMetadata
 
 
 # run once
 @functools.cache
 def _register_all_lycoris_configs():
-    base_configs = get_all()
+    base_configs = extensions.model_config.get_all()
     for base_config in base_configs:
-        register_model_config(LazyLycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)))
-        register_model_config(LazyLycorisModelConfig(base_config, "kohya", "lora", ["lora"]))
+        extensions.model_config.register(LazyLycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)))
+        extensions.model_config.register(LazyLycorisModelConfig(base_config, "kohya", "lora", ["lora"]))
 
 
 class LazyLycorisModelConfig:
@@ -115,16 +116,16 @@ lycoris_algorithms = {
 }
 
 
-# _register_all_lycoris_configs()
+_register_all_lycoris_configs()
 
 
-# @register_config_conversion
+# @convert_to_recipe
 # def sd1_diffusers_lora_to_base(
-#     lora: Mapping[str, torch.Tensor] | ModelConfig["sd1-diffusers_lycoris"],
+#     lora: StateDict | ModelConfig["sd1-diffusers_lycoris"],
 #     **kwargs,
 # ) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
 #     key = kwargs["key"]
-#     source_config: LazyLycorisModelConfig = resolve("sd1-diffusers_lycoris")
+#     source_config: LazyLycorisModelConfig = extensions.model_config.resolve("sd1-diffusers_lycoris")
 #     lycoris_key = next(iter(source_config.to_lycoris_keys(key)))
 #     return compose_lora_up_down(lora, lycoris_key.split(".")[0])
 

@@ -3,7 +3,6 @@ import functools
 from collections import OrderedDict
 
 import torch
-from sd_mecha.extensions.merge_space import MergeSpace, get_identifiers
 from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig
 from sd_mecha.streaming import TensorMetadata
 from typing import Iterable, Dict, List, Optional

@@ -10,6 +10,8 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 
+from sd_mecha.extensions.merge_method import MergeMethod, StateDict
+from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.hypers import validate_hyper
 from sd_mecha.recipe_nodes import RecipeVisitor
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
@@ -55,7 +57,7 @@ class RecipeMerger:
         strict_weight_space: bool = True,
     ):
         recipe = extensions.merge_method.path_to_node(recipe)
-        if strict_weight_space and recipe.merge_space != recipe_nodes.MergeSpace.BASE:
+        if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in model merge space, not {str(recipe.merge_space).split('.')[-1]}")
         if isinstance(fallback_model, (str, pathlib.Path)):
             fallback_model = extensions.merge_method.path_to_node(fallback_model)
@@ -377,8 +379,9 @@ class KeyMergeVisitor(KeyVisitor):
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         merged: List[Optional[torch.Tensor]] = [None] * len(node.models)
         try:
+            self.__visit_deeper_first(node.models, merged, node.merge_method)
             return node.merge_method(
-                self.__visit_deeper_first(node.models, merged),
+                merged,
                 {
                     k: hypers.get_hyper(v, self.key, node.model_config, node.merge_method.get_default_hypers().get(k))
                     for k, v in node.hypers.items()
@@ -389,22 +392,81 @@ class KeyMergeVisitor(KeyVisitor):
             )
         except StateDictKeyError:
             for n, m in zip(node.models, merged):
-                if m is not None and n.merge_space == node.merge_space:
+                if isinstance(m, torch.Tensor) and n.merge_space == node.merge_space:
                     return m
             return self.passthrough_callback(self.key)
 
-    def __visit_deeper_first(self, nodes: Tuple[recipe_nodes.RecipeNode, ...], merged: List[Optional[torch.Tensor]]) -> list:
+    def __visit_deeper_first(
+        self,
+        nodes: Tuple[recipe_nodes.RecipeNode, ...],
+        merged: List[Optional[torch.Tensor]],
+        merge_method: MergeMethod,
+    ):
         def depth_of_value(index) -> int:
             if nodes[index] is None:
                 return 0
             return nodes[index].accept(recipe_nodes.DepthRecipeVisitor())
 
+        input_types = merge_method.get_input_types()
         for index in sorted(range(len(nodes)), key=depth_of_value, reverse=True):
             if nodes[index] is None:
                 continue
-            merged[index] = nodes[index].accept(self)
+            if issubclass(input_types[min(index, len(input_types) - 1)], torch.Tensor):
+                merged[index] = nodes[index].accept(self)
+            else:
+                merged[index] = MergeNodeMappingWrapper(nodes[index], self)
 
-        return merged
+
+class MergeNodeMappingWrapper(StateDict):
+    def __init__(self, merge_node: recipe_nodes.MergeRecipeNode, original_merge_visitor: KeyMergeVisitor):
+        self.merge_node = merge_node
+        self.original_merge_visitor = original_merge_visitor
+        self.to_args = (), {}
+
+        self.__keys_to_merge = None
+        self.__keys_to_copy = None
+        self.__keys = None
+
+    def to(self, *args, **kwargs):
+        self.to_args = args, kwargs
+        return self
+
+    def __getitem__(self, key):
+        if key in self.compute_keys_to_merge():
+            key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
+        elif key in self.compute_keys_to_copy():
+            key_merger = KeyPassthroughVisitor(key, self.original_merge_visitor.default_device, self.original_merge_visitor.default_dtype)
+        else:
+            raise StateDictKeyError(key)
+        return self.merge_node.accept(key_merger).to(*self.to_args[0], **self.to_args[1])
+
+    def __len__(self):
+        return len(self.compute_keys())
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def keys(self) -> Iterable[str]:
+        return self.compute_keys().keys()
+
+    @property
+    def model_config(self) -> ModelConfig:
+        return self.merge_node.model_config
+
+    def compute_keys_to_merge(self):
+        if self.__keys_to_merge is None:
+            self.__keys_to_merge = self.model_config.compute_keys_to_merge()
+        return self.__keys_to_merge
+
+    def compute_keys_to_copy(self):
+        if self.__keys_to_copy is None:
+            self.__keys_to_copy = self.model_config.compute_keys_to_copy()
+        return self.__keys_to_copy
+
+    def compute_keys(self):
+        if self.__keys is None:
+            self.__keys = self.model_config.compute_keys()
+        return self.__keys
 
 
 @dataclasses.dataclass

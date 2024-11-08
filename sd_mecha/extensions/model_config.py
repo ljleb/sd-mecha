@@ -87,8 +87,11 @@ class ModelConfig:
     orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
     components: Mapping[str, ModelConfigComponent]
 
-    def __class_getitem__(cls, item):
-        return type(f"{item}ModelConfigTag", (), {})
+    def __class_getitem__(cls, item) -> type:
+        config = resolve(item)
+        return type(f"{config.identifier}ModelConfigTag", (ModelConfigTag,), {
+            "config": config,
+        })
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", self.identifier):
@@ -162,6 +165,10 @@ class ModelConfig:
 _model_configs_registry: Dict[str, ModelConfig] = {}
 
 
+class ModelConfigTag:
+    config: ModelConfig
+
+
 def serialize(obj):
     if dataclasses.is_dataclass(obj):
         return {
@@ -210,7 +217,7 @@ def from_yaml(yaml_config: str) -> ModelConfig:
     return ModelConfig(**dict_config)
 
 
-def register_model_config(config: ModelConfig):
+def register(config: ModelConfig):
     if config.identifier in _model_configs_registry:
         raise ValueError(f"Model {config.identifier} already exists")
 
@@ -222,7 +229,7 @@ def register_model_config(config: ModelConfig):
 def _register_builtin_model_configs():
     yaml_directory = pathlib.Path(__file__).parent.parent / "model_configs"
     for yaml_config_path in yaml_directory.glob("*.yaml"):
-        register_model_config(LazyModelConfig(yaml_config_path))
+        register(LazyModelConfig(yaml_config_path))
 
 
 class LazyModelConfig:

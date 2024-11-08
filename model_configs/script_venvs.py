@@ -77,4 +77,11 @@ def get_venv_configs() -> Dict[str, VenvConfig]:
             ],
             sys_paths=[repositories_dir / "flux" / "src"],
         ),
+        "huggingface": VenvConfig(
+            requirements=[
+                "huggingface-hub",
+                "transformers",
+                "diffusers",
+            ],
+        ),
     }

@@ -1,17 +1,32 @@
+import abc
 import fuzzywuzzy.process
 import inspect
 import pathlib
 import textwrap
 import torch
+
+from sd_mecha import extensions
+from sd_mecha.extensions.model_config import ModelConfig, ModelConfigTag
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
-from sd_mecha.extensions.merge_space import get_identifiers, get_all, MergeSpace, MergeSpaceBase
+from sd_mecha.extensions.merge_space import get_identifiers, get_all, MergeSpace, MergeSpaceBase, MergeSpaceSymbolBase
 from types import UnionType
 from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable
 import typing
 
 
 RecipeNodeOrPath = RecipeNode | str | pathlib.Path
+
+
+class StateDict(typing.Mapping[str, torch.Tensor], abc.ABC):
+    @property
+    @abc.abstractmethod
+    def model_config(self) -> ModelConfig:
+        pass
+
+    @abc.abstractmethod
+    def keys(self) -> Iterable[str]:
+        pass
 
 
 class MergeMethod:
@@ -25,16 +40,60 @@ class MergeMethod:
 
     def __validate_f(self):
         spec = inspect.getfullargspec(self.__f)
+        hints = typing.get_type_hints(self.__f)
         if spec.defaults:
             params_with_default = spec.args[-len(spec.defaults):]
             raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({params_with_default})")
 
         for volatile_hyper in self.__volatile_hypers:
-            if volatile_hyper not in spec.kwonlydefaults:
-                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it is missing or does not have a default value")
+            if volatile_hyper in spec.kwonlydefaults:
+                continue
+            elif volatile_hyper in spec.kwonlyargs:
+                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it does not have a default value")
 
         if spec.varkw is None:
             raise TypeError(f"**kwargs must be included in the function parameters")
+
+        AnyMergeSpaceBase = MergeSpaceBase | MergeSpaceSymbolBase
+        valid_return_type_combinations = [
+            (torch.Tensor,),
+            (torch.Tensor, AnyMergeSpaceBase),
+        ]
+        valid_type_combinations = valid_return_type_combinations + [
+            (StateDict,),
+            (StateDict, ModelConfigTag),
+            (StateDict, AnyMergeSpaceBase),
+            (StateDict, ModelConfigTag, AnyMergeSpaceBase),
+            (StateDict, AnyMergeSpaceBase, ModelConfigTag),
+        ]
+
+        def validate_type_combination(parameter_name, parameter_types, type_combs):
+            is_valid_type_combination = any(
+                len(valid_type_combination) == len(parameter_types) and
+                all(issubclass(t, p) for t, p in zip(parameter_types, valid_type_combination))
+                for valid_type_combination in type_combs
+            )
+            if not is_valid_type_combination:
+                raise TypeError(
+                    f"The type annotation for '{parameter_name}' is invalid. \n"
+                    f"Got: {parameter_types}\n"
+                    "Valid choices are:\n\t" + "\n\t".join(map(str, type_combs))
+                )
+
+        for model_name in spec.args + ["return"]:
+            model_type = hints[model_name]
+            union_types = typing.get_args(model_type) if typing.get_origin(model_type) is UnionType else (model_type,)
+            type_combs = valid_type_combinations if model_name != "return" else valid_return_type_combinations
+            validate_type_combination(model_name, union_types, type_combs)
+
+        for hyper in spec.kwonlyargs:
+            if hyper in self.__volatile_hypers:
+                continue
+
+            if hints[hyper] == Hyper | None:
+                raise TypeError(f"The type annotation of the keyword-only parameter '{hyper}' is invalid (Optional[Hyper]). It should be`sd_mecha.Hyper`")
+            if hints[hyper] != Hyper:
+                raise TypeError(f"The type annotation of the keyword-only parameter '{hyper}' is invalid ({hints[hyper]}). It should be`sd_mecha.Hyper`")
 
     def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
         args, kwargs = self.__get_args_kwargs(inputs, hypers, key, device, dtype)
@@ -115,10 +174,31 @@ class MergeMethod:
         return [MergeSpace[tuple(m)] for m in merge_spaces], varargs_merge_space
 
     def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[List[str], str]:
-        if annotation is not None and typing.get_origin(annotation) is UnionType:
-            key = param_name if issubclass(typing.get_origin(annotation), MergeSpaceBase) else typing.get_args(annotation)[-1].__name__
-            return get_identifiers(annotation), key
-        return get_all(), param_name
+        if typing.get_origin(annotation) is UnionType:
+            type_args = typing.get_args(annotation)
+        elif annotation is not None:
+            type_args = (annotation,)
+        else:
+            type_args = ()
+
+        key = param_name
+        for type_arg in type_args:
+            if issubclass(type_arg, MergeSpaceSymbolBase):
+                key = type_arg.__name__
+                break
+
+        merge_space_ids = extensions.merge_space.get_identifiers(annotation)
+        if not merge_space_ids:
+            merge_space_ids = extensions.merge_space.get_all()
+        return merge_space_ids, key
+
+    def get_input_types(self) -> List[type]:
+        return [
+            annotation if annotation is None or typing.get_origin(annotation) is not UnionType else
+            typing.get_args(annotation)[0]  # validation ensures the input type is index 0
+            for k, annotation in typing.get_type_hints(self.__f).items()
+            if k in self.get_model_names()
+        ]
 
     def get_model_names(self) -> List[str]:
         return inspect.getfullargspec(self.__f).args
@@ -194,7 +274,6 @@ def __convert_to_recipe_impl(
             {hyper_params}
             device: {Optional.__name__}[{str.__name__}] = None,
             dtype: {Optional.__name__}[{torch.dtype.__name__}] = None,
-            **kwargs,
         ):
             return {MergeRecipeNode.__name__}(
                 merge_method,
