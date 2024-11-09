@@ -12,7 +12,7 @@ from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
 
 
 EPSILON = 1e-10
-SameMergeSpace = MergeSpaceSymbol[()]
+SameMergeSpace = MergeSpaceSymbol["weight", "delta"]
 
 
 @convert_to_recipe

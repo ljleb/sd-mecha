@@ -4,6 +4,8 @@ import torch
 from collections import OrderedDict
 from typing import Optional, Dict, Any, Mapping
 from torch import Tensor
+
+import sd_mecha.extensions.merge_method
 from sd_mecha import extensions
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.hypers import Hyper
@@ -32,6 +34,25 @@ class RecipeNode(abc.ABC):
     @abc.abstractmethod
     def __contains__(self, item):
         pass
+
+    def __add__(self, other):
+        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        base, delta = self, other
+        if other.merge_space == "weight":
+            base, delta = delta, base
+        return sd_mecha.extensions.merge_method.resolve("add_difference").create_recipe(base, delta)
+
+    def __radd__(self, other):
+        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        return other + self
+
+    def __sub__(self, other):
+        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        return sd_mecha.extensions.merge_method.resolve("subtract").create_recipe(self, other)
+
+    def __rsub__(self, other):
+        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        return other - self
 
 
 class ModelRecipeNode(RecipeNode):

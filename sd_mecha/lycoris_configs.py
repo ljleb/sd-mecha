@@ -13,8 +13,26 @@ from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 def _register_all_lycoris_configs():
     base_configs = extensions.model_config.get_all()
     for base_config in base_configs:
-        extensions.model_config.register(LycorisLazyModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)))
-        extensions.model_config.register(LycorisLazyModelConfig(base_config, "kohya", "lora", ["lora"]))
+        for lyco_config in (
+            LycorisLazyModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)),
+            LycorisLazyModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
+        ):
+            extensions.model_config.register(lyco_config)
+            lora_config_id = lyco_config.identifier
+            base_config_id = lyco_config.base_config.identifier
+
+            @convert_to_recipe(identifier=f"{lora_config_id.replace('-', '_')}_to_base")
+            def diffusers_lora_to_base(
+                lora: StateDict | ModelConfig[lora_config_id] | MergeSpace["weight"],
+                **kwargs,
+            ) -> torch.Tensor | ModelConfig[base_config_id] | MergeSpace["delta"]:
+                key = kwargs["key"]
+                lycoris_keys = lyco_config.to_lycoris_keys(key)
+                if not lycoris_keys:
+                    raise StateDictKeyError(key)
+
+                lycoris_key = next(iter(lycoris_keys))
+                return compose_lora_up_down(lora, lycoris_key.split(".")[0])
 
 
 class LycorisLazyModelConfig:
@@ -116,26 +134,6 @@ lycoris_algorithms = {
 
 
 _register_all_lycoris_configs()
-
-
-try:
-    extensions.model_config.resolve("sd1-diffusers_kohya_lora")
-except ValueError:
-    pass
-else:
-    @convert_to_recipe
-    def sd1_diffusers_lora_to_base(
-        lora: StateDict | ModelConfig["sd1-diffusers_kohya_lora"] | MergeSpace["weight"],
-        **kwargs,
-    ) -> torch.Tensor | ModelConfig["sd1-diffusers"] | MergeSpace["delta"]:
-        key = kwargs["key"]
-        source_config: LycorisLazyModelConfig = lora.model_config
-        lycoris_keys = source_config.to_lycoris_keys(key)
-        if not lycoris_keys:
-            raise StateDictKeyError(key)
-
-        lycoris_key = next(iter(lycoris_keys))
-        return compose_lora_up_down(lora, lycoris_key.split(".")[0])
 
 
 def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):

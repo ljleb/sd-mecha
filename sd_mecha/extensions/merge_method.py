@@ -4,15 +4,14 @@ import inspect
 import pathlib
 import textwrap
 import torch
-
+import typing
 from sd_mecha import extensions
-from sd_mecha.extensions.model_config import ModelConfig, ModelConfigTag
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
 from sd_mecha.hypers import Hyper
-from sd_mecha.extensions.merge_space import get_identifiers, get_all, MergeSpace, MergeSpaceBase, MergeSpaceSymbolBase
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
+from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceBase, MergeSpaceSymbolBase
+from sd_mecha.extensions.model_config import ModelConfig, ModelConfigTag
 from types import UnionType
 from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable
-import typing
 
 
 RecipeNodeOrPath = RecipeNode | str | pathlib.Path
@@ -51,20 +50,20 @@ _valid_param_type_permutations = _common_valid_type_permutations + (
 class MergeMethod:
     create_recipe: Callable
 
-    def __init__(self, f: Callable, volatile_hypers: Iterable[str]):
-        self.__f = f
-        self.__name = f.__name__
-        self.__volatile_hypers = volatile_hypers
+    def __init__(self, f: Callable, identifier: str, volatile_hypers: Iterable[str]):
+        self.f = f
+        self.identifier = identifier
+        self.volatile_hypers = volatile_hypers
         self.__validate_f()
 
     def __validate_f(self):
-        spec = inspect.getfullargspec(self.__f)
-        hints = typing.get_type_hints(self.__f)
+        spec = inspect.getfullargspec(self.f)
+        hints = typing.get_type_hints(self.f)
         if spec.defaults:
             params_with_default = spec.args[-len(spec.defaults):]
             raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({params_with_default})")
 
-        for volatile_hyper in self.__volatile_hypers:
+        for volatile_hyper in self.volatile_hypers:
             if volatile_hyper in spec.kwonlydefaults:
                 continue
             elif volatile_hyper in spec.kwonlyargs:
@@ -101,7 +100,7 @@ class MergeMethod:
             validate_type_permutation(model_name, union_types, type_perms)
 
         for hyper in spec.kwonlyargs:
-            if hyper in self.__volatile_hypers:
+            if hyper in self.volatile_hypers:
                 continue
 
             if hints[hyper] == Hyper | None:
@@ -111,7 +110,7 @@ class MergeMethod:
 
     def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
         args, kwargs = self.__get_args_kwargs(inputs, hypers, key, device, dtype)
-        return self.__f(*args, **kwargs)
+        return self.f(*args, **kwargs)
 
     def __get_args_kwargs(
         self,
@@ -128,7 +127,7 @@ class MergeMethod:
 
         for k in hypers:
             if k not in self.get_hyper_names():
-                raise ValueError(f"method {self.__name} does not have a hyperparameter '{k}'")
+                raise ValueError(f"method {self.identifier} does not have a hyperparameter '{k}'")
 
         merge_method_args = tuple(
             v.to(*to_args)
@@ -144,12 +143,12 @@ class MergeMethod:
         return [
             annotation if annotation is None or typing.get_origin(annotation) is not UnionType else
             typing.get_args(annotation)[0]  # validation ensures the input type is index 0
-            for k, annotation in typing.get_type_hints(self.__f).items()
+            for k, annotation in typing.get_type_hints(self.f).items()
             if k in self.get_input_names()
         ]
 
     def get_return_merge_space(self, merge_spaces_args: List[str]) -> str:
-        type_hints = typing.get_type_hints(self.__f)
+        type_hints = typing.get_type_hints(self.f)
         model_names = self.get_input_names()
         varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
@@ -164,11 +163,11 @@ class MergeMethod:
                 if key in resolved_input_spaces:
                     # occurrence of already seen type var
                     if merge_space_arg != resolved_input_spaces[key]:
-                        raise TypeError(f"parameter '{param_name}' of method {self.__name} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
+                        raise TypeError(f"parameter '{param_name}' of method {self.identifier} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
                 elif merge_space_arg in merge_space_param:
                     resolved_input_spaces[key] = merge_space_arg
                 else:
-                    raise TypeError(f"parameter '{param_name}' of method {self.__name} expects {merge_space_param} but got {merge_space_arg}")
+                    raise TypeError(f"parameter '{param_name}' of method {self.identifier} expects {merge_space_param} but got {merge_space_arg}")
 
         merge_space_param, key = self.__extract_merge_space(type_hints.get("return"), "return")
         if key in resolved_input_spaces:
@@ -177,7 +176,7 @@ class MergeMethod:
             return next(iter(merge_space_param))
 
     def get_input_merge_spaces(self) -> Tuple[List[type], Optional[type]]:
-        type_hints = typing.get_type_hints(self.__f)
+        type_hints = typing.get_type_hints(self.f)
         model_names = self.get_input_names()
         merge_spaces = []
         for param in model_names:
@@ -216,7 +215,7 @@ class MergeMethod:
         return merge_space_ids, key
 
     def get_return_config(self, arg_configs: List[ModelConfig]) -> ModelConfig:
-        type_hints = typing.get_type_hints(self.__f)
+        type_hints = typing.get_type_hints(self.f)
         params = self.get_input_names()
         varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
@@ -253,40 +252,44 @@ class MergeMethod:
         return None
 
     def get_input_names(self) -> List[str]:
-        return inspect.getfullargspec(self.__f).args
+        return inspect.getfullargspec(self.f).args
 
     def get_hyper_names(self) -> Set[str]:
-        return set(inspect.getfullargspec(self.__f).kwonlyargs)
+        return set(inspect.getfullargspec(self.f).kwonlyargs)
 
     def get_volatile_hyper_names(self) -> Set[str]:
-        return set(self.__volatile_hypers)
+        return set(self.volatile_hypers)
 
     def get_default_hypers(self) -> Dict[str, Hyper]:
-        return inspect.getfullargspec(self.__f).kwonlydefaults or {}
+        return inspect.getfullargspec(self.f).kwonlydefaults or {}
 
     def get_input_varargs_name(self) -> Optional[str]:
-        return inspect.getfullargspec(self.__f).varargs
+        return inspect.getfullargspec(self.f).varargs
 
     def get_name(self) -> str:
-        return self.__name
+        return self.identifier
 
 
 def convert_to_recipe(
     f: Optional[Callable] = None, *,
+    identifier: Optional[str] = None,
     volatile_hypers: Iterable[str] = (),
     register: bool = True,
 ):
     if f is None:
-        return lambda f: __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers, register=register)
-    return __convert_to_recipe_impl(f, volatile_hypers=volatile_hypers, register=register)
+        return lambda f: __convert_to_recipe_impl(f, identifier=identifier, volatile_hypers=volatile_hypers, register=register)
+    return __convert_to_recipe_impl(f, identifier=identifier, volatile_hypers=volatile_hypers, register=register)
 
 
 def __convert_to_recipe_impl(
     f: Callable, *,
+    identifier: Optional[str] = None,
     volatile_hypers: Iterable[str],
     register: bool,
 ):
-    merge_method = MergeMethod(f, volatile_hypers)
+    if identifier is None:
+        identifier = f.__name__
+    merge_method = MergeMethod(f, identifier, volatile_hypers)
     default_hypers = merge_method.get_default_hypers()
 
     model_params = "".join(
@@ -342,7 +345,7 @@ def __convert_to_recipe_impl(
     res.__wrapped_method__ = merge_method
     merge_method.create_recipe = res
     if register:
-        _merge_methods_registry[f.__name__] = merge_method
+        _merge_methods_registry[identifier] = merge_method
     return res
 
 
@@ -355,6 +358,10 @@ def resolve(identifier: str) -> MergeMethod:
     except KeyError as e:
         suggestion = fuzzywuzzy.process.extractOne(str(e), _merge_methods_registry.keys())[0]
         raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
+
+
+def get_all() -> List[MergeMethod]:
+    return list(_merge_methods_registry.values())
 
 
 def path_to_node(node_or_path: RecipeNodeOrPath) -> RecipeNode:
