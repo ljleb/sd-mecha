@@ -151,7 +151,7 @@ def add_difference_ties(
     # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
-        if model.merge_space == MergeSpace["weight"] else
+        if model.merge_space == "weight" else
         model
         for model in models
     )
@@ -198,7 +198,7 @@ def add_difference_ties_extended(
     # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace["weight"] else
+        if model.merge_space == "weight" else
         model
         for model in models
     )
@@ -384,7 +384,7 @@ def ties_with_dare(
     models = tuple(path_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace["weight"] else
+        if model.merge_space == "weight" else
         model
         for model in models
     )
@@ -427,7 +427,7 @@ def model_stock_n_models(
     models = tuple(path_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
-        if model.merge_space is MergeSpace["weight"] else
+        if model.merge_space == "weight" else
         model
         for model in models
     )
