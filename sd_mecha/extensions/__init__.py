@@ -1,1 +1,8 @@
-from . import merge_method, model_config, merge_space, model_format
+from . import merge_space
+from . import model_format
+from . import model_config
+from . import merge_method
+from .external import load_extensions
+
+
+load_extensions()

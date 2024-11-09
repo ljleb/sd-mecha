@@ -3,7 +3,7 @@ import functools
 from collections import OrderedDict
 
 import torch
-from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig
+from sd_mecha.extensions.model_config import ModelConfigBlock, ModelConfigComponent, ModelConfig, ModelConfigImpl
 from sd_mecha.streaming import TensorMetadata
 from typing import Iterable, Dict, List, Optional
 
@@ -106,7 +106,7 @@ def create_config_from_module(
             if k not in all_component_keys
         )
 
-    return ModelConfig(
+    return ModelConfigImpl(
         identifier=identifier,
         orphan_keys_to_copy=orphan_keys,
         components=config_components,

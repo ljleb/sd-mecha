@@ -40,7 +40,7 @@ class RecipeNode(abc.ABC):
         base, delta = self, other
         if other.merge_space == "weight":
             base, delta = delta, base
-        return sd_mecha.extensions.merge_method.resolve("add_difference").create_recipe(base, delta)
+        return sd_mecha.extensions.merge_method.resolve("add_difference")(base, delta)
 
     def __radd__(self, other):
         other = sd_mecha.extensions.merge_method.path_to_node(other)
@@ -48,7 +48,7 @@ class RecipeNode(abc.ABC):
 
     def __sub__(self, other):
         other = sd_mecha.extensions.merge_method.path_to_node(other)
-        return sd_mecha.extensions.merge_method.resolve("subtract").create_recipe(self, other)
+        return sd_mecha.extensions.merge_method.resolve("subtract")(self, other)
 
     def __rsub__(self, other):
         other = sd_mecha.extensions.merge_method.path_to_node(other)

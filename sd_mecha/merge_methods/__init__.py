@@ -274,9 +274,29 @@ def select_max_delta(
     alpha: Hyper = 0.5,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
-    a_abs = (a / a.std()).abs()
-    b_abs = (b / b.std()).abs()
+    a_abs = ((a - a.mean()) / a.std()).nan_to_num(nan=0).abs()
+    b_abs = ((b - b.mean()) / b.std()).nan_to_num(nan=0).abs()
     return torch.where((1 - alpha) * a_abs >= alpha * b_abs, a, b)
+
+
+@convert_to_recipe
+def select_max_white_delta(
+    a: Tensor | MergeSpace["delta"],
+    b: Tensor | MergeSpace["delta"],
+    *,
+    alpha: Hyper = 0.5,
+    **kwargs,
+) -> Tensor | MergeSpace["delta"]:
+    original_shape = a.shape
+    a_norm = (a - a.mean()) / a.std(correction=0)
+    b_norm = (b - b.mean()) / b.std(correction=0)
+
+    d = torch.stack((a_norm.flatten(), b_norm.flatten()), dim=-1)
+    v, vs = torch.linalg.eigh(d.cov(correction=0))
+    w = vs @ torch.diag_embed(1 / v.sqrt()) @ vs.mH
+    a_w, b_w = (w @ d).T
+
+    return torch.where((1 - alpha) * a_w.abs() >= alpha * b_w.abs(), a, b)
 
 
 @convert_to_recipe
@@ -493,10 +513,11 @@ def clamp(
 ) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
     minimums = functools.reduce(torch.minimum, bounds)
-    bounds = torch.stack(bounds)
-    average = bounds.mean(dim=0)
 
     if stiffness:
+        bounds = torch.stack(bounds)
+        average = bounds.mean(dim=0)
+
         smallest_positive = maximums
         largest_negative = minimums
 

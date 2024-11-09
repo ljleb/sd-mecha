@@ -1,5 +1,4 @@
 import dataclasses
-import functools
 import pathlib
 import re
 import fuzzywuzzy.process
@@ -7,7 +6,7 @@ import torch
 import yaml
 from collections import OrderedDict
 from sd_mecha.streaming import TensorMetadata
-from typing import Dict, List, Iterable, Mapping
+from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable
 
 
 StateDictKey = str
@@ -81,8 +80,8 @@ class ModelConfigComponent:
         )
 
 
-@dataclasses.dataclass
-class ModelConfig:
+@runtime_checkable
+class ModelConfig(Protocol):
     identifier: str
     orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
     components: Mapping[str, ModelConfigComponent]
@@ -92,6 +91,37 @@ class ModelConfig:
         return type(f"{config.identifier}ModelConfigTag", (ModelConfigTag,), {
             "config": config,
         })
+
+    def get_architecture_identifier(self) -> str:
+        pass
+
+    def get_implementation_identifier(self) -> str:
+        pass
+
+    def hyper_keys(self) -> Iterable[str]:
+        pass
+
+    def get_hyper_block_key(self, component_identifier, block_identifier) -> str:
+        pass
+
+    def get_hyper_default_key(self, component_identifier) -> str:
+        pass
+
+    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
+        pass
+
+    def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
+        pass
+
+    def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
+        pass
+
+
+@dataclasses.dataclass
+class ModelConfigImpl(ModelConfig):
+    identifier: str
+    orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
+    components: Mapping[str, ModelConfigComponent]
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", self.identifier):
@@ -162,7 +192,31 @@ class ModelConfig:
         )
 
 
-_model_configs_registry: Dict[str, ModelConfig] = {}
+class LazyModelConfig(ModelConfig):
+    def __init__(self, yaml_config_file: pathlib.Path):
+        self.yaml_config_file = yaml_config_file
+        self.underlying_config = None
+        self.identifier = yaml_config_file.stem
+
+    def __getattr__(self, item):
+        if item in self.__dict__:
+            return self.__dict__[item]
+
+        self._ensure_config()
+        return getattr(self.underlying_config, item)
+
+    def _ensure_config(self):
+        if self.underlying_config is not None:
+            return
+
+        with open(self.yaml_config_file, "r") as f:
+            yaml_config = f.read()
+
+        self.underlying_config = from_yaml(yaml_config)
+
+
+_model_configs_registry_base: Dict[str, ModelConfig] = {}
+_model_configs_registry_aux: Dict[str, ModelConfig] = {}
 
 
 class ModelConfigTag:
@@ -214,57 +268,35 @@ def to_yaml(model_config: ModelConfig) -> str:
 
 def from_yaml(yaml_config: str) -> ModelConfig:
     dict_config = yaml.safe_load(yaml_config)
-    return ModelConfig(**dict_config)
+    return ModelConfigImpl(**dict_config)
 
 
 def register(config: ModelConfig):
-    if config.identifier in _model_configs_registry:
+    if config.identifier in _model_configs_registry_base or config.identifier in _model_configs_registry_aux:
         raise ValueError(f"Model {config.identifier} already exists")
 
-    _model_configs_registry[config.identifier] = config
+    _model_configs_registry_base[config.identifier] = config
 
 
-# run only once
-@functools.cache
-def _register_builtin_model_configs():
-    yaml_directory = pathlib.Path(__file__).parent.parent / "model_configs"
-    for yaml_config_path in yaml_directory.glob("*.yaml"):
-        register(LazyModelConfig(yaml_config_path))
+def register_aux(config: ModelConfig):
+    if config.identifier in _model_configs_registry_base or config.identifier in _model_configs_registry_aux:
+        raise ValueError(f"Model {config.identifier} already exists")
 
-
-class LazyModelConfig:
-    def __init__(self, yaml_config_file: pathlib.Path):
-        self.yaml_config_file = yaml_config_file
-        self.underlying_config = None
-
-    @property
-    def identifier(self) -> str:
-        return self.yaml_config_file.stem
-
-    def __getattr__(self, item):
-        if item in self.__dict__:
-            return self.__dict__[item]
-
-        self._ensure_config()
-        return getattr(self.underlying_config, item)
-
-    def _ensure_config(self):
-        if self.underlying_config is not None:
-            return
-
-        with open(self.yaml_config_file, "r") as f:
-            yaml_config = f.read()
-
-        self.underlying_config = from_yaml(yaml_config)
+    _model_configs_registry_aux[config.identifier] = config
 
 
 def resolve(identifier: str) -> ModelConfig:
     try:
-        return _model_configs_registry[identifier]
+        return _model_configs_registry_base[identifier]
     except KeyError:
         pass
 
-    suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry.keys())
+    try:
+        return _model_configs_registry_aux[identifier]
+    except KeyError:
+        pass
+
+    suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry_base.keys())
     postfix = ""
     if suggestions is not None:
         postfix = f". Nearest match is '{suggestions[0]}'"
@@ -272,7 +304,12 @@ def resolve(identifier: str) -> ModelConfig:
 
 
 def get_all() -> List[ModelConfig]:
-    return list(_model_configs_registry.values())
+    return get_all_base() + get_all_aux()
 
 
-_register_builtin_model_configs()
+def get_all_base() -> List[ModelConfig]:
+    return list(_model_configs_registry_base.values())
+
+
+def get_all_aux() -> List[ModelConfig]:
+    return list(_model_configs_registry_aux.values())

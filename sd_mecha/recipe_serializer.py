@@ -39,7 +39,7 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
         elif command == "merge":
             method, *positional_args = positional_args
             method = extensions.merge_method.resolve(method)
-            results.append(method.create_recipe(*positional_args, **named_args))
+            results.append(method(*positional_args, **named_args))
         else:
             raise ValueError(f"unknown command: {command}")
 
@@ -132,7 +132,7 @@ class SerializerVisitor(RecipeVisitor):
                 hyper_v = f"&{self.__add_instruction(dict_line)}"
             hypers.append(f"{hyper_k}={hyper_v}")
 
-        line = f'merge "{node.merge_method.get_name()}" {" ".join(models)} {" ".join(hypers)}'
+        line = f'merge "{node.merge_method.get_identifier()}" {" ".join(models)} {" ".join(hypers)}'
         return self.__add_instruction(line)
 
     def __add_instruction(self, instruction: str) -> int:

@@ -9,7 +9,6 @@ import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-
 from sd_mecha.extensions.merge_method import MergeMethod, StateDict
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.hypers import validate_hyper
@@ -373,7 +372,7 @@ class KeyMergeVisitor(KeyVisitor):
         merged: List[Optional[torch.Tensor]] = [None] * len(node.inputs)
         try:
             self.__visit_deeper_first(node.inputs, merged, node.merge_method)
-            return node.merge_method(
+            return node.merge_method.merge_key(
                 merged,
                 {
                     k: hypers.get_hyper(v, self.key, node.model_config, node.merge_method.get_default_hypers().get(k))

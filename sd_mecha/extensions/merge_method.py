@@ -51,14 +51,14 @@ class MergeMethod:
     create_recipe: Callable
 
     def __init__(self, f: Callable, identifier: str, volatile_hypers: Iterable[str]):
-        self.f = f
+        self.__wrapped__ = f
         self.identifier = identifier
         self.volatile_hypers = volatile_hypers
         self.__validate_f()
 
     def __validate_f(self):
-        spec = inspect.getfullargspec(self.f)
-        hints = typing.get_type_hints(self.f)
+        spec = inspect.getfullargspec(self.__wrapped__)
+        hints = typing.get_type_hints(self.__wrapped__)
         if spec.defaults:
             params_with_default = spec.args[-len(spec.defaults):]
             raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({params_with_default})")
@@ -108,9 +108,12 @@ class MergeMethod:
             if hints[hyper] != Hyper:
                 raise TypeError(f"The type annotation of the keyword-only parameter '{hyper}' is invalid ({hints[hyper]}). It should be`sd_mecha.Hyper`")
 
-    def __call__(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
+    def merge_key(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
         args, kwargs = self.__get_args_kwargs(inputs, hypers, key, device, dtype)
-        return self.f(*args, **kwargs)
+        return self.__wrapped__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        return self.create_recipe(*args, **kwargs)
 
     def __get_args_kwargs(
         self,
@@ -143,12 +146,12 @@ class MergeMethod:
         return [
             annotation if annotation is None or typing.get_origin(annotation) is not UnionType else
             typing.get_args(annotation)[0]  # validation ensures the input type is index 0
-            for k, annotation in typing.get_type_hints(self.f).items()
+            for k, annotation in typing.get_type_hints(self.__wrapped__).items()
             if k in self.get_input_names()
         ]
 
     def get_return_merge_space(self, merge_spaces_args: List[str]) -> str:
-        type_hints = typing.get_type_hints(self.f)
+        type_hints = typing.get_type_hints(self.__wrapped__)
         model_names = self.get_input_names()
         varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
@@ -176,7 +179,7 @@ class MergeMethod:
             return next(iter(merge_space_param))
 
     def get_input_merge_spaces(self) -> Tuple[List[type], Optional[type]]:
-        type_hints = typing.get_type_hints(self.f)
+        type_hints = typing.get_type_hints(self.__wrapped__)
         model_names = self.get_input_names()
         merge_spaces = []
         for param in model_names:
@@ -215,7 +218,7 @@ class MergeMethod:
         return merge_space_ids, key
 
     def get_return_config(self, arg_configs: List[ModelConfig]) -> ModelConfig:
-        type_hints = typing.get_type_hints(self.f)
+        type_hints = typing.get_type_hints(self.__wrapped__)
         params = self.get_input_names()
         varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
@@ -237,6 +240,26 @@ class MergeMethod:
 
         return default_config
 
+    def get_input_configs(self) -> Tuple[List[Optional[ModelConfig]], Optional[ModelConfig]]:
+        type_hints = typing.get_type_hints(self.__wrapped__)
+        model_names = self.get_input_names()
+
+        model_configs = []
+        for param in model_names:
+            annotation = type_hints.get(param)
+            if annotation:
+                model_config = self.__extract_model_config(annotation)
+                model_configs.append(model_config)
+
+        varargs_name = self.get_input_varargs_name()
+        varargs_model_config = None
+        if varargs_name:
+            annotation = type_hints.get(varargs_name)
+            if annotation:
+                varargs_model_config = self.__extract_model_config(annotation)
+
+        return model_configs, varargs_model_config
+
     def __extract_model_config(self, annotation) -> Optional[ModelConfig]:
         if typing.get_origin(annotation) is UnionType:
             type_args = typing.get_args(annotation)
@@ -252,21 +275,21 @@ class MergeMethod:
         return None
 
     def get_input_names(self) -> List[str]:
-        return inspect.getfullargspec(self.f).args
+        return inspect.getfullargspec(self.__wrapped__).args
 
     def get_hyper_names(self) -> Set[str]:
-        return set(inspect.getfullargspec(self.f).kwonlyargs)
+        return set(inspect.getfullargspec(self.__wrapped__).kwonlyargs)
 
     def get_volatile_hyper_names(self) -> Set[str]:
         return set(self.volatile_hypers)
 
     def get_default_hypers(self) -> Dict[str, Hyper]:
-        return inspect.getfullargspec(self.f).kwonlydefaults or {}
+        return inspect.getfullargspec(self.__wrapped__).kwonlydefaults or {}
 
     def get_input_varargs_name(self) -> Optional[str]:
-        return inspect.getfullargspec(self.f).varargs
+        return inspect.getfullargspec(self.__wrapped__).varargs
 
-    def get_name(self) -> str:
+    def get_identifier(self) -> str:
         return self.identifier
 
 
@@ -282,14 +305,14 @@ def convert_to_recipe(
 
 
 def __convert_to_recipe_impl(
-    f: Callable, *,
+    fn: Callable, *,
     identifier: Optional[str] = None,
     volatile_hypers: Iterable[str],
     register: bool,
 ):
     if identifier is None:
-        identifier = f.__name__
-    merge_method = MergeMethod(f, identifier, volatile_hypers)
+        identifier = fn.__name__
+    merge_method = MergeMethod(fn, identifier, volatile_hypers)
     default_hypers = merge_method.get_default_hypers()
 
     model_params = "".join(
@@ -323,7 +346,7 @@ def __convert_to_recipe_impl(
         "dtype": torch.dtype,  # `torch.dtype.__name__`
     }
     exec(textwrap.dedent(f"""
-        def {f.__name__}(
+        def {fn.__name__}(
             {model_params}
             *args: {MergeRecipeNode.__name__},
             {hyper_params}
@@ -340,13 +363,20 @@ def __convert_to_recipe_impl(
                 dtype=dtype,
             )
     """), fn_globals, fn_locals)
-    res = fn_locals[f.__name__]
-    res.__wrapped__ = f
-    res.__wrapped_method__ = merge_method
-    merge_method.create_recipe = res
+    merge_method.create_recipe = fn_locals[fn.__name__]
     if register:
         _merge_methods_registry[identifier] = merge_method
-    return res
+    return merge_method
+
+
+def config_converter(merge_method: MergeMethod):
+    assert len(merge_method.get_input_names()) == 1, f"the merge method should take exactly 1 positional argument"
+    input_param = merge_method.get_input_names()[0]
+    input_config = merge_method.get_input_configs()[0][0]
+    assert input_config is not None, f"the input ModelConfig['identifier...'] is missing. It should be appended to the type annotation of `{input_param}`"
+    output_config = merge_method.get_return_config([input_config])
+    assert output_config is not None, f"the output ModelConfig['identifier...'] is missing. It should be specified as part of the return type annotation"
+    return merge_method
 
 
 _merge_methods_registry = {}

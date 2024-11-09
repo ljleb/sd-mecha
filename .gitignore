@@ -6,7 +6,6 @@ __pycache__
 /config
 /venv
 /model_configs/venvs
+/sd_mecha/extensions/builtin/model_configs/**/*.yaml
 
 /examples/*_test.py
-
-/sd_mecha/model_configs
