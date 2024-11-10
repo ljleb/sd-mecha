@@ -99,6 +99,12 @@ class MergeMethod:
             type_perms = _valid_param_type_permutations if model_name != "return" else _valid_return_type_permutations
             validate_type_permutation(model_name, union_types, type_perms)
 
+        input_configs = self.get_input_configs()
+        input_configs = input_configs[0] + [input_configs[1]]*int(spec.varargs is not None)
+        input_configs_are_explicit = all(config is not None for config in input_configs)
+        if input_configs_are_explicit and self.get_return_config(input_configs) is None:
+            raise TypeError("Cannot infer the model config to return from the input model configs")
+
         for hyper in spec.kwonlyargs:
             if hyper in self.volatile_hypers:
                 continue

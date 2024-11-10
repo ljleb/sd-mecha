@@ -287,8 +287,11 @@ class LoadInputDictsVisitor(RecipeVisitor):
     def __detect_model_config(self, state_dict: Iterable[str], path: pathlib.Path):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
-            matched_keys = set(state_dict).intersection(model_config.compute_keys())
+            state_dict_set = set(state_dict)
+            matched_keys = state_dict_set.intersection(model_config.compute_keys())
             configs_affinity[model_config.identifier] = len(matched_keys)
+            if len(matched_keys) == len(state_dict_set):
+                break
 
         best_config = max(configs_affinity, key=configs_affinity.get)
         best_config = extensions.model_config.resolve(best_config)

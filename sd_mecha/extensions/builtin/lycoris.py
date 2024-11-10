@@ -1,10 +1,13 @@
 import dataclasses
+import inspect
+from types import MethodType
+
 import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha import extensions
 from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.extensions.merge_method import convert_to_recipe, config_converter, StateDict
-from sd_mecha.extensions.model_config import StateDictKey, ModelConfig, ModelConfigImpl
+from sd_mecha.extensions.model_config import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
 from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 
 
@@ -49,32 +52,23 @@ def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
     return res * (alpha / dim)
 
 
-class LycorisLazyModelConfig(ModelConfig):
+class LycorisLazyModelConfig(LazyModelConfigBase):
     def __init__(self, base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[str]):
+        super().__init__()
         self.base_config = base_config
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
         self.algorithms = algorithms
         self.multiple_text_encoders = None
-        self.underlying_config = None
 
     @property
     def identifier(self) -> str:
         return f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
 
-    def __getattr__(self, item):
-        if item in self.__dict__:
-            return self.__dict__[item]
-
-        self._ensure_config()
-        return getattr(self.underlying_config, item)
-
-    def _ensure_config(self):
-        if self.underlying_config is not None:
-            return
-
-        self.underlying_config = to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
+    def create_config(self):
+        underlying_config = to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
         self.multiple_text_encoders = any(key.startswith("text_encoder_2") for key in self.base_config.compute_keys())
+        return underlying_config
 
     def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
         return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.lycoris_identifier, self.prefix, self.multiple_text_encoders)

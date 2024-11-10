@@ -1,6 +1,11 @@
+import abc
 import dataclasses
+import functools
+import inspect
 import pathlib
 import re
+from types import MethodType, SimpleNamespace
+
 import fuzzywuzzy.process
 import torch
 import yaml
@@ -82,46 +87,65 @@ class ModelConfigComponent:
 
 @runtime_checkable
 class ModelConfig(Protocol):
-    identifier: str
-    orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
-    components: Mapping[str, ModelConfigComponent]
-
     def __class_getitem__(cls, item) -> type:
         config = resolve(item)
         return type(f"{config.identifier}ModelConfigTag", (ModelConfigTag,), {
             "config": config,
         })
 
+    @property
+    @abc.abstractmethod
+    def identifier(self) -> str:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def orphan_keys_to_copy(self) -> Mapping[StateDictKey, TensorMetadata]:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def components(self) -> Mapping[str, ModelConfigComponent]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def get_architecture_identifier(self) -> str:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def get_implementation_identifier(self) -> str:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def hyper_keys(self) -> Iterable[str]:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def get_hyper_block_key(self, component_identifier, block_identifier) -> str:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def get_hyper_default_key(self, component_identifier) -> str:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
     def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
-        pass
+        raise NotImplementedError
 
 
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
-    identifier: str
-    orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
-    components: Mapping[str, ModelConfigComponent]
+    __identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
+    __orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(metadata={"serial_name": "orphan_keys_to_copy"})
+    __components: Mapping[str, ModelConfigComponent] = dataclasses.field(metadata={"serial_name": "components"})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", self.identifier):
@@ -137,14 +161,26 @@ class ModelConfigImpl(ModelConfig):
             orphan_keys_to_copy[k] = v
             if isinstance(v, dict):
                 orphan_keys_to_copy[k] = TensorMetadata(**v)
-        self.orphan_keys_to_copy = orphan_keys_to_copy
+        self.__orphan_keys_to_copy = orphan_keys_to_copy
 
         components = OrderedDict(self.components)
         for k, v in self.components.items():
             components[k] = v
             if isinstance(v, dict):
                 components[k] = ModelConfigComponent(**v)
-        self.components = components
+        self.__components = components
+
+    @property
+    def identifier(self) -> str:
+        return self.__identifier
+
+    @property
+    def orphan_keys_to_copy(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return self.__orphan_keys_to_copy
+
+    @property
+    def components(self) -> Mapping[str, ModelConfigComponent]:
+        return self.__components
 
     def get_architecture_identifier(self):
         return self.identifier.split("-")[0]
@@ -192,27 +228,65 @@ class ModelConfigImpl(ModelConfig):
         )
 
 
-class LazyModelConfig(ModelConfig):
-    def __init__(self, yaml_config_file: pathlib.Path):
-        self.yaml_config_file = yaml_config_file
+def ModelConfigImpl__init__patch(self, *args, **kwargs):
+    for field in dataclasses.fields(ModelConfigImpl):
+        if "serial_name" in field.metadata and field.metadata["serial_name"] in kwargs:
+            kwargs[field.name] = kwargs.pop(field.metadata["serial_name"])
+
+    ModelConfigImpl__init__(self, *args, **kwargs)
+
+
+ModelConfigImpl__init__ = ModelConfigImpl.__init__
+ModelConfigImpl.__init__ = ModelConfigImpl__init__patch
+
+
+class LazyModelConfigBase(ModelConfig):
+    def __init__(self):
         self.underlying_config = None
-        self.identifier = yaml_config_file.stem
 
-    def __getattr__(self, item):
-        if item in self.__dict__:
-            return self.__dict__[item]
+    @classmethod
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        for name, value in inspect.getmembers(ModelConfig):
+            if (
+                (inspect.isfunction(value) or isinstance(value, property)) and
+                getattr(value, "__isabstractmethod__", False) and
+                name not in cls.__dict__
+            ):
+                setattr(cls, name, property(lambda self, name=name: resolve_lazy_model_config_attribute(self, name=name)))
 
-        self._ensure_config()
-        return getattr(self.underlying_config, item)
-
-    def _ensure_config(self):
+    def _ensure_config(self) -> None:
         if self.underlying_config is not None:
             return
 
+        self.underlying_config = self.create_config()
+
+    @abc.abstractmethod
+    def create_config(self) -> ModelConfig:
+        raise NotImplementedError
+
+
+def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
+    self._ensure_config()
+    attribute = getattr(self.underlying_config, name)
+    return attribute
+
+
+class LazyModelConfig(LazyModelConfigBase):
+    def __init__(self, yaml_config_file: pathlib.Path):
+        super().__init__()
+        self.yaml_config_file = yaml_config_file
+        self.__identifier = yaml_config_file.stem
+
+    @property
+    def identifier(self) -> str:
+        return self.__identifier
+
+    def create_config(self) -> ModelConfig:
         with open(self.yaml_config_file, "r") as f:
             yaml_config = f.read()
 
-        self.underlying_config = from_yaml(yaml_config)
+        return from_yaml(yaml_config)
 
 
 _model_configs_registry_base: Dict[str, ModelConfig] = {}
@@ -226,7 +300,7 @@ class ModelConfigTag:
 def serialize(obj):
     if dataclasses.is_dataclass(obj):
         return {
-            field.name: serialize(getattr(obj, field.name))
+            field.metadata.get("serial_name", field.name): serialize(getattr(obj, field.name))
             for field in dataclasses.fields(obj)
             if not field.metadata.get("exclude", False)
         }
