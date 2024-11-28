@@ -1,13 +1,12 @@
 import functools
 import math
-import operator
 import numpy as np
 import torch
 from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
 from sd_mecha.hypers import Hyper
-from .svd import orthogonal_procrustes, fractional_matrix_power
+from .svd import orthogonal_procrustes, close_ortho_columns_full, fractional_orthogonal_matrix_power, MatmulIdentity
 from sd_mecha.merge_space import MergeSpace
 from sd_mecha.extensions.merge_method import LiftFlag, convert_to_recipe
 
@@ -524,18 +523,45 @@ def rotate(
     cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
+    key = kwargs.get("key", "")
+    if key.endswith(("in_proj_weight", "in_proj_bias")):
+        # workaround for concatenated attention projection layers
+        vs = []
+        for i, k in enumerate(("to_q", "to_k", "to_v")):
+            k_kwargs = kwargs.copy()
+            k_kwargs["key"] = key.replace("in_proj_", f"{k}.")
+            dim = a.shape[0] // 3
+            t_start = dim*i
+            t_end = dim*(i+1)
+            k_models = tuple(m[t_start:t_end] for m in (a, b))
+            vs.append(rotate.__wrapped__(*k_models, alignment=alignment, alpha=alpha, **k_kwargs))
+        return torch.cat(vs)
+
     if alignment == 0 and alpha == 0:
         return a
 
-    if len(a.shape) < 2 or torch.allclose(a.half(), b.half()):
+    if len(a.shape) == 1 and key.endswith(("weight", "scale")):
+        return geometric_sum.__wrapped__(a, b, alpha=alpha)
+
+    if len(a.shape) < 2 or key.endswith("bias") or "position" in key or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
-    is_conv = len(a.shape) == 4 and a.shape[-1] != 1
-    if is_conv:
-        shape_2d = (-1, functools.reduce(operator.mul, a.shape[2:]))
-    else:
-        shape_2d = (a.shape[0], a.shape[1:].numel())
+    if len(a.shape) == 4:
+        a_dft = torch.fft.rfft2(a, norm="ortho")
+        b_dft = torch.fft.rfft2(a, norm="ortho")
 
+        res_dft = []
+        for i in range(a_dft.shape[-1]):
+            res_col = []
+            for j in range(a_dft.shape[-2]):
+                res_col.append(rotate.__wrapped__(a_dft[..., j, i], b_dft[..., j, i], alignment=alignment, alpha=alpha, **kwargs))
+            res_dft.append(torch.stack(res_col, dim=-1))
+
+        res_dft = torch.stack(res_dft, dim=-1)
+        res = torch.fft.irfft2(res_dft, s=a.shape[-2:], norm="ortho")
+        return res
+
+    shape_2d = (a.shape[0], a.shape[1:].numel())
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)
     a_centroid = a_neurons.mean(0)
@@ -551,29 +577,34 @@ def rotate(
             cache[key] = {}
         cache = cache[key]
 
-    if cache is not None and "rotation" in cache:
-        rotation = transform = cache["rotation"].to(a.device, a.dtype)
+    if cache is not None and "u" in cache:
+        u = cache["u"].to(a.device, a.dtype)
+        vh = cache["vh"].to(a.device, a.dtype)
     else:
-        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
+        u, vh = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
         if cache is not None:
-            cache["rotation"] = rotation.to("cpu", torch.float16)
+            cache["u"] = u.to("cpu", torch.bfloat16)
+            cache["vh"] = vh.to("cpu", torch.bfloat16)
 
     if alignment_is_float:
-        transform = fractional_matrix_power(transform, alignment, cache)
+        rotation = u @ vh
+        u, v, proj = close_ortho_columns_full(u, vh.mH)
+        transform = fractional_orthogonal_matrix_power(u, v, alignment, cache)
     elif alignment == 0:
-        transform = torch.eye(
-            len(transform),
-            dtype=transform.dtype,
-            device=transform.device,
-        )
+        transform = rotation = MatmulIdentity()
+        proj = MatmulIdentity()
     elif alignment != 1:
-        transform = torch.linalg.matrix_power(transform, round(alignment))
+        rotation = u @ vh
+        transform = torch.linalg.matrix_power(rotation, round(alignment))
+        proj = MatmulIdentity()
+    else:
+        transform = rotation = u @ vh
+        proj = MatmulIdentity()
 
     if alpha != 0:
-        # interpolate the relationship between the neurons
-        a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, alpha=alpha)
+        a_neurons = weighted_sum.__wrapped__(a_neurons, ((b_neurons @ proj) @ rotation.mH) @ proj.mH, alpha=alpha)
 
-    a_neurons @= transform
+    a_neurons = ((a_neurons @ proj) @ transform) @ proj.mH
     a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
     return a_neurons.reshape_as(a)
 
