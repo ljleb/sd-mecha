@@ -1,9 +1,7 @@
 import contextlib
 import ctypes
 import dataclasses
-import functools
 import json
-import operator
 import pathlib
 import struct
 import sys

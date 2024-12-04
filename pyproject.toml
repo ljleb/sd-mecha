@@ -39,5 +39,5 @@ Issues = "https://github.com/ljleb/sd-mecha/issues"
 [project.entry-points."sd_mecha.init"]
 model_configs = "sd_mecha.extensions.builtin.model_configs"
 
-[project.entry-points."sd_mecha.extensions"]
+[project.entry-points."sd_mecha.post_init"]
 lycoris = "sd_mecha.extensions.builtin.lycoris"

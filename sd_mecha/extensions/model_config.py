@@ -1,11 +1,8 @@
 import abc
 import dataclasses
-import functools
 import inspect
 import pathlib
 import re
-from types import MethodType, SimpleNamespace
-
 import fuzzywuzzy.process
 import torch
 import yaml
@@ -253,6 +250,7 @@ class LazyModelConfigBase(ModelConfig):
                 getattr(value, "__isabstractmethod__", False) and
                 name not in cls.__dict__
             ):
+                # implement all remaining abstract methods as delegating to underlying_config
                 setattr(cls, name, property(lambda self, name=name: resolve_lazy_model_config_attribute(self, name=name)))
 
     def _ensure_config(self) -> None:
@@ -269,6 +267,9 @@ class LazyModelConfigBase(ModelConfig):
 def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
     self._ensure_config()
     attribute = getattr(self.underlying_config, name)
+    if inspect.ismethod(attribute):
+        method = attribute.__func__.__get__(self, self.__class__)
+        return method
     return attribute
 
 
@@ -378,7 +379,9 @@ def resolve(identifier: str) -> ModelConfig:
 
 
 def get_all() -> List[ModelConfig]:
-    return get_all_base() + get_all_aux()
+    res = get_all_base() + get_all_aux()
+    res.sort(key=lambda c: c.identifier, reverse=True)
+    return res
 
 
 def get_all_base() -> List[ModelConfig]:

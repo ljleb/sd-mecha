@@ -9,6 +9,7 @@ from sd_mecha.hypers import Hyper
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, weight, delta
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
+from sd_mecha.streaming import StateDictKeyError
 
 
 EPSILON = 1e-10
@@ -863,3 +864,16 @@ def geometric_median_objective(median, points, weights):
 
 def l2distance(p1, p2):
     return torch.dist(p1, p2, p=2)
+
+
+@convert_to_recipe
+def fallback(
+    a: StateDict,
+    default: StateDict,
+    **kwargs
+) -> Tensor:
+    key = kwargs["key"]
+    try:
+        return a[key]
+    except StateDictKeyError:
+        return default[key]

@@ -148,13 +148,22 @@ class MergeMethod:
             "key": key,
         }
 
-    def get_input_types(self) -> List[type]:
+    def get_input_types(self, args_count) -> List[type]:
+        input_names = self.get_input_names()
+        vararg_name = self.get_input_varargs_name()
+        varargs_count = args_count - len(input_names)
+        type_hints = typing.get_type_hints(self.__wrapped__)
+
+        def get_empirical_type(annotation):
+            if annotation is None or typing.get_origin(annotation) is not UnionType:
+                return annotation
+            return typing.get_args(annotation)[0]  # validation ensures the input type is index 0
+
         return [
-            annotation if annotation is None or typing.get_origin(annotation) is not UnionType else
-            typing.get_args(annotation)[0]  # validation ensures the input type is index 0
-            for k, annotation in typing.get_type_hints(self.__wrapped__).items()
-            if k in self.get_input_names()
-        ]
+            get_empirical_type(annotation)
+            for k, annotation in type_hints.items()
+            if k in input_names
+        ] + [get_empirical_type(type_hints.get(vararg_name))] * varargs_count
 
     def get_return_merge_space(self, merge_spaces_args: List[str]) -> str:
         type_hints = typing.get_type_hints(self.__wrapped__)
@@ -375,11 +384,11 @@ def __convert_to_recipe_impl(
     return merge_method
 
 
-def config_converter(merge_method: MergeMethod):
-    assert len(merge_method.get_input_names()) == 1, f"the merge method should take exactly 1 positional argument"
-    input_param = merge_method.get_input_names()[0]
+def config_conversion(merge_method: MergeMethod):
+    input_names = merge_method.get_input_names()
+    assert len(input_names) == 1, f"the merge method should take exactly 1 positional argument"
     input_config = merge_method.get_input_configs()[0][0]
-    assert input_config is not None, f"the input ModelConfig['identifier...'] is missing. It should be appended to the type annotation of `{input_param}`"
+    assert input_config is not None, f"the input ModelConfig['identifier...'] is missing. It should be appended to the type annotation of `{input_names[0]}`"
     output_config = merge_method.get_return_config([input_config])
     assert output_config is not None, f"the output ModelConfig['identifier...'] is missing. It should be specified as part of the return type annotation"
     return merge_method

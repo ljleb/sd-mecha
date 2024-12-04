@@ -1,12 +1,9 @@
 import dataclasses
-import inspect
-from types import MethodType
-
 import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha import extensions
 from sd_mecha.extensions.merge_space import MergeSpace
-from sd_mecha.extensions.merge_method import convert_to_recipe, config_converter, StateDict
+from sd_mecha.extensions.merge_method import convert_to_recipe, config_conversion, StateDict
 from sd_mecha.extensions.model_config import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
 from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 
@@ -22,8 +19,8 @@ def _register_all_lycoris_configs():
             lora_config_id = lyco_config.identifier
             base_config_id = lyco_config.base_config.identifier
 
-            @config_converter
-            @convert_to_recipe(identifier=f"convert_'{lora_config_id.replace('-', '_')}'_to_base")
+            @config_conversion
+            @convert_to_recipe(identifier=f"convert_'{lora_config_id}'_to_base")
             def diffusers_lora_to_base(
                 lora: StateDict | ModelConfig[lora_config_id] | MergeSpace["weight"],
                 **kwargs,
@@ -67,7 +64,7 @@ class LycorisLazyModelConfig(LazyModelConfigBase):
 
     def create_config(self):
         underlying_config = to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
-        self.multiple_text_encoders = any(key.startswith("text_encoder_2") for key in self.base_config.compute_keys())
+        self.multiple_text_encoders = len(self.base_config.components) > 3
         return underlying_config
 
     def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
@@ -84,25 +81,24 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
     if "lora" not in algorithms or len(algorithms) != 1:
         raise ValueError(f"unknown lycoris algorithms {algorithms}")
 
-    return ModelConfigImpl(
-        identifier=f"{base_config.identifier}_{lycoris_identifier}_{'_'.join(algorithms)}",
-        orphan_keys_to_copy=_to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
-        components={
-            component_id: dataclasses.replace(
-                component,
-                orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
-                blocks={
-                    block_id: dataclasses.replace(
-                        block,
-                        keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
-                        keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
-                    )
-                    for block_id, block in component.blocks.items()
-                },
-            )
-            for component_id, component in base_config.components.items()
-        },
-    )
+    identifier = f"{base_config.identifier}_{lycoris_identifier}_{'_'.join(algorithms)}"
+    orphan_keys_to_copy = _to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders)
+    components = {
+        component_id: dataclasses.replace(
+            component,
+            orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
+            blocks={
+                block_id: dataclasses.replace(
+                    block,
+                    keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
+                    keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
+                )
+                for block_id, block in component.blocks.items()
+            },
+        )
+        for component_id, component in base_config.components.items()
+    }
+    return ModelConfigImpl(identifier, orphan_keys_to_copy, components)
 
 
 def _to_lycoris_keys(

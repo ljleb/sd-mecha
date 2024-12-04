@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 from typing import Optional, Dict, Mapping
 from sd_mecha.extensions.merge_space import MergeSpace
+from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
@@ -119,6 +120,8 @@ def add_perpendicular(
 
 geometric_sum = merge_methods.geometric_sum
 train_difference = merge_methods.train_difference
+add_opposite = merge_methods.add_opposite
+clamped_add_opposite = merge_methods.clamped_add_opposite
 cosine_add_a = merge_methods.add_cosine_a
 cosine_add_b = merge_methods.add_cosine_b
 ties_sum = merge_methods.ties_sum

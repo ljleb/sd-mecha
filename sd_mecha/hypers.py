@@ -114,6 +114,6 @@ def default(model_config: str | ModelConfig, model_components: Optional[str | Li
         model_components = [model_components]
 
     return {
-        f"{model_config.identifier}_{model_component}_default": value
+        f"{model_config.identifier}-{model_component}_default": value
         for model_component in model_components
     }
