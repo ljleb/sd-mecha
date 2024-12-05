@@ -325,7 +325,7 @@ def get_approximate_basis(A: Tensor, q: int, niter: Optional[int] = 2, M: Option
 
     niter = 2 if niter is None else niter
     m, n = A.shape[-2:]
-    dtype = get_floating_dtype(A)
+    dtype = A.dtype
 
     R = torch.eye(n, q, dtype=dtype, device=A.device)
 
@@ -390,14 +390,3 @@ def is_sparse(A):
     if not torch.jit.is_scripting():
         error_str += f" but got {type(A)}"
     raise TypeError(error_str)
-
-
-def get_floating_dtype(A):
-    """Return the floating point dtype of tensor A.
-
-    Integer types map to float32.
-    """
-    dtype = A.dtype
-    if dtype in (torch.float16, torch.float32, torch.float64):
-        return dtype
-    return torch.float32
