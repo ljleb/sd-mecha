@@ -19,19 +19,19 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     return u, vh
 
 
-def fractional_orthogonal_matrix_power(u, v, alignment, cache):
+def fractional_orthogonal_matrix_power(q, alignment, cache):
     if cache is not None and "eigenvalues" in cache:
-        eig_v = cache["eig_v"].to(u.device, u.dtype).view_as_complex()
-        eig_vs = cache["eig_vs"].to(u.device, u.dtype).view_as_complex()
+        eig_v = cache["eig_v"].to(q.device, q.dtype).view_as_complex()
+        eig_vs = cache["eig_vs"].to(q.device, q.dtype).view_as_complex()
     else:
-        eig_v, eig_vs = torch.linalg.eig(u @ v.mH)
+        eig_v, eig_vs = torch.linalg.eig(q)
         if cache is not None:
             cache["eig_v"] = eig_v.view_as_real().to("cpu", torch.bfloat16)
             cache["eig_vs"] = eig_vs.view_as_real().to("cpu", torch.bfloat16)
 
     eig_v_pow = eig_v**alignment
     result = torch.linalg.solve_ex(eig_vs, eig_vs @ torch.diag_embed(eig_v_pow), left=False)[0]
-    return result.to(dtype=u.dtype)
+    return result.to(dtype=q.dtype)
 
 
 def close_ortho_columns_full(a, b):

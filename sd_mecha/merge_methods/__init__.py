@@ -581,22 +581,29 @@ def rotate(
             cache["vh"] = vh.to("cpu", torch.bfloat16)
 
     if alignment_is_float:
-        rotation = u @ vh
         u, v, proj = close_ortho_columns_full(u, vh.mH)
-        transform = fractional_orthogonal_matrix_power(u, v, alignment, cache)
+        vh = v.mH
+        del v
+        rotation = u @ vh
+        del u, vh
+        transform = fractional_orthogonal_matrix_power(rotation, alignment, cache)
     elif alignment == 0:
-        transform = rotation = MatmulIdentity()
+        rotation = u @ vh
+        del u, vh
+        transform = MatmulIdentity()
         proj = MatmulIdentity()
     elif alignment != 1:
         rotation = u @ vh
+        del u, vh
         transform = torch.linalg.matrix_power(rotation, round(alignment))
         proj = MatmulIdentity()
     else:
         transform = rotation = u @ vh
+        del u, vh
         proj = MatmulIdentity()
 
     if alpha != 0:
-        a_neurons = weighted_sum.__wrapped__(a_neurons, ((b_neurons @ proj) @ rotation.mH) @ proj.mH, alpha=alpha)
+        a_neurons = (1-alpha)*a_neurons + alpha*(((b_neurons @ proj) @ rotation.mH) @ proj.mH)
 
     a_neurons = ((a_neurons @ proj) @ transform) @ proj.mH
     a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
