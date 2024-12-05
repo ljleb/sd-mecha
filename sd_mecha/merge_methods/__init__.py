@@ -548,7 +548,7 @@ def rotate(
 
     if len(a.shape) == 4:
         a_dft = torch.fft.rfft2(a, norm="ortho")
-        b_dft = torch.fft.rfft2(a, norm="ortho")
+        b_dft = torch.fft.rfft2(b, norm="ortho")
 
         res_dft = []
         for i in range(a_dft.shape[-1]):
