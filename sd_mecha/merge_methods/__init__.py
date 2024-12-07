@@ -580,32 +580,24 @@ def rotate(
             cache["u"] = u.to("cpu", torch.bfloat16)
             cache["vh"] = vh.to("cpu", torch.bfloat16)
 
+    def inverse_align(x): return (x @ vh.mH) @ u.mH
+
     if alignment_is_float:
         u, v, proj = close_ortho_columns_full(u, vh.mH)
-        vh = v.mH
-        del v
-        rotation = u @ vh
-        del u, vh
-        transform = fractional_orthogonal_matrix_power(rotation, alignment, cache)
+        del vh
+        def inverse_align(x): return (((x @ proj) @ v) @ u.mH) @ proj.mH
+        def transform(x): return ((x @ proj) @ fractional_orthogonal_matrix_power(u @ v.mH, alignment, cache)) @ proj.mH
     elif alignment == 0:
-        rotation = u @ vh
-        del u, vh
-        transform = MatmulIdentity()
-        proj = MatmulIdentity()
+        def transform(x): return x
     elif alignment != 1:
-        rotation = u @ vh
-        del u, vh
-        transform = torch.linalg.matrix_power(rotation, round(alignment))
-        proj = MatmulIdentity()
+        def transform(x): return x @ torch.linalg.matrix_power(u @ vh, round(alignment))
     else:
-        transform = rotation = u @ vh
-        del u, vh
-        proj = MatmulIdentity()
+        def transform(x): return (x @ u) @ vh
 
-    if alpha != 0:
-        a_neurons = (1-alpha)*a_neurons + alpha*(((b_neurons @ proj) @ rotation.mH) @ proj.mH)
+    if not math.isclose(alpha, 0):
+        a_neurons = (1-alpha)*a_neurons + alpha*inverse_align(b_neurons)
 
-    a_neurons = ((a_neurons @ proj) @ transform) @ proj.mH
+    a_neurons = transform(a_neurons)
     a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
     return a_neurons.reshape(original_shape)
 
