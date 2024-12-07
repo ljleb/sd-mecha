@@ -546,15 +546,6 @@ def rotate(
     if len(a.shape) < 2 or key.endswith("bias") or "position" in key or torch.allclose(a.half(), b.half()):
         return weighted_sum.__wrapped__(a, b, alpha=alpha)
 
-    original_shape = a.shape
-    if len(a.shape) == 4:
-        if a.shape[-2:].numel() == 1:
-            a = a.reshape(a.shape[0], -1)
-            b = b.reshape(b.shape[0], -1)
-        else:
-            a = a.reshape(a.shape[:1].numel(), -1)
-            b = b.reshape(b.shape[:1].numel(), -1)
-
     shape_2d = (a.shape[0], a.shape[1:].numel())
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)
@@ -599,7 +590,7 @@ def rotate(
 
     a_neurons = transform(a_neurons)
     a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
-    return a_neurons.reshape(original_shape)
+    return a_neurons.reshape_as(a)
 
 
 @convert_to_recipe
