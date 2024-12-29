@@ -7,7 +7,7 @@ yaml_directory = pathlib.Path(__file__).parent
 
 
 def _register_configs():
-    for yaml in reversed(sorted(yaml_directory.glob("*.yaml"))):
+    for yaml in yaml_directory.glob("*.yaml"):
         config = LazyModelConfig(yaml)
         extensions.model_config.register(config)
 

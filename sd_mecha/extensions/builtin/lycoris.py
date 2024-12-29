@@ -56,19 +56,16 @@ class LycorisLazyModelConfig(LazyModelConfigBase):
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
         self.algorithms = algorithms
-        self.multiple_text_encoders = None
 
     @property
     def identifier(self) -> str:
         return f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
 
     def create_config(self):
-        underlying_config = to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
-        self.multiple_text_encoders = len(self.base_config.components) > 3
-        return underlying_config
+        return to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
 
     def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
-        return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.lycoris_identifier, self.prefix, self.multiple_text_encoders)
+        return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.prefix)
 
 
 def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[str]) -> ModelConfig:
@@ -82,16 +79,16 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
         raise ValueError(f"unknown lycoris algorithms {algorithms}")
 
     identifier = f"{base_config.identifier}_{lycoris_identifier}_{'_'.join(algorithms)}"
-    orphan_keys_to_copy = _to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders)
+    orphan_keys_to_copy = _to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, prefix)
     components = {
         component_id: dataclasses.replace(
             component,
-            orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
+            orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, prefix),
             blocks={
                 block_id: dataclasses.replace(
                     block,
-                    keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
-                    keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, lycoris_identifier, prefix, multiple_text_encoders),
+                    keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, prefix),
+                    keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, prefix),
                 )
                 for block_id, block in component.blocks.items()
             },
@@ -104,9 +101,7 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
 def _to_lycoris_keys(
     keys: Mapping[StateDictKey, TensorMetadata],
     algorithms: Iterable[str],
-    lycoris_identifier: str,
     prefix: str,
-    multiple_text_encoders: bool,
 ) -> Dict[StateDictKey, TensorMetadata]:
     lycoris_keys = {}
 
@@ -118,11 +113,6 @@ def _to_lycoris_keys(
             key = key.split('.')
             if key[-1] == "weight":
                 key = key[:-1]
-            if lycoris_identifier == "kohya":
-                if key[0] == "text_encoder":
-                    key[0] = "te1" if multiple_text_encoders else "te"
-                if key[0] == "text_encoder_2":
-                    key[0] = "te2"
             key = "_".join(key)
 
             for suffix in lycoris_algorithms[algorithm]:

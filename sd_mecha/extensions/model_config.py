@@ -9,6 +9,10 @@ import yaml
 from collections import OrderedDict
 from sd_mecha.streaming import TensorMetadata
 from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable
+try:
+    from yaml import CLoader as YamlLoader
+except ImportError:
+    from yaml import Loader as YamlLoader
 
 
 StateDictKey = str
@@ -89,6 +93,9 @@ class ModelConfig(Protocol):
         return type(f"{config.identifier}ModelConfigTag", (ModelConfigTag,), {
             "config": config,
         })
+
+    def eq(self, other):
+        return self.identifier == getattr(other, "identifier", None)
 
     @property
     @abc.abstractmethod
@@ -342,7 +349,7 @@ def to_yaml(model_config: ModelConfig) -> str:
 
 
 def from_yaml(yaml_config: str) -> ModelConfig:
-    dict_config = yaml.safe_load(yaml_config)
+    dict_config = yaml.load(yaml_config, Loader=YamlLoader)
     return ModelConfigImpl(**dict_config)
 
 

@@ -39,7 +39,7 @@ class RecipeNode(abc.ABC):
         other = sd_mecha.extensions.merge_method.path_to_node(other)
         base, delta = self, other
         if other.merge_space == "weight":
-            base, delta = delta, base
+            base, delta = other, self
         return sd_mecha.extensions.merge_method.resolve("add_difference")(base, delta)
 
     def __radd__(self, other):

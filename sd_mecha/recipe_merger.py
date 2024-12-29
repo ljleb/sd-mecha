@@ -4,6 +4,7 @@ import gc
 import logging
 import os
 import pathlib
+import sys
 import threading
 import torch
 from contextlib import nullcontext
@@ -328,7 +329,7 @@ class KeyMergeVisitor(RecipeVisitor):
             raise StateDictKeyError(str(e)) from e
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
-        merged: List[Optional[torch.Tensor]] = [None] * len(node.inputs)
+        merged: List[Optional[torch.Tensor | StateDict]] = [None] * len(node.inputs)
         try:
             self.__visit_deeper_first(node.inputs, merged, node.merge_method)
             return node.merge_method.merge_key(
@@ -343,29 +344,47 @@ class KeyMergeVisitor(RecipeVisitor):
             )
         except StateDictKeyError:
             for n, m in zip(node.inputs, merged):
-                if isinstance(m, torch.Tensor) and n.merge_space == node.merge_space:
-                    return m
+                if n.model_config == node.model_config and n.merge_space == node.merge_space:
+                    if isinstance(m, torch.Tensor):
+                        return m
+                    elif isinstance(m, StateDict):
+                        return m[self.key]
             raise
 
     def __visit_deeper_first(
         self,
         nodes: Tuple[recipe_nodes.RecipeNode, ...],
-        merged: List[Optional[torch.Tensor]],
+        merged: List[Optional[torch.Tensor | StateDict]],
         merge_method: MergeMethod,
     ):
         def depth_of_value(index) -> int:
-            if nodes[index] is None:
-                return 0
             return nodes[index].accept(recipe_nodes.DepthRecipeVisitor())
 
         input_types = merge_method.get_input_types(len(nodes))
+        error_holder = ErrorHolder()
         for index in sorted(range(len(nodes)), key=depth_of_value, reverse=True):
-            if nodes[index] is None:
-                continue
             if issubclass(input_types[index], torch.Tensor):
-                merged[index] = nodes[index].accept(self)
+                merged[index] = error_holder.intercept(nodes[index].accept, self)
             else:
-                merged[index] = MergeNodeMappingWrapper(nodes[index], self)
+                merged[index] = error_holder.intercept(MergeNodeMappingWrapper, nodes[index], self)
+
+        error_holder.try_raise()
+
+
+class ErrorHolder:
+    def __init__(self):
+        self.exc_info = None
+
+    def intercept(self, fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            self.exc_info = sys.exc_info()
+            return None
+
+    def try_raise(self):
+        if self.exc_info:
+            raise self.exc_info[1].with_traceback(self.exc_info[2])
 
 
 class MergeNodeMappingWrapper(StateDict):

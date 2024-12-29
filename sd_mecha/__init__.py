@@ -10,6 +10,27 @@ from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
+from sd_mecha.merge_methods import (
+    weighted_sum,
+    slerp,
+    n_average,
+    geometric_median,
+    subtract,
+    perpendicular_component,
+    geometric_sum,
+    train_difference,
+    add_opposite,
+    clamped_add_opposite,
+    add_cosine_a,
+    add_cosine_b,
+    ties_sum,
+    ties_sum_extended,
+    distribution_crossover,
+    crossover,
+    clamp,
+    model_stock_for_tensor,
+    fallback,
+)
 
 
 def serialize_and_save(
@@ -27,12 +48,6 @@ def serialize_and_save(
     logging.info(f"Saving recipe to {output_path}")
     with open(output_path, "w") as f:
         f.write(serialized)
-
-
-weighted_sum = merge_methods.weighted_sum
-slerp = merge_methods.slerp
-n_average = merge_methods.n_average
-geometric_median = merge_methods.geometric_median
 
 
 def add_difference(
@@ -79,10 +94,6 @@ def add_difference(
     return res
 
 
-subtract = merge_methods.subtract
-perpendicular_component = merge_methods.perpendicular_component
-
-
 def add_perpendicular(
     a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: RecipeNodeOrPath, *,
     alpha: Hyper = 1.0,
@@ -116,16 +127,6 @@ def add_perpendicular(
         device=device,
         dtype=dtype,
     )
-
-
-geometric_sum = merge_methods.geometric_sum
-train_difference = merge_methods.train_difference
-add_opposite = merge_methods.add_opposite
-clamped_add_opposite = merge_methods.clamped_add_opposite
-cosine_add_a = merge_methods.add_cosine_a
-cosine_add_b = merge_methods.add_cosine_b
-ties_sum = merge_methods.ties_sum
-ties_sum_extended = merge_methods.ties_sum_extended
 
 
 # latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
@@ -278,8 +279,6 @@ def copy_region(
 
 
 tensor_sum = copy_region
-distribution_crossover = merge_methods.distribution_crossover
-crossover = merge_methods.crossover
 
 
 def rotate(
@@ -325,9 +324,6 @@ def rotate(
         )
 
     return res
-
-
-clamp = merge_methods.clamp
 
 
 def dropout(
@@ -412,9 +408,6 @@ def ties_with_dare(
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return merge_methods.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
-
-
-model_stock_for_tensor = merge_methods.model_stock_for_tensor
 
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
