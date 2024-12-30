@@ -4,6 +4,9 @@ from sd_mecha import extensions, recipe_nodes
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor
 
 
+MECHA_FORMAT_VERSION = "0.1.0"
+
+
 def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
     if isinstance(recipe, str):
         recipe = pathlib.Path(recipe)
@@ -26,6 +29,14 @@ def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | path
 def deserialize(recipe: List[str] | str) -> RecipeNode:
     if not isinstance(recipe, list):
         recipe = recipe.split("\n")
+
+    if not recipe[0].startswith("version"):
+        raise RuntimeError("bad format: expected version at line 1")
+
+    actual_version, recipe = recipe[0], recipe[1:]
+    expected_version = get_version_header(MECHA_FORMAT_VERSION)
+    if actual_version != expected_version:
+        raise RuntimeError(f"bad recipe version: got {actual_version}, expected {expected_version}")
 
     results = []
 
@@ -59,7 +70,9 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
 
     def get_arg_value(arg, arg_index):
         try:
-            if arg.startswith('&'):
+            if arg == "null":
+                return None
+            elif arg.startswith('&'):
                 ref_index = int(arg[1:])
                 if ref_index < 0 or ref_index >= len(results):
                     raise ValueError(f"reference {arg} out of bounds")
@@ -108,7 +121,13 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
 def serialize(recipe: RecipeNode) -> str:
     serializer = SerializerVisitor()
     recipe.accept(serializer)
-    return "\n".join(serializer.instructions)
+    body = "\n".join(serializer.instructions)
+    header = get_version_header(MECHA_FORMAT_VERSION)
+    return f"{header}\n{body}"
+
+
+def get_version_header(version: str):
+    return f"version {version}"
 
 
 class SerializerVisitor(RecipeVisitor):
@@ -116,7 +135,13 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.path}" "{node.model_config.identifier}"'
+        config = getattr(node.model_config, "identifier", None)
+        if config is None:
+            config = "null"
+        else:
+            config = f'"{config}"'
+
+        line = f'model "{node.path}" {config}'
         return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
