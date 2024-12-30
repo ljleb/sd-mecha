@@ -384,7 +384,7 @@ def __convert_to_recipe_impl(
     return merge_method
 
 
-def config_conversion(merge_method: MergeMethod):
+def implicit_config_conversion(merge_method: MergeMethod):
     input_names = merge_method.get_input_names()
     assert len(input_names) == 1, f"the merge method should take exactly 1 positional argument"
     input_config = merge_method.get_input_configs()[0][0]

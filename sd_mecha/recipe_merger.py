@@ -166,10 +166,9 @@ class RecipeMerger:
         if save_dtype is None:
             save_dtype = self.__default_dtype
 
-        if save_device is None:
-            to_kwargs = {"dtype": save_dtype},
-        else:
-            to_kwargs = {"dtype": save_dtype, "device": save_device}
+        to_kwargs = {"dtype": save_dtype, "copy": True}
+        if save_device is not None:
+            to_kwargs["device"] = save_device
 
         @functools.wraps(f)
         def track_output(*args, **kwargs):

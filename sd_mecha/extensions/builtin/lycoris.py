@@ -3,7 +3,7 @@ import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha import extensions
 from sd_mecha.extensions.merge_space import MergeSpace
-from sd_mecha.extensions.merge_method import convert_to_recipe, config_conversion, StateDict
+from sd_mecha.extensions.merge_method import convert_to_recipe, implicit_config_conversion, StateDict
 from sd_mecha.extensions.model_config import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
 from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 
@@ -19,7 +19,7 @@ def _register_all_lycoris_configs():
             lora_config_id = lyco_config.identifier
             base_config_id = lyco_config.base_config.identifier
 
-            @config_conversion
+            @implicit_config_conversion
             @convert_to_recipe(identifier=f"convert_'{lora_config_id}'_to_base")
             def diffusers_lora_to_base(
                 lora: StateDict | ModelConfig[lora_config_id] | MergeSpace["weight"],
@@ -38,7 +38,7 @@ def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
     up_weight = state_dict[f"{key}.lora_up.weight"]
     down_weight = state_dict[f"{key}.lora_down.weight"]
     alpha = state_dict[f"{key}.alpha"]
-    dim = down_weight.size()[0]
+    dim = down_weight.size(0)
 
     if len(down_weight.size()) == 2:  # linear
         res = up_weight @ down_weight
@@ -72,8 +72,6 @@ def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix:
     if isinstance(algorithms, str):
         algorithms = [algorithms]
     algorithms = list(sorted(algorithms))
-
-    multiple_text_encoders = any(key.startswith("text_encoder_2") for key in base_config.compute_keys())
 
     if "lora" not in algorithms or len(algorithms) != 1:
         raise ValueError(f"unknown lycoris algorithms {algorithms}")

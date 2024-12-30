@@ -1,6 +1,6 @@
 from torch import Tensor
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, config_conversion
+from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, implicit_config_conversion
 from sd_mecha.merge_methods import SameMergeSpace
 from .convert_vae_to_original import convert_vae
 
@@ -9,21 +9,21 @@ from .convert_vae_to_original import convert_vae
 # https://github.com/huggingface/diffusers/blob/main/scripts/convert_diffusers_to_original_stable_diffusion.py
 
 
-@config_conversion
+@implicit_config_conversion
 @convert_to_recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'")
-def convert_sd1_diffusers_to_original(
-    diffusers_sd: StateDict | ModelConfig["sd1-kohya"] | SameMergeSpace,
+def convert_sd1_kohya_to_original(
+    kohya_sd: StateDict | ModelConfig["sd1-kohya"] | SameMergeSpace,
     **kwargs,
 ) -> Tensor | ModelConfig["sd1-ldm"] | SameMergeSpace:
     ldm_key = kwargs["key"]
     if ldm_key.startswith("model.diffusion_model."):
-        return convert_unet(diffusers_sd, ldm_key)
+        return convert_unet(kohya_sd, ldm_key)
     elif ldm_key.startswith("cond_stage_model."):
-        return convert_clip_l(diffusers_sd, ldm_key)
+        return convert_clip_l(kohya_sd, ldm_key)
     elif ldm_key.startswith("first_stage_model."):
-        return convert_vae(diffusers_sd, ldm_key)
+        return convert_vae(kohya_sd, ldm_key)
     else:
-        return diffusers_sd[ldm_key]
+        return kohya_sd[ldm_key]
 
 
 def convert_unet(diffusers_sd: StateDict, ldm_key: str) -> Tensor:
