@@ -83,7 +83,14 @@ class RecipeMerger:
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
 
+        # ideally we use keys in the order the model config lists them
+        # model configs should be responsible for default key ordering
+        #   (in some cases we can optimize the key ordering from input models, disregard default order in this case)
+        # however I cannot be bothered to update the current config files
+        # hence we force lexicographic ordering here for the time being :>
+        #   (it's the exact right ordering most of the time)
         recipe_keys = OrderedDict(sorted(model_config.compute_keys().items(), key=lambda t: t[0]))
+
         keys_to_merge = model_config.compute_keys_to_merge()
         output = self.__normalize_output_to_dict(
             output,
