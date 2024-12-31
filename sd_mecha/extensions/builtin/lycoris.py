@@ -37,6 +37,9 @@ def _register_all_lycoris_configs():
 
 
 def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
+    # fetching these 3 keys in lexicographic order is very important
+    # any other order would raise the number of cache misses in the input safetensors when streaming keys
+    #  which in turn would slow down merging significantly
     alpha = state_dict[f"{key}.alpha"]
     down_weight = state_dict[f"{key}.lora_down.weight"]
     up_weight = state_dict[f"{key}.lora_up.weight"]
