@@ -7,7 +7,7 @@ from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
-from sd_mecha.extensions.merge_method import RecipeNodeOrPath, path_to_node
+from sd_mecha.extensions.merge_method import RecipeNodeOrLiteral, value_to_node
 from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 from sd_mecha.merge_methods import (
@@ -51,18 +51,18 @@ def serialize_and_save(
 
 
 def add_difference(
-    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
+    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
     alpha: Hyper = 1.0,
     clamp_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = extensions.merge_method.path_to_node(a)
-    b = extensions.merge_method.path_to_node(b)
+    a = extensions.merge_method.value_to_node(a)
+    b = extensions.merge_method.value_to_node(b)
     original_b = b
 
     if c is not None:
-        c = extensions.merge_method.path_to_node(c)
+        c = extensions.merge_method.value_to_node(c)
         b = subtract(
             b, c,
             device=device,
@@ -95,14 +95,14 @@ def add_difference(
 
 
 def add_perpendicular(
-    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: RecipeNodeOrPath, *,
+    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: RecipeNodeOrLiteral, *,
     alpha: Hyper = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = path_to_node(a)
-    b = path_to_node(b)
-    c = path_to_node(c)
+    a = value_to_node(a)
+    b = value_to_node(b)
+    c = value_to_node(c)
 
     a_diff = subtract(
         a, c,
@@ -140,16 +140,16 @@ def add_perpendicular(
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 # Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 def add_difference_ties(
-    base: RecipeNodeOrPath,
-    *models: RecipeNodeOrPath,
+    base: RecipeNodeOrLiteral,
+    *models: RecipeNodeOrLiteral,
     alpha: Hyper,
     k: Hyper = 0.2,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
-    base = path_to_node(base)
-    models = tuple(path_to_node(model) for model in models)
+    base = value_to_node(base)
+    models = tuple(value_to_node(model) for model in models)
 
     # Create task vectors.
     # $$ \tau_t $$
@@ -180,8 +180,8 @@ def add_difference_ties(
 
 
 def add_difference_ties_extended(
-    base: RecipeNodeOrPath,
-    *models: RecipeNodeOrPath,
+    base: RecipeNodeOrLiteral,
+    *models: RecipeNodeOrLiteral,
     alpha: Hyper,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
@@ -195,8 +195,8 @@ def add_difference_ties_extended(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
-    base = path_to_node(base)
-    models = tuple(path_to_node(model) for model in models)
+    base = value_to_node(base)
+    models = tuple(value_to_node(model) for model in models)
 
     # Create task vectors.
     # $$ \tau_t $$
@@ -234,18 +234,18 @@ def add_difference_ties_extended(
 
 
 def copy_region(
-    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
+    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
     width: Hyper = 1.0,
     offset: Hyper = 0.0,
     top_k: bool = False,
     device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = path_to_node(a)
-    b = path_to_node(b)
+    a = value_to_node(a)
+    b = value_to_node(b)
 
     if c is not None:
-        c = path_to_node(c)
+        c = value_to_node(c)
 
         a = subtract(
             a, c,
@@ -282,18 +282,18 @@ tensor_sum = copy_region
 
 
 def rotate(
-    a: RecipeNodeOrPath, b: RecipeNodeOrPath, c: Optional[RecipeNodeOrPath] = None, *,
+    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
     alignment: Hyper = 1.0,
     alpha: Hyper = 0.0,
     device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = None,
     cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
-    a = path_to_node(a)
-    b = path_to_node(b)
+    a = value_to_node(a)
+    b = value_to_node(b)
 
     if c is not None:
-        c = path_to_node(c)
+        c = value_to_node(c)
 
         a = subtract(
             a, c,
@@ -327,8 +327,8 @@ def rotate(
 
 
 def dropout(
-    a: RecipeNodeOrPath,
-    *models: RecipeNodeOrPath,
+    a: RecipeNodeOrLiteral,
+    *models: RecipeNodeOrLiteral,
     probability: Hyper = 0.9,
     alpha: Hyper = 0.5,
     overlap: Hyper = 1.0,
@@ -361,8 +361,8 @@ ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
 # - `return`: $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 def ties_with_dare(
-    base: RecipeNodeOrPath,
-    *models: RecipeNodeOrPath,
+    base: RecipeNodeOrLiteral,
+    *models: RecipeNodeOrLiteral,
     probability: Hyper = 0.9,
     rescale: Hyper = 1.0,
     alpha: Hyper = 0.5,
@@ -379,8 +379,8 @@ def ties_with_dare(
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
-    base = path_to_node(base)
-    models = tuple(path_to_node(model) for model in models)
+    base = value_to_node(base)
+    models = tuple(value_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
         if model.merge_space == "weight" else
@@ -413,14 +413,14 @@ def ties_with_dare(
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
 # https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
 def model_stock_n_models(
-    base: RecipeNodeOrPath,
-    *models: RecipeNodeOrPath,    
+    base: RecipeNodeOrLiteral,
+    *models: RecipeNodeOrLiteral,
     cos_eps: Hyper = 1e-6,    
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
-    base = path_to_node(base)
-    models = tuple(path_to_node(model) for model in models)
+    base = value_to_node(base)
+    models = tuple(value_to_node(model) for model in models)
     deltas = tuple(
         subtract(model, base)
         if model.merge_space == "weight" else

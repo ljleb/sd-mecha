@@ -41,7 +41,11 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
     results = []
 
     def parse(line):
-        command, *args = tokenize(line.strip())
+        line = line.strip()
+        if line.startswith("#"):
+            return
+
+        command, *args = tokenize(line)
         positional_args, named_args = preprocess_args(args)
         if command == "dict":
             results.append(dict(*positional_args, **named_args))
@@ -59,10 +63,7 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
         named_args = {}
         for arg_index, arg in enumerate(args):
             if '=' in arg:
-                # note: this is wrong if "=" is inside quotes
-                # however, quoted kwarg values (aka string hypers) will raise an exception in the constructor of recipes
-                # so I'm not gonna bother fixing this with the tokenizer until it is actually useful to do so
-                key, value = arg.split('=')
+                key, value = arg.split('=', maxsplit=1)
                 named_args[key] = get_arg_value(value, arg_index)
             else:
                 positional_args.append(get_arg_value(arg, arg_index))
@@ -89,13 +90,24 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
     def tokenize(line):
         tokens = []
         current_token = []
+        quote_prefix = []
         inside_quotes = False
+        is_escape = False
         for char in line:
-            if char == '"':
+            if is_escape:
+                is_escape = False
+            elif char == "\\":
+                is_escape = True
+                continue
+            elif char == '"':
                 inside_quotes = not inside_quotes
-                if not inside_quotes:  # End of quoted string
-                    tokens.append(f'"{"".join(current_token)}"')
+                if inside_quotes:  # Begin of quoted string
+                    quote_prefix = current_token
                     current_token = []
+                else:  # End of quoted string
+                    tokens.append(f'{"".join(quote_prefix)}"{"".join(current_token)}"')
+                    current_token = []
+                    quote_prefix = []
                 continue
             elif char == ' ' and not inside_quotes:
                 if current_token:  # End of a token
@@ -134,35 +146,42 @@ class SerializerVisitor(RecipeVisitor):
     def __init__(self, instructions: Optional[List[str]] = None):
         self.instructions = instructions if instructions is not None else []
 
-    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        config = getattr(node.model_config, "identifier", None)
-        if config is None:
-            config = "null"
-        else:
-            config = f'"{config}"'
-
-        line = f'model "{node.path}" {config}'
+    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> str:
+        path = self.__serialize_value(node.path)
+        config = self.__serialize_value(getattr(node.model_config, "identifier", None))
+        line = f'model {path} {config}'
         return self.__add_instruction(line)
 
-    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
-        models = [
-            f"&{model.accept(self)}"
-            for model in node.inputs
+    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> str:
+        args = [
+            self.__serialize_value(v)
+            for v in node.args
         ]
-
-        hypers = []
-        for hyper_k, hyper_v in node.hypers.items():
-            if isinstance(hyper_v, dict):
-                dict_line = "dict " + " ".join(f"{k}={v}" for k, v in hyper_v.items())
-                hyper_v = f"&{self.__add_instruction(dict_line)}"
-            hypers.append(f"{hyper_k}={hyper_v}")
-
-        line = f'merge "{node.merge_method.get_identifier()}" {" ".join(models)} {" ".join(hypers)}'
+        kwargs = [
+            f"{k}={self.__serialize_value(v)}"
+            for k, v in node.kwargs.items()
+        ]
+        line = f'merge {self.__serialize_value(node.merge_method.get_identifier())} {" ".join(args)} {" ".join(kwargs)}'
         return self.__add_instruction(line)
 
-    def __add_instruction(self, instruction: str) -> int:
+    def __serialize_value(self, value) -> str:
+        if value is None:
+            return "null"
+        if isinstance(value, (str, pathlib.Path)):
+            value = str(value).replace("\\", "\\\\").replace('"', "\\\"")
+            return f'"{value}"'
+        if isinstance(value, dict):
+            dict_line = "dict " + " ".join(f"{k}={self.__serialize_value(v)}" for k, v in value.items())
+            return self.__add_instruction(dict_line)
+        if isinstance(value, recipe_nodes.RecipeNode):
+            return value.accept(self)
+        if isinstance(value, (int, float)):
+            return str(value)
+        raise ValueError(value)
+
+    def __add_instruction(self, instruction: str) -> str:
         try:
-            return self.instructions.index(instruction)
+            return f"&{self.instructions.index(instruction)}"
         except ValueError:
             self.instructions.append(instruction)
-            return len(self.instructions) - 1
+            return f"&{len(self.instructions) - 1}"

@@ -1,15 +1,12 @@
 import abc
+import itertools
 import pathlib
 import torch
-from collections import OrderedDict
-from typing import Optional, Dict, Any, Mapping
+from typing import Optional, Dict, Any, Mapping, Tuple
 from torch import Tensor
-
-import sd_mecha.extensions.merge_method
 from sd_mecha import extensions
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.hypers import Hyper
-from sd_mecha.streaming import TensorMetadata, MemoryDict
+from sd_mecha.streaming import MemoryDict
 
 
 class RecipeNode(abc.ABC):
@@ -32,23 +29,57 @@ class RecipeNode(abc.ABC):
         pass
 
     def __add__(self, other):
-        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        other = extensions.merge_method.value_to_node(other, torch.Tensor)
         base, delta = self, other
         if other.merge_space == "weight":
             base, delta = other, self
-        return sd_mecha.extensions.merge_method.resolve("add_difference")(base, delta)
+        return extensions.merge_method.resolve("add_difference")(base, delta)
 
     def __radd__(self, other):
-        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        other = extensions.merge_method.value_to_node(other, torch.Tensor)
         return other + self
 
     def __sub__(self, other):
-        other = sd_mecha.extensions.merge_method.path_to_node(other)
-        return sd_mecha.extensions.merge_method.resolve("subtract")(self, other)
+        other = extensions.merge_method.value_to_node(other, torch.Tensor)
+        return extensions.merge_method.resolve("subtract")(self, other)
 
     def __rsub__(self, other):
-        other = sd_mecha.extensions.merge_method.path_to_node(other)
+        other = extensions.merge_method.value_to_node(other, torch.Tensor)
         return other - self
+
+
+class LiteralRecipeNode(RecipeNode):
+    def __init__(
+        self,
+        # pathlib.Path allowed (i.e. path to 7gb fisher weights)
+        value: str | pathlib.Path | int | float | dict,
+        model_config: Optional[str | ModelConfig] = None,
+    ):
+        self.value = value
+        self.__model_config = model_config
+
+    def accept(self, visitor, *args, **kwargs):
+        return visitor.visit_literal(self, *args, **kwargs)
+
+    @property
+    def merge_space(self) -> str:
+        return "param"
+
+    @property
+    def model_config(self) -> Optional[ModelConfig]:
+        if isinstance(self.__model_config, str):
+            return extensions.model_config.resolve(self.__model_config)
+        return self.__model_config
+
+    @model_config.setter
+    def model_config(self, model_config: Optional[ModelConfig]):
+        self.__model_config = model_config
+
+    def __contains__(self, item):
+        if isinstance(item, LiteralRecipeNode):
+            return self.value == item.value
+        else:
+            return False
 
 
 class ModelRecipeNode(RecipeNode):
@@ -56,6 +87,7 @@ class ModelRecipeNode(RecipeNode):
         self,
         state_dict: str | pathlib.Path | Mapping[str, Tensor],
         model_config: Optional[str | ModelConfig] = None,
+        merge_space: str = "weight",
     ):
         if isinstance(state_dict, Mapping):
             self.path = "<memory>"
@@ -64,13 +96,14 @@ class ModelRecipeNode(RecipeNode):
             self.path = state_dict
             self.state_dict = None
         self.__model_config = model_config
+        self.__merge_space = merge_space
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_model(self, *args, **kwargs)
 
     @property
     def merge_space(self) -> str:
-        return "weight"
+        return self.__merge_space
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
@@ -93,15 +126,15 @@ class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
         merge_method,
-        *inputs: RecipeNode,
-        hypers: Dict[str, Hyper],
+        args: Tuple[RecipeNode, ...],
+        kwargs: Dict[str, RecipeNode],
         volatile_hypers: Dict[str, Any],
         device: Optional[str] = None,
         dtype: Optional[torch.dtype] = None,
     ):
         self.merge_method = merge_method
-        self.inputs = inputs
-        self.hypers = hypers
+        self.args = args
+        self.kwargs = kwargs
         self.volatile_hypers = volatile_hypers
         self.device = device
         self.dtype = dtype
@@ -111,21 +144,24 @@ class MergeRecipeNode(RecipeNode):
 
     @property
     def merge_space(self) -> str:
-        return self.merge_method.get_return_merge_space([
-            input.merge_space for input in self.inputs
-        ])
+        return self.merge_method.get_return_merge_space(
+            [v.merge_space for v in self.args],
+            {k: v.merge_space for k, v in self.kwargs.items()},
+        )
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
         return self.merge_method.get_return_config([
-            input.model_config for input in self.inputs
+            [v.model_config for v in self.args],
+            {k: v.model_config for k, v in self.kwargs.items()},
         ])
 
     def __contains__(self, item):
         if isinstance(item, MergeRecipeNode):
             return self is item or any(
-                item in model
-                for model in self.inputs
+                item in v
+                for v in itertools.chain(self.args, self.kwargs.values())
+                if isinstance(v, RecipeNode)
             )
         else:
             return False
@@ -165,22 +201,4 @@ class ModelsCountVisitor(RecipeVisitor):
         return sum(
             model.accept(self)
             for model in node.inputs
-        )
-
-
-class ParameterResolverVisitor(RecipeVisitor):
-    def __init__(self, arguments: Dict[str, RecipeNode]):
-        self.__arguments = arguments
-
-    def visit_model(self, node: ModelRecipeNode) -> RecipeNode:
-        return node
-
-    def visit_merge(self, node: MergeRecipeNode) -> RecipeNode:
-        return MergeRecipeNode(
-            node.merge_method,
-            *(node.accept(self) for node in node.inputs),
-            hypers=node.hypers,
-            volatile_hypers=node.volatile_hypers,
-            device=node.device,
-            dtype=node.dtype,
         )

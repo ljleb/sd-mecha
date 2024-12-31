@@ -13,6 +13,9 @@ class MergeSpaceSymbolBase:
     merge_space: type(MergeSpaceBase) | type(Union)
 
 
+AnyMergeSpaceBase = MergeSpaceBase | MergeSpaceSymbolBase
+
+
 class MergeSpace:
     def __init__(self):
         raise RuntimeError(f"Cannot instantiate {MergeSpace.__name__}")
@@ -86,9 +89,11 @@ _merge_space_registry = {}
 
 weight = TypeVar("weight")
 delta = TypeVar("delta")
+param = TypeVar("param")
 _builtin_merge_spaces = [
     weight.__name__,
     delta.__name__,
+    param.__name__,
 ]
 
 

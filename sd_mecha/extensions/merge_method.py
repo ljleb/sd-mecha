@@ -6,17 +6,17 @@ import textwrap
 import torch
 import typing
 from sd_mecha import extensions
-from sd_mecha.hypers import Hyper
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode
-from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceBase, MergeSpaceSymbolBase
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode
+from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbolBase, AnyMergeSpaceBase
 from sd_mecha.extensions.model_config import ModelConfig, ModelConfigTag
 from types import UnionType
-from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable
+from typing import Optional, Callable, Dict, Tuple, Union, List, Set, Iterable, Any
 
 
-RecipeNodeOrPath = RecipeNode | str | pathlib.Path
+RecipeNodeOrLiteral = RecipeNode | pathlib.Path | str | int | float | dict
 
 
+# todo: make generic to be able to specify contained type (tensor, str, int, float)
 class StateDict(typing.Mapping[str, torch.Tensor], abc.ABC):
     @property
     @abc.abstractmethod
@@ -28,7 +28,7 @@ class StateDict(typing.Mapping[str, torch.Tensor], abc.ABC):
         pass
 
 
-AnyMergeSpaceBase = MergeSpaceBase | MergeSpaceSymbolBase
+# todo: allow str, int and float as base types (on top of torch.Tensor and StateDict[K])
 _common_valid_type_permutations = (
     (torch.Tensor,),
     (torch.Tensor, AnyMergeSpaceBase),
@@ -50,27 +50,26 @@ _valid_param_type_permutations = _common_valid_type_permutations + (
 class MergeMethod:
     create_recipe: Callable
 
-    def __init__(self, f: Callable, identifier: str, volatile_hypers: Iterable[str]):
+    def __init__(self, f: Callable, identifier: str, volatile_params: Iterable[str]):
         self.__wrapped__ = f
         self.identifier = identifier
-        self.volatile_hypers = volatile_hypers
+        self.volatile_params = volatile_params
         self.__validate_f()
 
     def __validate_f(self):
         spec = inspect.getfullargspec(self.__wrapped__)
         hints = typing.get_type_hints(self.__wrapped__)
-        if spec.defaults:
-            params_with_default = spec.args[-len(spec.defaults):]
-            raise TypeError(f"Default arguments are not supported for positional parameters. To declare hyperparameters, they must be keyword-only ({params_with_default})")
 
-        for volatile_hyper in self.volatile_hypers:
+        for volatile_hyper in self.volatile_params:
             if volatile_hyper in spec.kwonlydefaults:
                 continue
             elif volatile_hyper in spec.kwonlyargs:
                 raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it does not have a default value")
 
         if spec.varkw is None:
-            raise TypeError(f"**kwargs must be included in the function parameters")
+            raise TypeError(f"for forward compatibility reasons, **kwargs must be included in the function parameters")
+
+        # todo: only params with type str, int or float can have a default value
 
         def type_to_str(a: type):
             if typing.get_origin(a) is UnionType or issubclass(a, AnyMergeSpaceBase):
@@ -93,11 +92,23 @@ class MergeMethod:
                     "Valid choices are:\n\t" + "\n\t".join(" | ".join(map(type_to_str, type_comb)) for type_comb in type_perms)
                 )
 
-        for model_name in spec.args + ["return"]:
-            model_type = hints[model_name]
-            union_types = typing.get_args(model_type) if typing.get_origin(model_type) is UnionType else (model_type,)
-            type_perms = _valid_param_type_permutations if model_name != "return" else _valid_return_type_permutations
-            validate_type_permutation(model_name, union_types, type_perms)
+        for param_name in spec.args + ["return"] + spec.kwonlyargs:
+            if param_name in self.volatile_params:
+                continue
+
+            param_type = hints[param_name]
+            union_types = typing.get_args(param_type) if typing.get_origin(param_type) is UnionType else (param_type,)
+            type_perms = _valid_param_type_permutations if param_name != "return" else _valid_return_type_permutations
+            validate_type_permutation(param_name, union_types, type_perms)
+
+        for kw_param_name in spec.kwonlyargs:
+            if kw_param_name in self.volatile_params:
+                continue
+
+            param_type = hints[kw_param_name]
+            union_types = typing.get_args(param_type) if typing.get_origin(param_type) is UnionType else (param_type,)
+            type_perms = _valid_param_type_permutations
+            validate_type_permutation(kw_param_name, union_types, type_perms)
 
         input_configs = self.get_input_configs()
         input_configs = input_configs[0] + [input_configs[1]]*int(spec.varargs is not None)
@@ -105,17 +116,13 @@ class MergeMethod:
         if input_configs_are_explicit and self.get_return_config(input_configs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
 
-        for hyper in spec.kwonlyargs:
-            if hyper in self.volatile_hypers:
-                continue
-
-            if hints[hyper] == Hyper | None:
-                raise TypeError(f"The type annotation of the keyword-only parameter '{hyper}' is invalid (Optional[Hyper]). It should be`sd_mecha.Hyper`")
-            if hints[hyper] != Hyper:
-                raise TypeError(f"The type annotation of the keyword-only parameter '{hyper}' is invalid ({hints[hyper]}). It should be`sd_mecha.Hyper`")
-
-    def merge_key(self, inputs: Tuple[torch.Tensor, ...], hypers: Dict[str, Hyper], key: str, device: str, dtype: torch.dtype):
-        args, kwargs = self.__get_args_kwargs(inputs, hypers, key, device, dtype)
+    def merge_key(
+        self,
+        input_args: Tuple[torch.Tensor | StateDict, ...],
+        input_kwargs: Dict[str, torch.Tensor | StateDict, ...],
+        key: str,
+    ):
+        args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key)
         return self.__wrapped__(*args, **kwargs)
 
     def __call__(self, *args, **kwargs):
@@ -123,33 +130,20 @@ class MergeMethod:
 
     def __get_args_kwargs(
         self,
-        inputs: Tuple[torch.Tensor, ...],
-        hypers: Dict[str, float],
+        input_args: Tuple[Any, ...],
+        input_kwargs: Dict[str, float],
         key: str,
-        device: str,
-        dtype: Optional[torch.dtype],
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
-        if dtype is None:
-            to_args = device,
-        else:
-            to_args = device, dtype
-
-        for k in hypers:
-            if k not in self.get_hyper_names():
+        for k in input_kwargs:
+            if k not in self.get_kwarg_names():
                 raise ValueError(f"method {self.identifier} does not have a hyperparameter '{k}'")
 
-        merge_method_args = tuple(
-            v.to(*to_args)
-            for v in inputs
-        )
-        return merge_method_args, hypers | {
-            "device": device,
-            "dtype": dtype,
+        return input_args, input_kwargs | {
             "key": key,
         }
 
     def get_input_types(self, args_count) -> List[type]:
-        input_names = self.get_input_names()
+        input_names = self.get_arg_names()
         vararg_name = self.get_input_varargs_name()
         varargs_count = args_count - len(input_names)
         type_hints = typing.get_type_hints(self.__wrapped__)
@@ -167,7 +161,7 @@ class MergeMethod:
 
     def get_return_merge_space(self, merge_spaces_args: List[str]) -> str:
         type_hints = typing.get_type_hints(self.__wrapped__)
-        model_names = self.get_input_names()
+        model_names = self.get_arg_names()
         varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
             model_names.extend([varargs_name] * max(0, len(merge_spaces_args) - len(model_names)))
@@ -195,7 +189,7 @@ class MergeMethod:
 
     def get_input_merge_spaces(self) -> Tuple[List[type], Optional[type]]:
         type_hints = typing.get_type_hints(self.__wrapped__)
-        model_names = self.get_input_names()
+        model_names = self.get_arg_names()
         merge_spaces = []
         for param in model_names:
             annotation = type_hints.get(param)
@@ -234,7 +228,7 @@ class MergeMethod:
 
     def get_return_config(self, arg_configs: List[ModelConfig]) -> ModelConfig:
         type_hints = typing.get_type_hints(self.__wrapped__)
-        params = self.get_input_names()
+        params = self.get_arg_names()
         varargs_name = self.get_input_varargs_name()
         if varargs_name is not None:
             params.extend([varargs_name] * max(0, len(arg_configs) - len(params)))
@@ -257,7 +251,7 @@ class MergeMethod:
 
     def get_input_configs(self) -> Tuple[List[Optional[ModelConfig]], Optional[ModelConfig]]:
         type_hints = typing.get_type_hints(self.__wrapped__)
-        model_names = self.get_input_names()
+        model_names = self.get_arg_names()
 
         model_configs = []
         for param in model_names:
@@ -289,17 +283,20 @@ class MergeMethod:
 
         return None
 
-    def get_input_names(self) -> List[str]:
+    def get_arg_names(self) -> List[str]:
         return inspect.getfullargspec(self.__wrapped__).args
 
-    def get_hyper_names(self) -> Set[str]:
+    def get_kwarg_names(self) -> Set[str]:
         return set(inspect.getfullargspec(self.__wrapped__).kwonlyargs)
 
-    def get_volatile_hyper_names(self) -> Set[str]:
-        return set(self.volatile_hypers)
+    def get_volatile_names(self) -> Set[str]:
+        return set(self.volatile_params)
 
-    def get_default_hypers(self) -> Dict[str, Hyper]:
+    def get_default_kwargs(self) -> Dict[str, Any]:
         return inspect.getfullargspec(self.__wrapped__).kwonlydefaults or {}
+
+    def get_default_args(self) -> Tuple[Any, ...]:
+        return inspect.getfullargspec(self.__wrapped__).defaults or ()
 
     def get_input_varargs_name(self) -> Optional[str]:
         return inspect.getfullargspec(self.__wrapped__).varargs
@@ -328,52 +325,54 @@ def __convert_to_recipe_impl(
     if identifier is None:
         identifier = fn.__name__
     merge_method = MergeMethod(fn, identifier, volatile_hypers)
-    default_hypers = merge_method.get_default_hypers()
+    default_kwargs = merge_method.get_default_kwargs()
 
-    model_params = "".join(
-        f"{model_name}: {MergeRecipeNode.__name__}, "
-        for model_name in merge_method.get_input_names()
+    params = "".join(
+        f"{model_name}: {RecipeNodeOrLiteral.__name__}, "
+        for model_name in merge_method.get_arg_names()
     )
-    hyper_params = "".join(
-        f"{hyper_name}: {Hyper.__name__} = default_hypers[\"{hyper_name}\"], "
-        if hyper_name in default_hypers else
-        f"{hyper_name}: {Hyper.__name__}, "
-        for hyper_name in merge_method.get_hyper_names()
+    kw_params = "".join(
+        f"{kwarg_name}: {RecipeNodeOrLiteral.__name__} = default_kwargs[\"{kwarg_name}\"], "
+        if kwarg_name in default_kwargs else
+        f"{kwarg_name}: {RecipeNodeOrLiteral.__name__}, "
+        for kwarg_name in merge_method.get_kwarg_names()
     )
 
-    model_args = "".join(
-        f"{path_to_node.__name__}({model_name}), "
-        for model_name in merge_method.get_input_names()
+    # todo: use `value_to_node()` to convert args and kwargs literals to nodes
+
+    args = "".join(
+        f"{arg_name}, "
+        for arg_name in merge_method.get_arg_names()
     )
-    hyper_args = "".join(
-        f"{hyper_name}={hyper_name}, "
-        for hyper_name in merge_method.get_hyper_names() - merge_method.get_volatile_hyper_names()
+    kwargs = "".join(
+        f"{kwarg_name}={kwarg_name}, "
+        for kwarg_name in merge_method.get_kwarg_names() - merge_method.get_volatile_names()
     )
-    volatile_hyper_args = "".join(
+    volatile_kwargs = "".join(
         f"{hyper_name}={hyper_name}, "
-        for hyper_name in merge_method.get_volatile_hyper_names()
+        for hyper_name in merge_method.get_volatile_names()
     )
 
     fn_locals = {}
     fn_globals = globals() | {
         "merge_method": merge_method,
-        "default_hypers": default_hypers,
+        "default_kwargs": default_kwargs,
         "dtype": torch.dtype,  # `torch.dtype.__name__`
     }
     exec(textwrap.dedent(f"""
         def {fn.__name__}(
-            {model_params}
+            {params}
             *args: {MergeRecipeNode.__name__},
-            {hyper_params}
+            {kw_params}
             device: {Optional.__name__}[{str.__name__}] = None,
             dtype: {Optional.__name__}[{torch.dtype.__name__}] = None,
         ):
             return {MergeRecipeNode.__name__}(
                 merge_method,
-                {model_args}
-                *({path_to_node.__name__}(arg) for arg in args),
-                hypers=dict({hyper_args}),
-                volatile_hypers=dict({volatile_hyper_args}),
+                {args}
+                *args,
+                kwargs=dict({kwargs}),
+                volatile_kwargs=dict({volatile_kwargs}),
                 device=device,
                 dtype=dtype,
             )
@@ -385,7 +384,7 @@ def __convert_to_recipe_impl(
 
 
 def implicit_config_conversion(merge_method: MergeMethod):
-    input_names = merge_method.get_input_names()
+    input_names = merge_method.get_arg_names()
     assert len(input_names) == 1, f"the merge method should take exactly 1 positional argument"
     input_config = merge_method.get_input_configs()[0][0]
     assert input_config is not None, f"the input ModelConfig['identifier...'] is missing. It should be appended to the type annotation of `{input_names[0]}`"
@@ -409,7 +408,12 @@ def get_all() -> List[MergeMethod]:
     return list(_merge_methods_registry.values())
 
 
-def path_to_node(node_or_path: RecipeNodeOrPath) -> RecipeNode:
-    if isinstance(node_or_path, (str, pathlib.Path)):
-        return ModelRecipeNode(node_or_path)
-    return node_or_path
+def value_to_node(node_or_value: RecipeNodeOrLiteral, expected_value_type: Any) -> RecipeNode:
+    if isinstance(node_or_value, RecipeNode):
+        return node_or_value
+
+    # todo: determine whether to instantiate LiteralRecipeNode or ModelRecipeNode based on expected type
+    if isinstance(node_or_value, expected_value_type):
+        return LiteralRecipeNode(node_or_value)
+
+    return ModelRecipeNode(node_or_value)

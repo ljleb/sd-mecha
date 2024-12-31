@@ -18,6 +18,9 @@ except ImportError:
 StateDictKey = str
 
 
+# todo: flatten format, delete blocks entirely
+
+
 @dataclasses.dataclass
 class ModelConfigBlock:
     keys_to_merge: Mapping[StateDictKey, TensorMetadata]
