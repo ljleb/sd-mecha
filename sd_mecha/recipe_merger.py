@@ -6,6 +6,8 @@ import os
 import pathlib
 import sys
 import threading
+from collections import OrderedDict
+
 import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
@@ -81,7 +83,7 @@ class RecipeMerger:
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
 
-        recipe_keys = recipe.compute_keys()
+        recipe_keys = OrderedDict(sorted(model_config.compute_keys().items(), key=lambda t: t[0]))
         keys_to_merge = model_config.compute_keys_to_merge()
         output = self.__normalize_output_to_dict(
             output,
@@ -166,7 +168,7 @@ class RecipeMerger:
         if save_dtype is None:
             save_dtype = self.__default_dtype
 
-        to_kwargs = {"dtype": save_dtype, "copy": True}
+        to_kwargs = {"dtype": save_dtype}
         if save_device is not None:
             to_kwargs["device"] = save_device
 

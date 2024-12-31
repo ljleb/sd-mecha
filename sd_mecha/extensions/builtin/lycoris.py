@@ -1,4 +1,6 @@
 import dataclasses
+
+import psutil
 import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha import extensions
@@ -35,10 +37,15 @@ def _register_all_lycoris_configs():
 
 
 def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
-    up_weight = state_dict[f"{key}.lora_up.weight"]
-    down_weight = state_dict[f"{key}.lora_down.weight"]
     alpha = state_dict[f"{key}.alpha"]
+    down_weight = state_dict[f"{key}.lora_down.weight"]
+    up_weight = state_dict[f"{key}.lora_up.weight"]
     dim = down_weight.size(0)
+
+    if up_weight.numel() <= down_weight.numel():
+        up_weight = up_weight * (alpha / dim)
+    else:
+        down_weight = down_weight * (alpha / dim)
 
     if len(down_weight.size()) == 2:  # linear
         res = up_weight @ down_weight
@@ -46,7 +53,7 @@ def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
         res = (up_weight.squeeze(3).squeeze(2) @ down_weight.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(3)
     else:  # conv2d 3x3
         res = torch.nn.functional.conv2d(down_weight.permute(1, 0, 2, 3), up_weight).permute(1, 0, 2, 3)
-    return res * (alpha / dim)
+    return res
 
 
 class LycorisLazyModelConfig(LazyModelConfigBase):

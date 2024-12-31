@@ -28,10 +28,6 @@ class RecipeNode(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
-        pass
-
-    @abc.abstractmethod
     def __contains__(self, item):
         pass
 
@@ -86,14 +82,6 @@ class ModelRecipeNode(RecipeNode):
     def model_config(self, value: Optional[ModelConfig]):
         self.__model_config = value
 
-    def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
-        all_keys = self.model_config.compute_keys()
-        return OrderedDict(
-            (k, v)
-            for k, v in self.state_dict.metadata()
-            if k in all_keys
-        )
-
     def __contains__(self, item):
         if isinstance(item, ModelRecipeNode):
             return self.path == item.path
@@ -132,16 +120,6 @@ class MergeRecipeNode(RecipeNode):
         return self.merge_method.get_return_config([
             input.model_config for input in self.inputs
         ])
-
-    def compute_keys(self) -> OrderedDict[str, TensorMetadata]:
-        res = OrderedDict()
-        for model in self.inputs:
-            for k, v in model.compute_keys().items():
-                if k not in res:
-                    res[k] = v
-                elif res[k].shape != v.shape:
-                    raise RuntimeError(f"key {k} has ambiguous shape. candidates are {res[k].shape} and {v.shape}")
-        return OrderedDict(self.model_config.compute_keys())
 
     def __contains__(self, item):
         if isinstance(item, MergeRecipeNode):
