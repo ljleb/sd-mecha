@@ -1,3 +1,4 @@
+import contextlib
 import dataclasses
 import functools
 import gc
@@ -14,7 +15,7 @@ from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from sd_mecha.extensions.merge_method import MergeMethod, StateDict
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.recipe_nodes import RecipeVisitor
+from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
@@ -71,64 +72,55 @@ class RecipeMerger:
         if threads is None:
             threads = min(max(total_files_open, 2), os.cpu_count(), 8)
 
-        load_input_dicts_visitor = LoadInputDictsVisitor(
-            self.__base_dirs,
-            buffer_size_per_file,
-        )
-        recipe.accept(load_input_dicts_visitor)
+        with open_input_dicts(recipe, self.__base_dirs, buffer_size_per_file):
+            model_config = recipe.model_config
+            if strict_weight_space and recipe.merge_space != "weight":
+                raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
 
-        model_config = recipe.model_config
-        if strict_weight_space and recipe.merge_space != "weight":
-            raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
+            # ideally we use keys in the order the model config lists them
+            # model configs should be responsible for default key ordering
+            #   (in some cases we can optimize the key ordering from input models, disregard default order in this case)
+            # however I cannot be bothered to update the current config files
+            # hence we force lexicographic ordering here for the time being :>
+            #   (it's the exact right ordering most of the time)
+            recipe_keys = OrderedDict(sorted(model_config.compute_keys().items(), key=lambda t: t[0]))
 
-        # ideally we use keys in the order the model config lists them
-        # model configs should be responsible for default key ordering
-        #   (in some cases we can optimize the key ordering from input models, disregard default order in this case)
-        # however I cannot be bothered to update the current config files
-        # hence we force lexicographic ordering here for the time being :>
-        #   (it's the exact right ordering most of the time)
-        recipe_keys = OrderedDict(sorted(model_config.compute_keys().items(), key=lambda t: t[0]))
+            keys_to_merge = model_config.compute_keys_to_merge()
+            output = self.__normalize_output_to_dict(
+                output,
+                recipe_keys,
+                keys_to_merge,
+                recipe_serializer.serialize(recipe),
+                buffer_size_per_file // max(1, threads),
+                save_dtype,
+            )
+            if threads == 0:
+                thread_local_data = SimpleNamespace()
+                executor = ThisThreadExecutor()
+            else:
+                thread_local_data = threading.local()
+                executor = ThreadPoolExecutor(max_workers=threads)
 
-        keys_to_merge = model_config.compute_keys_to_merge()
-        output = self.__normalize_output_to_dict(
-            output,
-            recipe_keys,
-            keys_to_merge,
-            recipe_serializer.serialize(recipe),
-            buffer_size_per_file // max(1, threads),
-            save_dtype,
-        )
-        if threads == 0:
-            thread_local_data = SimpleNamespace()
-            executor = ThisThreadExecutor()
-        else:
-            thread_local_data = threading.local()
-            executor = ThreadPoolExecutor(max_workers=threads)
+            progress = self.__tqdm(total=len(recipe_keys), desc="Merging recipe")
+            with executor:
+                futures = []
+                for key in recipe_keys:
+                    key_merger = self.__get_key_merger(key, recipe)
+                    key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
+                    key_merger = self.__track_progress(key_merger, key, recipe_keys[key].shape, progress)
+                    key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
+                    futures.append(executor.submit(key_merger))
 
-        progress = self.__tqdm(total=len(recipe_keys), desc="Merging recipe")
-        with executor:
-            futures = []
-            for key in recipe_keys:
-                key_merger = self.__get_key_merger(key, recipe)
-                key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
-                key_merger = self.__track_progress(key_merger, key, recipe_keys[key].shape, progress)
-                key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
-                futures.append(executor.submit(key_merger))
+                for future in as_completed(futures):
+                    if future.exception() is not None:
+                        for future_to_cancel in futures:
+                            future_to_cancel.cancel()
+                        raise future.exception()
+                    future.result()
 
-            for future in as_completed(futures):
-                if future.exception() is not None:
-                    for future_to_cancel in futures:
-                        future_to_cancel.cancel()
-                    raise future.exception()
-                future.result()
-
-        progress.close()
-        if isinstance(output, OutSafetensorsDict):
-            output.close()
-        recipe.accept(CloseInputDictsVisitor())
-
-        gc.collect()
-        torch.cuda.empty_cache()
+            progress.close()
+            if isinstance(output, OutSafetensorsDict):
+                output.close()
 
     def __normalize_output_to_dict(
         self,
@@ -211,11 +203,23 @@ class ThisThreadExecutor(nullcontext):
         return result
 
 
+@contextlib.contextmanager
+def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: List[pathlib.Path], buffer_size_per_dict: Optional[int] = None):
+    recipe.accept(LoadInputDictsVisitor(base_dirs, buffer_size_per_dict))
+    yield recipe
+    recipe.accept(CloseInputDictsVisitor())
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
 @dataclasses.dataclass
 class LoadInputDictsVisitor(RecipeVisitor):
     base_dirs: List[pathlib.Path]
     buffer_size_per_dict: int
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
+
+    def visit_literal(self, node: LiteralRecipeNode):
+        return node
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)
@@ -223,7 +227,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
             node.model_config = self.__detect_model_config(node.state_dict, node_path)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in node.inputs:
+        for model in itertools.chain(node.args, node.kwargs.values()):
             model.accept(self)
 
     def __load_dict(self, node: recipe_nodes.ModelRecipeNode):
@@ -277,13 +281,16 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
 @dataclasses.dataclass
 class CloseInputDictsVisitor(RecipeVisitor):
+    def visit_literal(self, node: LiteralRecipeNode):
+        pass
+
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         if node.state_dict is not None:
             node.state_dict.close()
         node.state_dict = None
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in node.inputs:
+        for model in node.args:
             model.accept(self)
 
 
@@ -305,6 +312,19 @@ class KeyMerger:
 class KeyMergeVisitor(RecipeVisitor):
     key: str
 
+    def visit_literal(self, node: LiteralRecipeNode):
+        value = node.value
+        if isinstance(node.value, Mapping):
+            try:
+                value = value[self.key]
+            except KeyError as e:
+                raise StateDictKeyError(str(e)) from e
+        if isinstance(value, str):
+            return value
+        if isinstance(value, int | float):
+            return torch.tensor(value)
+        raise RuntimeError(f"Unexpected literal node value of type {type(value)}")
+
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
         try:
             return node.state_dict[self.key]
@@ -312,7 +332,7 @@ class KeyMergeVisitor(RecipeVisitor):
             raise StateDictKeyError(str(e)) from e
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
-        merged_args, merged_kwargs, error = self.__visit_deeper_first(node.input_args, node.input_kwargs, node.merge_method)
+        merged_args, merged_kwargs, error = self.__visit_deeper_first(node.args, node.kwargs, node.merge_method)
         try:
             if error: raise error
 
@@ -323,7 +343,7 @@ class KeyMergeVisitor(RecipeVisitor):
             )
         except StateDictKeyError:
             for node_child, merged in zip(
-                itertools.chain(node.input_args, node.input_kwargs.keys()),
+                itertools.chain(node.args, node.kwargs.keys()),
                 itertools.chain(merged_args, merged_kwargs.keys()),
             ):
                 if node_child.model_config == node.model_config and node_child.merge_space == node.merge_space:
@@ -344,11 +364,11 @@ class KeyMergeVisitor(RecipeVisitor):
     ):
         def depth_of_value(index) -> int:
             nodes = node_args if isinstance(index, int) else node_kwargs
-            return nodes[index].accept(recipe_nodes.DepthRecipeVisitor())
+            return nodes[index].accept(recipe_nodes.ModelDepthRecipeVisitor())
 
         error_holder = ErrorHolder()
         merged = {}
-        input_types = merge_method.get_input_types(len(node_args))
+        input_types = merge_method.get_input_types().as_dict(len(node_args))
         indices = itertools.chain(range(len(node_args)), node_kwargs.keys())
         for index in sorted(indices, key=depth_of_value, reverse=True):
             nodes = node_args if isinstance(index, int) else node_kwargs

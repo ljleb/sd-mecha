@@ -1,7 +1,7 @@
 import pathlib
 from typing import List, Optional
 from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode
 
 
 MECHA_FORMAT_VERSION = "0.1.0"
@@ -49,6 +49,8 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
         positional_args, named_args = preprocess_args(args)
         if command == "dict":
             results.append(dict(*positional_args, **named_args))
+        elif command == "literal":
+            results.append(LiteralRecipeNode(*positional_args, **named_args))
         elif command == "model":
             results.append(ModelRecipeNode(*positional_args, **named_args))
         elif command == "merge":
@@ -145,6 +147,13 @@ def get_version_header(version: str):
 class SerializerVisitor(RecipeVisitor):
     def __init__(self, instructions: Optional[List[str]] = None):
         self.instructions = instructions if instructions is not None else []
+
+    def visit_literal(self, node: LiteralRecipeNode):
+        if node.model_config is None:
+            return self.__serialize_value(node.value)
+        else:
+            config = self.__serialize_value(node.model_config.identifier)
+            return self.__add_instruction(f"literal {node.value} {config}")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> str:
         path = self.__serialize_value(node.path)

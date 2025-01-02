@@ -29,30 +29,29 @@ class RecipeNode(abc.ABC):
         pass
 
     def __add__(self, other):
-        other = extensions.merge_method.value_to_node(other, torch.Tensor)
+        other = extensions.merge_method.value_to_node(other)
         base, delta = self, other
         if other.merge_space == "weight":
             base, delta = other, self
         return extensions.merge_method.resolve("add_difference")(base, delta)
 
     def __radd__(self, other):
-        other = extensions.merge_method.value_to_node(other, torch.Tensor)
+        other = extensions.merge_method.value_to_node(other)
         return other + self
 
     def __sub__(self, other):
-        other = extensions.merge_method.value_to_node(other, torch.Tensor)
+        other = extensions.merge_method.value_to_node(other)
         return extensions.merge_method.resolve("subtract")(self, other)
 
     def __rsub__(self, other):
-        other = extensions.merge_method.value_to_node(other, torch.Tensor)
+        other = extensions.merge_method.value_to_node(other)
         return other - self
 
 
 class LiteralRecipeNode(RecipeNode):
     def __init__(
         self,
-        # pathlib.Path allowed (i.e. path to 7gb fisher weights)
-        value: str | pathlib.Path | int | float | dict,
+        value: str | int | float | Dict[str, str | int | float],
         model_config: Optional[str | ModelConfig] = None,
     ):
         self.value = value
@@ -151,10 +150,10 @@ class MergeRecipeNode(RecipeNode):
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
-        return self.merge_method.get_return_config([
+        return self.merge_method.get_return_config(
             [v.model_config for v in self.args],
             {k: v.model_config for k, v in self.kwargs.items()},
-        ])
+        )
 
     def __contains__(self, item):
         if isinstance(item, MergeRecipeNode):
@@ -169,6 +168,10 @@ class MergeRecipeNode(RecipeNode):
 
 class RecipeVisitor(abc.ABC):
     @abc.abstractmethod
+    def visit_literal(self, node: LiteralRecipeNode):
+        pass
+
+    @abc.abstractmethod
     def visit_model(self, node: ModelRecipeNode):
         pass
 
@@ -177,20 +180,27 @@ class RecipeVisitor(abc.ABC):
         pass
 
 
-class DepthRecipeVisitor(RecipeVisitor):
+class ModelDepthRecipeVisitor(RecipeVisitor):
+    def visit_literal(self, node: LiteralRecipeNode):
+        return 0
+
     def visit_model(self, _node: ModelRecipeNode):
         return 1
 
     def visit_merge(self, node: MergeRecipeNode):
         return max(
-            model.accept(self)
-            for model in node.inputs
+            child.accept(self)
+            for children in (node.args, node.kwargs.values())
+            for child in children
         ) + 1
 
 
 class ModelsCountVisitor(RecipeVisitor):
     def __init__(self):
         self.__seen_nodes = []
+
+    def visit_literal(self, node: LiteralRecipeNode):
+        return 0
 
     def visit_model(self, node: ModelRecipeNode):
         seen = node in self.__seen_nodes
@@ -199,6 +209,7 @@ class ModelsCountVisitor(RecipeVisitor):
 
     def visit_merge(self, node: MergeRecipeNode):
         return sum(
-            model.accept(self)
-            for model in node.inputs
+            child.accept(self)
+            for children in (node.args, node.kwargs.values())
+            for child in children
         )
