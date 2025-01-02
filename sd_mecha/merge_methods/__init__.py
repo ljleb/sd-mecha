@@ -5,7 +5,6 @@ import torch
 from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, Dict, Optional
-from sd_mecha.hypers import Hyper
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, weight, delta
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
@@ -21,7 +20,7 @@ def weighted_sum(
     a: StateDict | SameMergeSpace,
     b: StateDict | SameMergeSpace,
     *,
-    alpha: Hyper = 0.5,
+    alpha: Tensor = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     key = kwargs["key"]
@@ -47,7 +46,7 @@ def slerp(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 0.5,
+    alpha: Tensor = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_normalized = a / a.norm()
@@ -70,7 +69,7 @@ def add_difference(
     a: Tensor | SameMergeSpace,
     b: Tensor | MergeSpace["delta"],
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     return a + alpha * b
@@ -103,7 +102,7 @@ def geometric_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 0.5,
+    alpha: Tensor = 0.5,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a = torch.complex(a, torch.zeros_like(a))
@@ -117,7 +116,7 @@ def add_cosine_a(
     a: Tensor | MergeSpace["weight"],
     b: Tensor | MergeSpace["weight"],
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | MergeSpace["weight"]:
     a_norm = torch.nn.functional.normalize(a, dim=0)
@@ -131,7 +130,7 @@ def add_cosine_b(
     a: Tensor | MergeSpace["weight"],
     b: Tensor | MergeSpace["weight"],
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | MergeSpace["weight"]:
     similarity = torch.nn.functional.cosine_similarity(a, b, dim=0)
@@ -141,7 +140,7 @@ def add_cosine_b(
     return add_cosine_generic(a, b, alpha, combined_similarity)
 
 
-def add_cosine_generic(a: Tensor, b: Tensor, alpha: float, similarity: Tensor) -> Tensor:
+def add_cosine_generic(a: Tensor, b: Tensor, alpha: Tensor, similarity: Tensor) -> Tensor:
     k = 1 - torch.clamp(similarity - alpha, 0, 1)
     return weighted_sum.__wrapped__(a, b, alpha=k)
 
@@ -151,8 +150,8 @@ def tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Hyper = 0.5,
-    offset: Hyper = 0.0,
+    width: Tensor = 0.5,
+    offset: Tensor = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if a.shape == ():
@@ -174,8 +173,8 @@ def top_k_tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Hyper = 1.0,
-    offset: Hyper = 0.0,
+    width: Tensor = 1.0,
+    offset: Tensor = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
@@ -204,7 +203,7 @@ def kth_abs_value(a: Tensor, k: int) -> Tensor:
         return torch.kthvalue(torch.abs(a.float()), k)[0]
 
 
-def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool]:
+def ratio_to_region(width: Tensor, offset: Tensor, n: int) -> Tuple[int, int, bool]:
     if width < 0:
         offset += width
         width = -width
@@ -232,7 +231,7 @@ def train_difference(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     mask = 1.8 * torch.nan_to_num((b - a).abs() / ((b - a).abs() + (b - c).abs()), nan=0)
@@ -245,7 +244,7 @@ def add_opposite(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a = a[kwargs['key']]
@@ -259,7 +258,7 @@ def clamped_add_opposite(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     threshold = torch.maximum(torch.abs(a - c), torch.abs(b - c))
@@ -272,7 +271,7 @@ def select_max_delta(
     a: Tensor | MergeSpace["delta"],
     b: Tensor | MergeSpace["delta"],
     *,
-    alpha: Hyper = 0.5,
+    alpha: Tensor = 0.5,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
     a_abs = ((a - a.mean()) / a.std()).nan_to_num(nan=0).abs()
@@ -285,7 +284,7 @@ def select_max_white_delta(
     a: Tensor | MergeSpace["delta"],
     b: Tensor | MergeSpace["delta"],
     *,
-    alpha: Hyper = 0.5,
+    alpha: Tensor = 0.5,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
     original_shape = a.shape
@@ -306,7 +305,7 @@ def multiply_quotient(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 1.0,
+    alpha: Tensor = 1.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     ac_log = torch.log(a.abs()) - torch.log(c.abs())
@@ -330,8 +329,8 @@ def distribution_crossover(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper,
-    tilt: Hyper,
+    alpha: Tensor,
+    tilt: Tensor,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if alpha == 0:
@@ -361,8 +360,8 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: Hyper = 0.5,
-    tilt: Hyper = 0.0,
+    alpha: Tensor = 0.5,
+    tilt: Tensor = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if alpha == 0:
@@ -386,7 +385,7 @@ def crossover(
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: Tensor, tilt: Tensor, device=None):
     """
     Create a crossover filter. The cut is first tilted around (0, 0), then slid along its normal until it touches the point (alpha, 1 - alpha).
     :param shape: shape of the filter
@@ -446,8 +445,8 @@ def rotate(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alignment: Hyper = 1.0,
-    alpha: Hyper = 0.0,
+    alignment: Tensor = 1.0,
+    alpha: Tensor = 0.0,
     cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
@@ -470,8 +469,6 @@ def rotate(
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
-    alignment_is_float = alignment != round(alignment)
-
     if cache is not None:
         key = kwargs["key"]
         if key not in cache:
@@ -481,12 +478,12 @@ def rotate(
     if cache is not None and "rotation" in cache:
         rotation = transform = cache["rotation"].to(a.device, a.dtype)
     else:
-        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
+        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment.is_floating_point())
         if cache is not None:
             cache["rotation"] = rotation.to("cpu", torch.float16)
 
-    if alignment_is_float:
-        transform = fractional_matrix_power(transform, alignment, cache)
+    if alignment.is_floating_point():
+        transform = fractional_matrix_power(transform, alignment.item(), cache)
     elif alignment == 0:
         transform = torch.eye(
             len(transform),
@@ -494,7 +491,7 @@ def rotate(
             device=transform.device,
         )
     elif alignment != 1:
-        transform = torch.linalg.matrix_power(transform, round(alignment))
+        transform = torch.linalg.matrix_power(transform, alignment.round().item())
 
     if alpha != 0:
         # interpolate the relationship between the neurons
@@ -509,7 +506,7 @@ def rotate(
 def clamp(
     a: Tensor | SameMergeSpace,
     *bounds: Tensor | SameMergeSpace,
-    stiffness: Hyper = 0.0,
+    stiffness: Tensor = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     maximums = functools.reduce(torch.maximum, bounds)
@@ -545,14 +542,14 @@ def copy_distribution(
 @convert_to_recipe
 def ties_sum_extended(  # aka add_difference_ties
     *models: Tensor | MergeSpace["delta"],
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    apply_stock: Hyper = 0.0,
-    cos_eps: Hyper = 1e-6,
-    apply_median: Hyper = 0.0,
-    eps: Hyper = 1e-6,
-    maxiter: Hyper = 100,
-    ftol: Hyper =1e-20,
+    k: Tensor = 0.2,
+    vote_sgn: Tensor = 0.0,
+    apply_stock: Tensor = 0.0,
+    apply_median: Tensor = 0.0,
+    cos_eps: Tensor = 1e-6,
+    eps: Tensor = 1e-6,
+    maxiter: Tensor = 100,
+    ftol: Tensor = 1e-20,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
@@ -567,7 +564,7 @@ def ties_sum_extended(  # aka add_difference_ties
         return torch.nan_to_num(filtered_delta * t / param_counts)
     else:
         # $$ \tau_m $$, but in geometric median instead of arithmetic mean. Considered to replace model stock.
-        filtered_delta = geometric_median_list_of_array(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
+        filtered_delta = geometric_median.__wrapped__(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
 
         return torch.nan_to_num(filtered_delta)
 
@@ -585,8 +582,8 @@ def ties_sum_extended(  # aka add_difference_ties
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Tensor | MergeSpace["delta"],
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
+    k: Tensor = 0.2,
+    vote_sgn: Tensor = 0.0,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
@@ -597,8 +594,8 @@ def ties_sum(  # aka add_difference_ties
 
 def ties_sum_deltas(
     *models: Tensor,
-    k: float = 0.2,
-    vote_sgn: float = 0.0,
+    k: Tensor = 0.2,
+    vote_sgn: Tensor = 0.0,
 ):
     # Step 1: Trim redundant parameters
 
@@ -634,8 +631,8 @@ def ties_sum_deltas(
     return filtered_delta, param_counts
 
 
-def filter_top_k(a: Tensor, k: float):
-    k = max(int((1 - k) * torch.numel(a)), 1)
+def filter_top_k(a: Tensor, k: Tensor):
+    k = max(int((1 - k.item()) * torch.numel(a)), 1)
     k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
     top_k_filter = (torch.abs(a) >= k_value).float()
     return a * top_k_filter
@@ -644,11 +641,11 @@ def filter_top_k(a: Tensor, k: float):
 @convert_to_recipe
 def dropout(  # aka n-supermario
     *deltas: Tensor | MergeSpace["delta"],
-    probability: Hyper = 0.9,
-    rescale: Hyper = 1.0,
-    overlap: Hyper = 1.0,
-    overlap_emphasis: Hyper = 0.0,
-    seed: Hyper = -1,
+    probability: Tensor = 0.9,
+    rescale: Tensor = 1.0,
+    overlap: Tensor = 1.0,
+    overlap_emphasis: Tensor = 0.0,
+    seed: Tensor = -1,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
     if len(deltas) == 0:
@@ -725,17 +722,17 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
 @convert_to_recipe
 def ties_sum_with_dropout(
     *deltas: Tensor | MergeSpace["delta"],
-    probability: Hyper = 0.9,    
-    no_rescale: Hyper = 0.0,
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    apply_stock: Hyper = 0.0,
-    cos_eps: Hyper = 1e-6,
-    apply_median: Hyper = 0.0,
-    eps: Hyper = 1e-6,    
-    maxiter: Hyper = 100, 
-    ftol: Hyper = 1e-20,
-    seed: Hyper = -1,
+    probability: Tensor = 0.9,
+    no_rescale: Tensor = 0.0,
+    k: Tensor = 0.2,
+    vote_sgn: Tensor = 0.0,
+    apply_stock: Tensor = 0.0,
+    cos_eps: Tensor = 1e-6,
+    apply_median: Tensor = 0.0,
+    eps: Tensor = 1e-6,
+    maxiter: Tensor = 100,
+    ftol: Tensor = 1e-20,
+    seed: Tensor = -1,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
     # Set seed
@@ -774,17 +771,13 @@ def binomial_coefficient_np(n, k):
     return result
 
 
-# Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
-# https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
-# I will break the functions to be retrivible for other algos like TIES.
+# src: https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
 @convert_to_recipe
-def model_stock_for_tensor(
+def model_stock(
     *deltas: Tensor | MergeSpace["delta"],
-    cos_eps: Hyper = 1e-6,
+    cos_eps: Tensor = 1e-6,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
-
-    # This is obvious.
     w_avg = n_average.__wrapped__(*deltas)
 
     # t can get inf so handle with care
@@ -796,74 +789,57 @@ def model_stock_for_tensor(
 
 # The guess from mergekit: Average of cos(theta). Expected value is 0, somehow match with paper.
 # However this may be very unstable, and the range is still -1 to 1.
-def get_model_stock_t(deltas, cos_eps):
+def get_model_stock_t(deltas, cos_eps: Tensor):
     n = len(deltas)
 
-    # Generator function. Default eps from torch API doc.
-    cos = torch.nn.CosineSimilarity(dim=-1, eps=cos_eps)
-
-    # One-liner is all you need. I may make it in running average if it really memory hungry.
+    # Generator function
+    cos = torch.nn.CosineSimilarity(dim=-1, eps=cos_eps.item())
     cos_thetas = [cos(deltas[i], deltas[i + 1]) for i, _ in enumerate(deltas) if (i + 1) < n]
 
-    # Still a vector.
+    # Still a vector
     cos_theta = torch.stack(cos_thetas).mean(dim=0)
 
-    # Convert to column vector for multiplication.
+    # Convert to column vector for multiplication
     t = (n * cos_theta / (1 + (n - 1) * cos_theta)).unsqueeze(-1)
-
     return t
 
 
-# This becomes a wrapper since I want TIES use GM also.
+# src: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
 @convert_to_recipe
 def geometric_median(
     *models: Tensor | SameMergeSpace,
-    eps: Hyper = 1e-6,
-    maxiter: Hyper = 100,
-    ftol: Hyper = 1e-20,
+    eps: Tensor = 1e-6,
+    maxiter: Tensor = 100,
+    ftol: Tensor = 1e-20,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    return geometric_median_list_of_array(models, eps, maxiter, ftol)
-
-
-# Original sourcecode: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
-# Changed to "List comprehension" and rely on torch API only. It is now fully parallel.
-def geometric_median_list_of_array(models, eps, maxiter, ftol):
-    # I think it is impossible to pass this from user space so I hardcode this instead.
-    # Meanwhile I rename "points" as "models"
-    # no_grad part is rare case: Merge algorithm under GPU is never heard.
     weights = torch.ones(len(models), device=models[0].device)
 
     # initialize median estimate at mean
-    median = weighted_average(models, weights)
+    median = weighted_average_tuple(models, weights)
     new_weights = weights
     objective_value = geometric_median_objective(median, models, weights)
 
     # Weiszfeld iterations
-    for _ in range(max(0, round(maxiter))):
+    for _ in range(max(0, round(maxiter.item()))):
         prev_obj_value = objective_value
-        denom = torch.stack([l2distance(p, median) for p in models])
+        denom = torch.stack([torch.dist(p, median) for p in models])
         new_weights = weights / torch.clamp(denom, min=eps)
-        median = weighted_average(models, new_weights)
+        median = weighted_average_tuple(models, new_weights)
 
         objective_value = geometric_median_objective(median, models, weights)
         if abs(prev_obj_value - objective_value) <= ftol * objective_value:
             break
 
-    return weighted_average(models, new_weights)
+    return weighted_average_tuple(models, new_weights)
 
 
-def weighted_average(points, weights):
-    # weighted_average_component is not even required.
+def weighted_average_tuple(points: Tuple, weights):
     return torch.sum(torch.stack([p * weights[i] for i, p in enumerate(points)]), dim=0) / weights.sum()
 
 
-def geometric_median_objective(median, points, weights):
-    return torch.mean(torch.stack([l2distance(point, median) for point in points]) * weights)
-
-
-def l2distance(p1, p2):
-    return torch.dist(p1, p2, p=2)
+def geometric_median_objective(median, points: Tuple, weights):
+    return torch.mean(torch.stack([torch.dist(point, median) for point in points]) * weights)
 
 
 @convert_to_recipe
