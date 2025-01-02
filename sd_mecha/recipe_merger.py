@@ -290,7 +290,7 @@ class CloseInputDictsVisitor(RecipeVisitor):
         node.state_dict = None
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in node.args:
+        for model in itertools.chain(node.args, node.kwargs.values()):
             model.accept(self)
 
 
@@ -332,29 +332,12 @@ class KeyMergeVisitor(RecipeVisitor):
             raise StateDictKeyError(str(e)) from e
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
-        merged_args, merged_kwargs, error = self.__visit_deeper_first(node.args, node.kwargs, node.merge_method)
-        try:
-            if error: raise error
-
-            return node.merge_method.merge_key(
-                merged_args,
-                merged_kwargs,
-                self.key,
-            )
-        except StateDictKeyError:
-            for node_child, merged in zip(
-                itertools.chain(node.args, node.kwargs.keys()),
-                itertools.chain(merged_args, merged_kwargs.keys()),
-            ):
-                if node_child.model_config == node.model_config and node_child.merge_space == node.merge_space:
-                    if isinstance(merged, str):
-                        merged = merged_kwargs[merged]
-
-                    if isinstance(merged, torch.Tensor):
-                        return merged
-                    elif isinstance(merged, StateDict):
-                        return merged[self.key]
-            raise
+        merged_args, merged_kwargs = self.__visit_deeper_first(node.args, node.kwargs, node.merge_method)
+        return node.merge_method.merge_key(
+            merged_args,
+            merged_kwargs,
+            self.key,
+        )
 
     def __visit_deeper_first(
         self,
@@ -379,7 +362,8 @@ class KeyMergeVisitor(RecipeVisitor):
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
         merged_kwargs = {k: v for k, v in merged if not isinstance(k, int)}
-        return merged_args, merged_kwargs, error_holder.get_error()
+        error_holder.try_raise()
+        return merged_args, merged_kwargs
 
 
 class ErrorHolder:
