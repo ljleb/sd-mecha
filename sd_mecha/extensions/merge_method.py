@@ -472,7 +472,7 @@ def value_to_node(node_or_value: RecipeNodeOrLiteral, expected_value_type: type 
         return node_or_value
 
     if issubclass(expected_value_type, StateDict):
-        expected_value_type = typing.get_args(expected_value_type)[0]
+        expected_value_type = (typing.get_args(expected_value_type) + (torch.Tensor,))[0]
 
     if isinstance(node_or_value, expected_value_type):
         return LiteralRecipeNode(node_or_value)
