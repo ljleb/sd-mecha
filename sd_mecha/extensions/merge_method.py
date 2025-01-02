@@ -52,10 +52,10 @@ class FunctionArgs(Generic[P]):
         return self.args + varargs
 
     def _get_varargs_count(self, varargs_count):
-        return varargs_count*int(self.vararg != FunctionArgs.EMPTY_VARARGS)
+        return varargs_count*int(self.has_varargs())
 
     def has_varargs(self):
-        return self.vararg == FunctionArgs.EMPTY_VARARGS
+        return self.vararg != FunctionArgs.EMPTY_VARARGS
 
 
 FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
