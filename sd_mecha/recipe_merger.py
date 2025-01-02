@@ -358,7 +358,7 @@ class KeyMergeVisitor(RecipeVisitor):
             if issubclass(input_types[index], torch.Tensor):
                 merged[index] = error_holder.intercept(nodes[index].accept, self)
             else:
-                merged[index] = error_holder.intercept(MergeNodeMappingWrapper, nodes[index], self)
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], self)
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
         merged_kwargs = {k: v for k, v in merged if not isinstance(k, int)}
@@ -388,23 +388,18 @@ class ErrorHolder:
             return None
 
 
-class MergeNodeMappingWrapper(StateDict):
+class MergeNodeWrapperStateDict(StateDict):
     def __init__(self, merge_node: recipe_nodes.MergeRecipeNode, original_merge_visitor: KeyMergeVisitor):
         self.merge_node = merge_node
         self.original_merge_visitor = original_merge_visitor
-        self.to_args = (), {}
 
         self.__keys_to_merge = None
         self.__keys_to_copy = None
         self.__keys = None
 
-    def to(self, *args, **kwargs):
-        self.to_args = args, kwargs
-        return self
-
     def __getitem__(self, key):
         key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
-        return self.merge_node.accept(key_merger).to(*self.to_args[0], **self.to_args[1])
+        return self.merge_node.accept(key_merger)
 
     def __len__(self):
         return len(self.compute_keys())
