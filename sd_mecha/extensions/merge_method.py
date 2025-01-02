@@ -356,9 +356,7 @@ class MergeMethod:
             config = self.__extract_model_config(annotation)
             kwarg_configs[param_name] = config
 
-        res = FunctionArgs(arg_configs, vararg_model_config, kwarg_configs)
-        return res
-        # default_config = self.get_return_config(res.args_varags(), res.kwargs)
+        return FunctionArgs(arg_configs, vararg_model_config, kwarg_configs)
 
     def __extract_model_config(self, annotation) -> Optional[ModelConfig]:
         if typing.get_origin(annotation) is UnionType:
@@ -379,7 +377,7 @@ class MergeMethod:
         return FunctionArgs(
             spec.args,
             spec.varargs or FunctionArgs.EMPTY_VARARGS,
-            dict(zip(spec.kwonlyargs, spec.kwonlyargs)),
+            {k: k for k in spec.kwonlyargs},
         )
 
     def get_default_args(self) -> FunctionArgs[Any]:
