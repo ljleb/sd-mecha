@@ -153,7 +153,8 @@ class SerializerVisitor(RecipeVisitor):
             return self.__serialize_value(node.value)
         else:
             config = self.__serialize_value(node.model_config.identifier)
-            return self.__add_instruction(f"literal {node.value} {config}")
+            line = f"literal {node.value} {config}"
+            return self.__add_instruction(line)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> str:
         path = self.__serialize_value(node.path)
@@ -162,6 +163,7 @@ class SerializerVisitor(RecipeVisitor):
         return self.__add_instruction(line)
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> str:
+        identifier = self.__serialize_value(node.merge_method.get_identifier())
         args = [
             self.__serialize_value(v)
             for v in node.args
@@ -170,7 +172,7 @@ class SerializerVisitor(RecipeVisitor):
             f"{k}={self.__serialize_value(v)}"
             for k, v in node.kwargs.items()
         ]
-        line = f'merge {self.__serialize_value(node.merge_method.get_identifier())} {" ".join(args)} {" ".join(kwargs)}'
+        line = f'merge {identifier} {" ".join(args)} {" ".join(kwargs)}'
         return self.__add_instruction(line)
 
     def __serialize_value(self, value) -> str:

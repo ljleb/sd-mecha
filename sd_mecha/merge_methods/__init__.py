@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from scipy.stats import binom
 from torch import Tensor
-from typing import Tuple, Dict, Optional
+from typing import Tuple
 from .svd import orthogonal_procrustes, fractional_matrix_power
-from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, weight, delta
+from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict
 from sd_mecha.streaming import StateDictKeyError
 
@@ -150,8 +150,8 @@ def tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Tensor = 0.5,
-    offset: Tensor = 0.0,
+    width: float = 0.5,
+    offset: float = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if a.shape == ():
@@ -173,8 +173,8 @@ def top_k_tensor_sum(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    width: Tensor = 1.0,
-    offset: Tensor = 0.0,
+    width: float = 1.0,
+    offset: float = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     a_flat = torch.flatten(a)
@@ -203,7 +203,7 @@ def kth_abs_value(a: Tensor, k: int) -> Tensor:
         return torch.kthvalue(torch.abs(a.float()), k)[0]
 
 
-def ratio_to_region(width: Tensor, offset: Tensor, n: int) -> Tuple[int, int, bool]:
+def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool]:
     if width < 0:
         offset += width
         width = -width
@@ -226,44 +226,40 @@ def ratio_to_region(width: Tensor, offset: Tensor, n: int) -> Tuple[int, int, bo
 
 
 @convert_to_recipe
-def train_difference(
+def train_difference_mask(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
     alpha: Tensor = 1.0,
     **kwargs,
-) -> Tensor | SameMergeSpace:
-    mask = 1.8 * torch.nan_to_num((b - a).abs() / ((b - a).abs() + (b - c).abs()), nan=0)
-    return a + (b - c) * alpha * mask
+) -> Tensor | MergeSpace["param"]:
+    return alpha * 1.8 * torch.nan_to_num((b - a).abs() / ((b - a).abs() + (b - c).abs()), nan=0)
 
 
 @convert_to_recipe
-def add_opposite(
-    a: StateDict | SameMergeSpace,
-    b: Tensor | SameMergeSpace,
-    c: Tensor | SameMergeSpace,
-    *,
-    alpha: Tensor = 1.0,
-    **kwargs,
-) -> Tensor | SameMergeSpace:
-    a = a[kwargs['key']]
-    mask = 2 * torch.nan_to_num((a - b).abs() / ((a - b).abs() + (a + b - 2*c).abs()), nan=0)
-    return a + (b - c) * alpha * mask
-
-
-@convert_to_recipe
-def clamped_add_opposite(
+def add_opposite_mask(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
     alpha: Tensor = 1.0,
     **kwargs,
-) -> Tensor | SameMergeSpace:
+) -> Tensor | MergeSpace["param"]:
+    return alpha * 2 * torch.nan_to_num((a - b).abs() / ((a - b).abs() + (a + b - 2*c).abs()), nan=0)
+
+
+@convert_to_recipe
+def add_strict_opposite_mask(
+    a: Tensor | SameMergeSpace,
+    b: Tensor | SameMergeSpace,
+    c: Tensor | SameMergeSpace,
+    *,
+    alpha: Tensor = 1.0,
+    **kwargs,
+) -> Tensor | MergeSpace["param"]:
     threshold = torch.maximum(torch.abs(a - c), torch.abs(b - c))
-    mask = torch.clamp(torch.nan_to_num((c - a) * (b - c) / threshold**2, nan=0), 0) * 2
-    return a + (b - c) * alpha * mask
+    return alpha * torch.clamp(torch.nan_to_num((c - a) * (b - c) / threshold**2, nan=0), 0) * 2
 
 
 @convert_to_recipe
@@ -287,7 +283,6 @@ def select_max_white_delta(
     alpha: Tensor = 0.5,
     **kwargs,
 ) -> Tensor | MergeSpace["delta"]:
-    original_shape = a.shape
     a_norm = (a - a.mean()) / a.std(correction=0)
     b_norm = (b - b.mean()) / b.std(correction=0)
 
@@ -329,8 +324,8 @@ def distribution_crossover(
     b: Tensor | SameMergeSpace,
     c: Tensor | SameMergeSpace,
     *,
-    alpha: Tensor,
-    tilt: Tensor,
+    alpha: float,
+    tilt: float,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if alpha == 0:
@@ -360,8 +355,8 @@ def crossover(
     a: Tensor | SameMergeSpace,
     b: Tensor | SameMergeSpace,
     *,
-    alpha: Tensor = 0.5,
-    tilt: Tensor = 0.0,
+    alpha: float = 0.5,
+    tilt: float = 0.0,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
     if alpha == 0:
@@ -385,7 +380,7 @@ def crossover(
     return torch.fft.irfftn(x_dft, s=shape)
 
 
-def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: Tensor, tilt: Tensor, device=None):
+def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float, device=None):
     """
     Create a crossover filter. The cut is first tilted around (0, 0), then slid along its normal until it touches the point (alpha, 1 - alpha).
     :param shape: shape of the filter
@@ -440,21 +435,26 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: Tensor, tilt: Tens
     return dft_filter
 
 
-@convert_to_recipe(volatile_hypers=["cache"])
+@convert_to_recipe
 def rotate(
-    a: Tensor | SameMergeSpace,
-    b: Tensor | SameMergeSpace,
+    a_dict: StateDict | SameMergeSpace,
+    b_dict: StateDict | SameMergeSpace,
     *,
-    alignment: Tensor = 1.0,
+    alignment: float = 1.0,
     alpha: Tensor = 0.0,
-    cache: Optional[Dict[str, Dict[str, Tensor]]] = None,
     **kwargs,
 ) -> Tensor | SameMergeSpace:
-    if alignment == 0 and alpha == 0:
-        return a
+    key = kwargs["key"]
+    if math.isclose(alignment, 0) and torch.allclose(alpha, torch.zeros_like(alpha)):
+        return a_dict[key]
 
+    if math.isclose(alignment, 1) and torch.allclose(alpha, torch.ones_like(alpha)):
+        return b_dict[key]
+
+    a = a_dict[key]
+    b = b_dict[key]
     if len(a.shape) <= 1 or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, alpha=alpha)
+        return (1-alpha)*a + alpha*b
 
     is_conv = len(a.shape) == 4 and a.shape[-2:].numel() != 1
     if is_conv:
@@ -469,36 +469,40 @@ def rotate(
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
+    # todo: actually implement cache
+    cache = kwargs["cache"]
     if cache is not None:
         key = kwargs["key"]
         if key not in cache:
             cache[key] = {}
         cache = cache[key]
 
+    alignment_is_float = math.isclose(alignment, round(alignment))
+
     if cache is not None and "rotation" in cache:
         rotation = transform = cache["rotation"].to(a.device, a.dtype)
     else:
-        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment.is_floating_point())
+        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
         if cache is not None:
             cache["rotation"] = rotation.to("cpu", torch.float16)
 
-    if alignment.is_floating_point():
-        transform = fractional_matrix_power(transform, alignment.item(), cache)
-    elif alignment == 0:
+    if alignment_is_float:
+        transform = fractional_matrix_power(transform, alignment, cache)
+    elif math.isclose(alignment, 0):
         transform = torch.eye(
             len(transform),
             dtype=transform.dtype,
             device=transform.device,
         )
-    elif alignment != 1:
-        transform = torch.linalg.matrix_power(transform, alignment.round().item())
+    elif not math.isclose(alignment, 1):
+        transform = torch.linalg.matrix_power(transform, round(alignment))
 
-    if alpha != 0:
+    if not torch.allclose(alpha, torch.zeros_like(alpha)):
         # interpolate the relationship between the neurons
-        a_neurons = weighted_sum.__wrapped__(a_neurons, b_neurons @ rotation.T, alpha=alpha)
+        a_neurons = (1-alpha)*a_neurons + alpha*b_neurons@rotation.T
 
     a_neurons @= transform
-    a_neurons += weighted_sum.__wrapped__(a_centroid, b_centroid, alpha=alignment)
+    a_neurons += (1-alignment)*a_centroid + alignment*b_centroid
     return a_neurons.reshape_as(a)
 
 
@@ -523,10 +527,32 @@ def clamp(
             smallest_positive = torch.where((smallest_positive >= bound) & (bound >= average), bound, smallest_positive)
             largest_negative = torch.where((largest_negative <= bound) & (bound <= average), bound, largest_negative)
 
-        maximums = weighted_sum.__wrapped__(maximums, smallest_positive, alpha=stiffness)
-        minimums = weighted_sum.__wrapped__(minimums, largest_negative, alpha=stiffness)
+        maximums = (1-stiffness)*maximums + stiffness*smallest_positive
+        minimums = (1-stiffness)*minimums + stiffness*largest_negative
 
     return torch.minimum(torch.maximum(a, minimums), maximums)
+
+
+# todo: change merge method api to work like this:
+from typing import Any
+class ParamData:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+def Param(*args, **kwargs) -> type[Any]:
+    return type("Param", (), {
+        "data": ParamData(*args, **kwargs)
+    })
+
+@convert_to_recipe
+def fn_test(
+    x: Param(StateDict, config="sdxl-sgm"),
+    y: Param(Tensor) = 4,
+):
+    print(x)
+
+fn_test(3)
 
 
 @convert_to_recipe
@@ -853,3 +879,36 @@ def fallback(
         return a[key]
     except StateDictKeyError:
         return default[key]
+
+
+@convert_to_recipe
+def cast(
+    a: Tensor,
+    device: str = None,
+    dtype: str = None,
+    **kwargs,
+) -> Tensor:
+    to_kwargs = {}
+    if device is not None:
+        to_kwargs["device"] = device
+
+    if dtype is not None:
+        if dtype not in cast_dtype_map:
+            raise ValueError(f"Unknown dtype {dtype}. Possible values are None, {', '.join(cast_dtype_map.keys())}")
+        to_kwargs["dtype"] = cast_dtype_map[dtype]
+
+    return a.to(**to_kwargs)
+
+
+cast_dtype_map = {
+    "float64": torch.float64,
+    "float32": torch.float32,
+    "float16": torch.float16,
+    "bfloat16": torch.bfloat16,
+    "float8_e4m3fn": torch.float8_e4m3fn,
+    "float8_e5m2": torch.float8_e5m2,
+    "int64": torch.int64,
+    "int32": torch.int32,
+    "int16": torch.int16,
+    "int8": torch.int8,
+}

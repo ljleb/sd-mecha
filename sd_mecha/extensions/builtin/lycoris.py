@@ -1,6 +1,4 @@
 import dataclasses
-
-import psutil
 import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha import extensions
@@ -14,8 +12,8 @@ def _register_all_lycoris_configs():
     base_configs = extensions.model_config.get_all_base()
     for base_config in base_configs:
         for lyco_config in (
-            LycorisLazyModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)),
-            LycorisLazyModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
+                LycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)),
+                LycorisModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
         ):
             extensions.model_config.register_aux(lyco_config)
             lora_config_id = lyco_config.identifier
@@ -59,51 +57,28 @@ def compose_lora_up_down(state_dict: Mapping[str, torch.Tensor], key: str):
     return res
 
 
-class LycorisLazyModelConfig(LazyModelConfigBase):
-    def __init__(self, base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[str]):
+class LycorisModelConfig(LazyModelConfigBase):
+    def __init__(self, base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[str] | str):
         super().__init__()
         self.base_config = base_config
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
-        self.algorithms = algorithms
+        self.algorithms = list(sorted(algorithms)) if not isinstance(algorithms, str) else [algorithms]
 
     @property
     def identifier(self) -> str:
         return f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
 
     def create_config(self):
-        return to_lycoris_config(self.base_config, self.lycoris_identifier, self.prefix, self.algorithms)
+        if "lora" not in self.algorithms or len(self.algorithms) != 1:
+            raise ValueError(f"unknown lycoris algorithms {self.algorithms}")
+
+        identifier = f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
+        keys = _to_lycoris_keys(self.base_config.keys, self.algorithms, self.prefix)
+        return ModelConfigImpl(identifier, keys)
 
     def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
         return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.prefix)
-
-
-def to_lycoris_config(base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[str]) -> ModelConfig:
-    if isinstance(algorithms, str):
-        algorithms = [algorithms]
-    algorithms = list(sorted(algorithms))
-
-    if "lora" not in algorithms or len(algorithms) != 1:
-        raise ValueError(f"unknown lycoris algorithms {algorithms}")
-
-    identifier = f"{base_config.identifier}_{lycoris_identifier}_{'_'.join(algorithms)}"
-    orphan_keys_to_copy = _to_lycoris_keys(base_config.orphan_keys_to_copy, algorithms, prefix)
-    components = {
-        component_id: dataclasses.replace(
-            component,
-            orphan_keys_to_copy=_to_lycoris_keys(component.orphan_keys_to_copy, algorithms, prefix),
-            blocks={
-                block_id: dataclasses.replace(
-                    block,
-                    keys_to_merge=_to_lycoris_keys(block.keys_to_merge, algorithms, prefix),
-                    keys_to_copy=_to_lycoris_keys(block.keys_to_copy, algorithms, prefix),
-                )
-                for block_id, block in component.blocks.items()
-            },
-        )
-        for component_id, component in base_config.components.items()
-    }
-    return ModelConfigImpl(identifier, orphan_keys_to_copy, components)
 
 
 def _to_lycoris_keys(

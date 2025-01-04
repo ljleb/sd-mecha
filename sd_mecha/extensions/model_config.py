@@ -18,77 +18,6 @@ except ImportError:
 StateDictKey = str
 
 
-# todo: flatten format, delete blocks entirely
-
-
-@dataclasses.dataclass
-class ModelConfigBlock:
-    keys_to_merge: Mapping[StateDictKey, TensorMetadata]
-    keys_to_copy: Mapping[StateDictKey, TensorMetadata]
-
-    def __post_init__(self):
-        keys_to_merge = OrderedDict(self.keys_to_merge)
-        for k, v in self.keys_to_merge.items():
-            keys_to_merge[k] = v
-            if isinstance(v, dict):
-                keys_to_merge[k] = TensorMetadata(**v)
-        self.keys_to_merge = keys_to_merge
-
-        keys_to_copy = OrderedDict(self.keys_to_copy)
-        for k, v in self.keys_to_copy.items():
-            keys_to_copy[k] = v
-            if isinstance(v, dict):
-                keys_to_copy[k] = TensorMetadata(**v)
-        self.keys_to_copy = keys_to_copy
-
-    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            **self.keys_to_merge,
-            **self.keys_to_copy,
-        )
-
-
-@dataclasses.dataclass
-class ModelConfigComponent:
-    orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata]
-    blocks: Mapping[str, ModelConfigBlock]
-
-    def __post_init__(self):
-        orphan_keys_to_copy = OrderedDict(self.orphan_keys_to_copy)
-        for k, v in self.orphan_keys_to_copy.items():
-            orphan_keys_to_copy[k] = v
-            if isinstance(v, dict):
-                orphan_keys_to_copy[k] = TensorMetadata(**v)
-        self.orphan_keys_to_copy = orphan_keys_to_copy
-
-        blocks = OrderedDict(self.blocks)
-        for k, v in self.blocks.items():
-            blocks[k] = v
-            if isinstance(v, dict):
-                blocks[k] = ModelConfigBlock(**v)
-        self.blocks = blocks
-
-    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            **self.compute_keys_to_merge(),
-            **self.compute_keys_to_copy(),
-        )
-
-    def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            (k, v)
-            for block in self.blocks.values()
-            for k, v in block.keys_to_merge.items()
-        )
-
-    def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
-        return self.orphan_keys_to_copy | OrderedDict(
-            (k, v)
-            for block in self.blocks.values()
-            for k, v in block.keys_to_copy.items()
-        )
-
-
 @runtime_checkable
 class ModelConfig(Protocol):
     def __class_getitem__(cls, item) -> type:
@@ -105,16 +34,6 @@ class ModelConfig(Protocol):
     def identifier(self) -> str:
         raise NotImplementedError
 
-    @property
-    @abc.abstractmethod
-    def orphan_keys_to_copy(self) -> Mapping[StateDictKey, TensorMetadata]:
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def components(self) -> Mapping[str, ModelConfigComponent]:
-        raise NotImplementedError
-
     @abc.abstractmethod
     def get_architecture_identifier(self) -> str:
         raise NotImplementedError
@@ -123,71 +42,36 @@ class ModelConfig(Protocol):
     def get_implementation_identifier(self) -> str:
         raise NotImplementedError
 
+    @property
     @abc.abstractmethod
-    def hyper_keys(self) -> Iterable[str]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_hyper_block_key(self, component_identifier, block_identifier) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def get_hyper_default_key(self, component_identifier) -> str:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
+    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
         raise NotImplementedError
 
 
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
     __identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
-    __orphan_keys_to_copy: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(metadata={"serial_name": "orphan_keys_to_copy"})
-    __components: Mapping[str, ModelConfigComponent] = dataclasses.field(metadata={"serial_name": "components"})
+    __keys: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(metadata={"serial_name": "keys"})
 
     def __post_init__(self):
-        if not re.fullmatch("[a-z0-9_+]+-[a-z0-9_+]+", self.identifier):
+        if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
             raise ValueError(
                 f"Identifier of model {self.identifier} is invalid: "
-                "it must only contain lowercase alphanumerical characters or '+' or '_', "
+                "it must only contain lowercase alphanumerical characters, '.', '_' or '+', "
                 "and must match the pattern '<architecture>-<implementation>'. "
                 "An example of valid identifier is 'flux_dev-flux'"
             )
 
-        orphan_keys_to_copy = OrderedDict(self.orphan_keys_to_copy)
-        for k, v in self.orphan_keys_to_copy.items():
-            orphan_keys_to_copy[k] = v
+        keys = OrderedDict(self.__keys)
+        for k, v in self.__keys.items():
+            keys[k] = v
             if isinstance(v, dict):
-                orphan_keys_to_copy[k] = TensorMetadata(**v)
-        self.__orphan_keys_to_copy = orphan_keys_to_copy
-
-        components = OrderedDict(self.components)
-        for k, v in self.components.items():
-            components[k] = v
-            if isinstance(v, dict):
-                components[k] = ModelConfigComponent(**v)
-        self.__components = components
+                keys[k] = TensorMetadata(**v)
+        self.__keys = keys
 
     @property
     def identifier(self) -> str:
         return self.__identifier
-
-    @property
-    def orphan_keys_to_copy(self) -> Mapping[StateDictKey, TensorMetadata]:
-        return self.__orphan_keys_to_copy
-
-    @property
-    def components(self) -> Mapping[str, ModelConfigComponent]:
-        return self.__components
 
     def get_architecture_identifier(self):
         return self.identifier.split("-")[0]
@@ -195,44 +79,9 @@ class ModelConfigImpl(ModelConfig):
     def get_implementation_identifier(self):
         return self.identifier.split("-")[1]
 
-    def hyper_keys(self) -> Iterable[str]:
-        for component_name, component in self.components.items():
-            for block_name in component.blocks.keys():
-                yield self.get_hyper_block_key(component_name, block_name)
-
-    def get_hyper_block_key(self, component_identifier, block_identifier):
-        if component_identifier not in self.components:
-            raise ValueError(f"no such component: {component_identifier}")
-        if block_identifier not in self.components[component_identifier].blocks:
-            raise ValueError(f"no such block in component {component_identifier}: {block_identifier}")
-
-        return f"{self.identifier}-{component_identifier}_block_{block_identifier}"
-
-    def get_hyper_default_key(self, component_identifier):
-        if component_identifier not in self.components:
-            raise ValueError(f"no such component: {component_identifier}")
-
-        return f"{self.identifier}-{component_identifier}_default"
-
-    def compute_keys(self) -> Dict[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            **self.compute_keys_to_merge(),
-            **self.compute_keys_to_copy(),
-        )
-
-    def compute_keys_to_merge(self) -> Dict[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            (k, v)
-            for component in self.components.values()
-            for k, v in component.compute_keys_to_merge().items()
-        )
-
-    def compute_keys_to_copy(self) -> Dict[StateDictKey, TensorMetadata]:
-        return self.orphan_keys_to_copy | OrderedDict(
-            (k, v)
-            for component in self.components.values()
-            for k, v in component.compute_keys_to_copy().items()
-        )
+    @property
+    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return self.__keys
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):
@@ -283,7 +132,7 @@ def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
     return attribute
 
 
-class LazyModelConfig(LazyModelConfigBase):
+class YamlModelConfig(LazyModelConfigBase):
     def __init__(self, yaml_config_file: pathlib.Path):
         super().__init__()
         self.yaml_config_file = yaml_config_file

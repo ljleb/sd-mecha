@@ -10,7 +10,7 @@ import numpy
 import torch
 import warnings
 from collections import OrderedDict
-from typing import Optional, Dict, Mapping, Iterator, Iterable, Tuple
+from typing import Optional, Mapping, Iterator, Iterable, Tuple
 from tqdm import tqdm
 from sd_mecha.typing import WriteOnlyMapping
 
@@ -187,7 +187,7 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
     def __init__(
         self,
         file_path: pathlib.Path,
-        header: Dict[str, TensorMetadata],
+        header: Mapping[str, TensorMetadata],
         mecha_recipe: str,
         minimum_buffer_size: int,
     ):
@@ -235,7 +235,7 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
     def __len__(self) -> int:
         return len(self.header)
 
-    def _init_buffer(self, header: Dict[str, TensorMetadata]) -> int:
+    def _init_buffer(self, header: Mapping[str, TensorMetadata]) -> int:
         worst_case_header = OrderedDict(sorted(
             header.items(),
             key=lambda item: item[1].get_byte_size(),
@@ -368,10 +368,10 @@ DTYPE_MAPPING = {
     'F32': (torch.float32, 4),
     'F16': (torch.float16, 2),
     'BF16': (torch.bfloat16, 2),
-    'I8': (torch.int8, 1),
     'I64': (torch.int64, 8),
     'I32': (torch.int32, 4),
     'I16': (torch.int16, 2),
+    'I8': (torch.int8, 1),
     "F8_E4M3": (torch.float8_e4m3fn, 1),
     "F8_E5M2": (torch.float8_e5m2, 1),
 }

@@ -8,7 +8,6 @@ from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.extensions.merge_method import RecipeNodeOrLiteral, value_to_node
-from sd_mecha.hypers import Hyper, blocks, default
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 from sd_mecha.merge_methods import (
     weighted_sum,
@@ -28,7 +27,7 @@ from sd_mecha.merge_methods import (
     distribution_crossover,
     crossover,
     clamp,
-    model_stock_for_tensor,
+    model_stock,
     fallback,
 )
 
@@ -52,7 +51,7 @@ def serialize_and_save(
 
 def add_difference(
     a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
-    alpha: Hyper = 1.0,
+    alpha: float = 1.0,
     clamp_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -96,7 +95,7 @@ def add_difference(
 
 def add_perpendicular(
     a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: RecipeNodeOrLiteral, *,
-    alpha: Hyper = 1.0,
+    alpha: float = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -142,8 +141,8 @@ def add_perpendicular(
 def add_difference_ties(
     base: RecipeNodeOrLiteral,
     *models: RecipeNodeOrLiteral,
-    alpha: Hyper,
-    k: Hyper = 0.2,
+    alpha: float,
+    k: float = 0.2,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -182,15 +181,15 @@ def add_difference_ties(
 def add_difference_ties_extended(
     base: RecipeNodeOrLiteral,
     *models: RecipeNodeOrLiteral,
-    alpha: Hyper,
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    apply_stock: Hyper = 0.0,
-    cos_eps: Hyper = 1e-6,
-    apply_median: Hyper = 0.0,
-    eps: Hyper = 1e-6,
-    maxiter: Hyper = 100,
-    ftol: Hyper =1e-20,
+    alpha: float = 1.0,
+    k: float = 0.2,
+    vote_sgn: float = 0.0,
+    apply_stock: float = 0.0,
+    cos_eps: float = 1e-6,
+    apply_median: float = 0.0,
+    eps: float = 1e-6,
+    maxiter: float = 100,
+    ftol: float =1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -218,8 +217,6 @@ def add_difference_ties_extended(
         eps=eps,
         maxiter=maxiter,
         ftol=ftol,
-        device=device,
-        dtype=dtype,
     )
 
     # Obtain merged checkpoint
@@ -228,15 +225,13 @@ def add_difference_ties_extended(
     return add_difference(
         base, res,
         alpha=alpha,
-        device=device,
-        dtype=dtype,
     )
 
 
 def copy_region(
     a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
-    width: Hyper = 1.0,
-    offset: Hyper = 0.0,
+    width: float = 1.0,
+    offset: float = 0.0,
     top_k: bool = False,
     device: Optional[str] = "cuda",
     dtype: Optional[torch.dtype] = None,
@@ -249,13 +244,9 @@ def copy_region(
 
         a = subtract(
             a, c,
-            device=device,
-            dtype=dtype,
         )
         b = subtract(
             b, c,
-            device=device,
-            dtype=dtype,
         )
 
     copy_method = [merge_methods.tensor_sum, merge_methods.top_k_tensor_sum][int(top_k)]
@@ -263,16 +254,12 @@ def copy_region(
         a, b,
         width=width,
         offset=offset,
-        device=device,
-        dtype=dtype,
     )
 
     if c is not None:
         res = merge_methods.add_difference(
             c, res,
             alpha=1.0,
-            device=device,
-            dtype=dtype,
         )
 
     return res
@@ -283,10 +270,8 @@ tensor_sum = copy_region
 
 def rotate(
     a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
-    alignment: Hyper = 1.0,
-    alpha: Hyper = 0.0,
-    device: Optional[str] = "cuda",
-    dtype: Optional[torch.dtype] = None,
+    alignment: float = 1.0,
+    alpha: float = 0.0,
     cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
@@ -297,13 +282,9 @@ def rotate(
 
         a = subtract(
             a, c,
-            device=device,
-            dtype=dtype,
         )
         b = subtract(
             b, c,
-            device=device,
-            dtype=dtype,
         )
 
     res = merge_methods.rotate(
@@ -311,16 +292,12 @@ def rotate(
         alignment=alignment,
         alpha=alpha,
         cache=cache,
-        device=device,
-        dtype=dtype,
     )
 
     if c is not None:
         res = merge_methods.add_difference(
             c, res,
             alpha=1.0,
-            device=device,
-            dtype=dtype,
         )
 
     return res
@@ -329,11 +306,11 @@ def rotate(
 def dropout(
     a: RecipeNodeOrLiteral,
     *models: RecipeNodeOrLiteral,
-    probability: Hyper = 0.9,
-    alpha: Hyper = 0.5,
-    overlap: Hyper = 1.0,
-    overlap_emphasis: Hyper = 0.0,
-    seed: Optional[Hyper] = None,
+    probability: float = 0.9,
+    alpha: float = 0.5,
+    overlap: float = 1.0,
+    overlap_emphasis: float = 0.0,
+    seed: Optional[float] = None,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -363,18 +340,18 @@ ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
 def ties_with_dare(
     base: RecipeNodeOrLiteral,
     *models: RecipeNodeOrLiteral,
-    probability: Hyper = 0.9,
-    rescale: Hyper = 1.0,
-    alpha: Hyper = 0.5,
-    seed: Hyper = -1,
-    k: Hyper = 0.2,
-    vote_sgn: Hyper = 0.0,
-    apply_stock: Hyper = 0.0,
-    cos_eps: Hyper = 1e-6,
-    apply_median: Hyper = 0.0,
-    eps: Hyper = 1e-6,    
-    maxiter: Hyper = 100, 
-    ftol: Hyper = 1e-20,
+    probability: float = 0.9,
+    rescale: float = 1.0,
+    alpha: float = 0.5,
+    seed: float = -1,
+    k: float = 0.2,
+    vote_sgn: float = 0.0,
+    apply_stock: float = 0.0,
+    cos_eps: float = 1e-6,
+    apply_median: float = 0.0,
+    eps: float = 1e-6,
+    maxiter: float = 100,
+    ftol: float = 1e-20,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -415,7 +392,7 @@ def ties_with_dare(
 def model_stock_n_models(
     base: RecipeNodeOrLiteral,
     *models: RecipeNodeOrLiteral,
-    cos_eps: Hyper = 1e-6,    
+    cos_eps: float = 1e-6,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
@@ -431,7 +408,7 @@ def model_stock_n_models(
     # This is hacky: Both w_avg and w_h will be calculated there.    
     # Notice that t and cos_theta is vector instead of single value.
     # Conceptually it could compatable with TIES, but algorithm should be rewritten.
-    res = model_stock_for_tensor(
+    res = model_stock(
         *deltas,
         cos_eps=cos_eps,
         device=device, 

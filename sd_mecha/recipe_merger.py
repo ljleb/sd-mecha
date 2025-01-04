@@ -9,7 +9,6 @@ import pathlib
 import sys
 import threading
 import torch
-from collections import OrderedDict
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
@@ -72,27 +71,19 @@ class RecipeMerger:
         if threads is None:
             threads = min(max(total_files_open, 2), os.cpu_count(), 8)
 
+        # todo: use fake tensors to detect keys to merge and output dtype, etc.
+        # todo: wrap recipe in node that calls to(save_device, save_dtype) if any of device or dtype are passed
         with open_input_dicts(recipe, self.__base_dirs, buffer_size_per_file):
             model_config = recipe.model_config
             if strict_weight_space and recipe.merge_space != "weight":
                 raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
 
-            # ideally we use keys in the order the model config lists them
-            # model configs should be responsible for default key ordering
-            #   (in some cases we can optimize the key ordering from input models, disregard default order in this case)
-            # however I cannot be bothered to update the current config files
-            # hence we force lexicographic ordering here for the time being :>
-            #   (it's the exact right ordering most of the time)
-            recipe_keys = OrderedDict(sorted(model_config.compute_keys().items(), key=lambda t: t[0]))
-
-            keys_to_merge = model_config.compute_keys_to_merge()
+            recipe_keys = model_config.keys
             output = self.__normalize_output_to_dict(
                 output,
                 recipe_keys,
-                keys_to_merge,
                 recipe_serializer.serialize(recipe),
                 buffer_size_per_file // max(1, threads),
-                save_dtype,
             )
             if threads == 0:
                 thread_local_data = SimpleNamespace()
@@ -126,10 +117,8 @@ class RecipeMerger:
         self,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
         merged_header: Mapping[str, TensorMetadata],
-        keys_to_merge: Iterable[str],
         serialized_recipe: str,
         buffer_size_per_thread: int,
-        dtype: torch.dtype,
     ):
         if isinstance(output, (str, pathlib.Path)):
             if not isinstance(output, pathlib.Path):
@@ -139,11 +128,6 @@ class RecipeMerger:
             if not output.suffix:
                 output = output.with_suffix(".safetensors")
             logging.info(f"Saving to {output}")
-
-            merged_header = {
-                k: dataclasses.replace(v, dtype=dtype) if k in keys_to_merge else v
-                for k, v in merged_header.items()
-            }
 
             output = OutSafetensorsDict(
                 output,
@@ -176,7 +160,7 @@ class RecipeMerger:
     def __track_progress(self, f, key, key_shape, progress):
         @functools.wraps(f)
         def track_progress(*args, **kwargs):
-            progress.set_postfix({"key": key, "shape": list(key_shape)})
+            progress.set_postfix({"key": key} | ({"shape": list(key_shape)} if key_shape is not None else {}))
             res = f(*args, **kwargs)
             progress.update()
             return res
@@ -266,7 +250,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
             state_dict_set = set(state_dict)
-            matched_keys = state_dict_set.intersection(model_config.compute_keys())
+            matched_keys = state_dict_set.intersection(model_config.keys)
             configs_affinity[model_config.identifier] = len(matched_keys)
             if len(matched_keys) == len(state_dict_set):
                 break
@@ -361,7 +345,7 @@ class KeyMergeVisitor(RecipeVisitor):
                 merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], self)
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
-        merged_kwargs = {k: v for k, v in merged if not isinstance(k, int)}
+        merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
         error_holder.try_raise()
         return merged_args, merged_kwargs
 
@@ -393,10 +377,6 @@ class MergeNodeWrapperStateDict(StateDict):
         self.merge_node = merge_node
         self.original_merge_visitor = original_merge_visitor
 
-        self.__keys_to_merge = None
-        self.__keys_to_copy = None
-        self.__keys = None
-
     def __getitem__(self, key):
         key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
         return self.merge_node.accept(key_merger)
@@ -414,17 +394,5 @@ class MergeNodeWrapperStateDict(StateDict):
     def model_config(self) -> ModelConfig:
         return self.merge_node.model_config
 
-    def compute_keys_to_merge(self):
-        if self.__keys_to_merge is None:
-            self.__keys_to_merge = self.model_config.compute_keys_to_merge()
-        return self.__keys_to_merge
-
-    def compute_keys_to_copy(self):
-        if self.__keys_to_copy is None:
-            self.__keys_to_copy = self.model_config.compute_keys_to_copy()
-        return self.__keys_to_copy
-
     def compute_keys(self):
-        if self.__keys is None:
-            self.__keys = self.model_config.compute_keys()
-        return self.__keys
+        return self.model_config.keys

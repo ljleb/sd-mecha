@@ -7,18 +7,17 @@ import pathlib
 import torch
 import typing
 from sd_mecha import extensions
-from sd_mecha.extensions import merge_space
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor
 from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbolBase, AnyMergeSpaceBase
 from sd_mecha.extensions.model_config import ModelConfig, ModelConfigTag
 from types import UnionType, SimpleNamespace
-from typing import Optional, Callable, Dict, Tuple, List, Set, Iterable, Any, Generic, TypeVar, Mapping
+from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 
 
 RecipeNodeOrLiteral = RecipeNode | pathlib.Path | str | int | float | dict
 
 
-T = TypeVar('T', torch.Tensor, str)
+T = TypeVar('T', torch.Tensor, str, int, float)
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
     @property
     @abc.abstractmethod
@@ -34,7 +33,7 @@ P = TypeVar('P')
 @dataclasses.dataclass
 class FunctionArgs(Generic[P]):
     args: List[P]
-    vararg: P | SimpleNamespace  # using SimpleNamespace as "empty" because P can be Optional[X]
+    vararg: P | SimpleNamespace  # using SimpleNamespace as "empty" because P can be Optional
     kwargs: Dict[str, P]
 
     def as_dict(self, varargs_count=0) -> Dict[int | str, P]:
@@ -80,35 +79,29 @@ _valid_return_type_permutations = _common_valid_type_permutations + tuple(
 )
 _valid_param_type_permutations = _common_valid_type_permutations + tuple(
     perm
-    for t in T.__constraints__
     for perm in (
-        (StateDict[t],),
-        (StateDict[t], ModelConfigTag),
-        (StateDict[t], AnyMergeSpaceBase),
-        (StateDict[t], ModelConfigTag, AnyMergeSpaceBase),
-        (StateDict[t], AnyMergeSpaceBase, ModelConfigTag),
+        (StateDict,),
+        (StateDict, ModelConfigTag),
+        (StateDict, AnyMergeSpaceBase),
+        (StateDict, ModelConfigTag, AnyMergeSpaceBase),
+        (StateDict, AnyMergeSpaceBase, ModelConfigTag),
     )
 )
 
 
 class MergeMethod:
-    def __init__(self, f: Callable, identifier: str, volatile_params: Iterable[str]):
+    def __init__(self, f: Callable, identifier: str):
         self.__wrapped__ = f
         self.identifier = identifier
-        self.volatile_params = volatile_params
         self.__validate_f()
 
     def __validate_f(self):
         spec = inspect.getfullargspec(self.__wrapped__)
         hints = typing.get_type_hints(self.__wrapped__)
+        params = self.get_param_names()
+        defaults = self.get_default_args()
         merge_spaces = self.get_input_merge_spaces()
         input_configs = self.get_input_configs()
-
-        for volatile_hyper in self.volatile_params:
-            if volatile_hyper in spec.kwonlydefaults:
-                continue
-            elif volatile_hyper in spec.kwonlyargs:
-                raise TypeError(f"Keyword-only parameter '{volatile_hyper}' was marked as volatile but it does not have a default value")
 
         if spec.varkw is None:
             raise TypeError(f"for forward compatibility reasons, **kwargs must be included in the function parameters")
@@ -135,12 +128,14 @@ class MergeMethod:
                 )
 
         for param_idx in itertools.chain(range(len(spec.args) + int(spec.varargs is not None)), ["return"] + spec.kwonlyargs):
-            param_name = spec.args[param_idx] if isinstance(param_idx, int) else param_idx
-            if param_name in self.volatile_params:
-                continue
+            param_name = (spec.args + [spec.varargs] * int(spec.varargs is not None))[param_idx] if isinstance(param_idx, int) else param_idx
 
-            if isinstance(param_idx, int) and param_idx >= len(spec.args) - len(spec.defaults):
-                if merge_spaces.args[param_idx] not in (MergeSpace["param"], None):
+            if (
+                isinstance(param_idx, int) and param_idx >= len(params.args) - len(defaults.args) and param_idx < len(params.args) or
+                isinstance(param_idx, str) and param_idx in (spec.kwonlydefaults or {})
+            ):
+                param_merge_space = merge_spaces.args_varags()[param_idx] if isinstance(param_idx, int) else merge_spaces.kwargs[param_idx]
+                if param_merge_space != MergeSpace["param"]:
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
             param_type = hints[param_name]
@@ -148,21 +143,18 @@ class MergeMethod:
             type_perms = _valid_param_type_permutations if param_name != "return" else _valid_return_type_permutations
             validate_type_permutation(param_name, union_types, type_perms)
 
-        input_configs_are_explicit = all(config is not None for config in input_configs.as_dict().values())
+        input_configs_are_explicit = all(config is not None for config in input_configs.as_dict(1).values())
         if input_configs_are_explicit and self.get_return_config(input_configs.args_varags(), input_configs.kwargs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
 
     def merge_key(
         self,
         input_args: Tuple[torch.Tensor | StateDict, ...],
-        input_kwargs: Dict[str, torch.Tensor | StateDict, ...],
+        input_kwargs: Dict[str, torch.Tensor | StateDict],
         key: str,
     ):
         args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key)
         return self.__wrapped__(*args, **kwargs)
-
-    def __call__(self, *args, **kwargs):
-        return self.create_recipe(*args, **kwargs)
 
     def __get_args_kwargs(
         self,
@@ -172,7 +164,11 @@ class MergeMethod:
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
         return input_args, input_kwargs | {
             "key": key,
+            "cache": None,
         }
+
+    def __call__(self, *args, **kwargs):
+        return self.create_recipe(*args, **kwargs)
 
     def create_recipe(self, *args, **kwargs):
         params = self.get_param_names()
@@ -193,8 +189,8 @@ class MergeMethod:
 
         varargs_count = len(args) - len(params.args)
         input_configs = self.get_input_configs()
-        merge_spaces = self.get_input_merge_spaces()
         default_config = self.get_return_config(input_configs.args_varags(varargs_count), input_configs.kwargs)
+        merge_spaces = self.get_input_merge_spaces()
 
         def arg_to_node(k: int | str, arg: Any, expected_type: type):
             nonlocal default_config
@@ -202,16 +198,16 @@ class MergeMethod:
             return value_to_node(arg, expected_type).accept(InferModelConfigVisitor(default_config, merge_space))
 
         input_types = self.get_input_types()
-        args = (
-            arg_to_node(i, arg, input_types.args[i]) if k not in self.volatile_params else arg
+        args = tuple(
+            arg_to_node(i, arg, input_types.args[i])
             for i, (arg, k) in enumerate(zip(args, params.args_varags(varargs_count)))
         )
         kwargs = {
-            k: arg_to_node(k, arg, input_types.kwargs[k]) if k not in self.volatile_params else arg
+            k: arg_to_node(k, arg, input_types.kwargs[k])
             for k, arg in kwargs.items()
         }
 
-        return MergeRecipeNode(self, *args, **kwargs)
+        return MergeRecipeNode(self, args, kwargs)
 
     def get_input_types(self) -> FunctionArgs[type]:
         params = self.get_param_names()
@@ -375,17 +371,18 @@ class MergeMethod:
     def get_param_names(self) -> FunctionArgs[str]:
         spec = inspect.getfullargspec(self.__wrapped__)
         return FunctionArgs(
-            spec.args,
+            spec.args or [],
             spec.varargs or FunctionArgs.EMPTY_VARARGS,
-            {k: k for k in spec.kwonlyargs},
+            spec.kwonlyargs or {},
         )
 
     def get_default_args(self) -> FunctionArgs[Any]:
         spec = inspect.getfullargspec(self.__wrapped__)
-        return FunctionArgs(list(spec.defaults or ()), FunctionArgs.EMPTY_VARARGS, spec.kwonlydefaults or {})
-
-    def get_volatile_names(self) -> Set[str]:
-        return set(self.volatile_params)
+        return FunctionArgs(
+            spec.defaults or [],
+            FunctionArgs.EMPTY_VARARGS,
+            spec.kwonlydefaults or {}
+        )
 
     def get_identifier(self) -> str:
         return self.identifier
@@ -396,13 +393,13 @@ class InferModelConfigVisitor(RecipeVisitor):
     default_model_config: ModelConfig
     default_merge_space: type
 
-    def visit_literal(self, node: ModelRecipeNode):
+    def visit_literal(self, node: LiteralRecipeNode):
         model_config = node.model_config if node.model_config is not None else self.default_model_config
-        return LiteralRecipeNode(node.state_dict, model_config)
+        return LiteralRecipeNode(node.value, model_config)
 
     def visit_model(self, node: ModelRecipeNode):
         node_merge_space = node.merge_space
-        default_merge_spaces = merge_space.get_identifiers(self.default_merge_space)
+        default_merge_spaces = extensions.merge_space.get_identifiers(self.default_merge_space)
         # allow to infer merge space 'param' for i.e. approximated fisher diagonal
         if len(default_merge_spaces) == 1 and default_merge_spaces[0] == "param":
             node_merge_space = default_merge_spaces[0]
@@ -416,26 +413,27 @@ class InferModelConfigVisitor(RecipeVisitor):
         return node
 
 
+F = TypeVar("F", bound=Callable)
+
+
 def convert_to_recipe(
-    f: Optional[Callable] = None, *,
+    f: Optional[F] = None, *,
     identifier: Optional[str] = None,
-    volatile_hypers: Iterable[str] = (),
     register: bool = True,
-):
+) -> F:
     if f is None:
-        return lambda f: __convert_to_recipe_impl(f, identifier=identifier, volatile_hypers=volatile_hypers, register=register)
-    return __convert_to_recipe_impl(f, identifier=identifier, volatile_hypers=volatile_hypers, register=register)
+        return lambda f: __convert_to_recipe_impl(f, identifier=identifier, register=register)
+    return __convert_to_recipe_impl(f, identifier=identifier, register=register)
 
 
 def __convert_to_recipe_impl(
     fn: Callable, *,
     identifier: Optional[str] = None,
-    volatile_hypers: Iterable[str],
     register: bool,
 ):
     if identifier is None:
         identifier = fn.__name__
-    merge_method = MergeMethod(fn, identifier, volatile_hypers)
+    merge_method = MergeMethod(fn, identifier)
 
     if register:
         _merge_methods_registry[identifier] = merge_method
@@ -468,23 +466,35 @@ def get_all() -> List[MergeMethod]:
 
 
 def value_to_node(node_or_value: RecipeNodeOrLiteral, expected_value_type: type = torch.Tensor) -> RecipeNode:
-    if isinstance(node_or_value, RecipeNode):
-        return node_or_value
+    valid_input_types = RecipeNode | torch.Tensor | int | float | dict | str
+    if not isinstance(node_or_value, valid_input_types):
+        raise TypeError(f"type of 'node_or_value' should be {valid_input_types}")
 
     if issubclass(expected_value_type, StateDict):
         expected_value_type = (typing.get_args(expected_value_type) + (torch.Tensor,))[0]
+
+    if isinstance(node_or_value, RecipeNode):
+        return node_or_value
 
     if isinstance(node_or_value, expected_value_type):
         return LiteralRecipeNode(node_or_value)
 
     if issubclass(expected_value_type, torch.Tensor):
-        if isinstance(node_or_value, int | float):
+        if (
+            isinstance(node_or_value, int | float) or
+            isinstance(node_or_value, dict) and all(isinstance(v, int | float) for v in node_or_value.values())
+        ):
             return LiteralRecipeNode(node_or_value)
         return ModelRecipeNode(node_or_value)
+
+    if issubclass(expected_value_type, int | float):
+        if isinstance(node_or_value, dict | int | float):
+            return LiteralRecipeNode(node_or_value)
+        raise TypeError(f"No implicit conversion exists from {type(node_or_value)} to {expected_value_type}")
 
     if issubclass(expected_value_type, str):
         if isinstance(node_or_value, dict):
             return LiteralRecipeNode(node_or_value)
-        raise TypeError(f"No implicit conversion exist from str to torch.Tensor")
+        raise TypeError(f"No implicit conversion exists from {type(node_or_value)} to str")
 
     raise TypeError(f"Type {expected_value_type} is not yet supported in merge methods")

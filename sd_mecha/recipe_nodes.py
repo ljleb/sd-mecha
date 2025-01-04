@@ -1,8 +1,7 @@
 import abc
 import itertools
 import pathlib
-import torch
-from typing import Optional, Dict, Any, Mapping, Tuple
+from typing import Optional, Dict, Mapping, Tuple
 from torch import Tensor
 from sd_mecha import extensions
 from sd_mecha.extensions.model_config import ModelConfig
@@ -127,16 +126,10 @@ class MergeRecipeNode(RecipeNode):
         merge_method,
         args: Tuple[RecipeNode, ...],
         kwargs: Dict[str, RecipeNode],
-        volatile_hypers: Dict[str, Any],
-        device: Optional[str] = None,
-        dtype: Optional[torch.dtype] = None,
     ):
         self.merge_method = merge_method
         self.args = args
         self.kwargs = kwargs
-        self.volatile_hypers = volatile_hypers
-        self.device = device
-        self.dtype = dtype
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_merge(self, *args, **kwargs)
@@ -156,14 +149,11 @@ class MergeRecipeNode(RecipeNode):
         )
 
     def __contains__(self, item):
-        if isinstance(item, MergeRecipeNode):
-            return self is item or any(
-                item in v
-                for v in itertools.chain(self.args, self.kwargs.values())
-                if isinstance(v, RecipeNode)
-            )
-        else:
-            return False
+        return self is item or any(
+            item in v
+            for v in itertools.chain(self.args, self.kwargs.values())
+            if isinstance(v, RecipeNode)
+        )
 
 
 class RecipeVisitor(abc.ABC):
