@@ -8,9 +8,9 @@ import torch
 import typing
 from sd_mecha import extensions
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor
-from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbolBase, AnyMergeSpaceBase
-from sd_mecha.extensions.model_config import ModelConfig, ModelConfigTag
-from types import UnionType, SimpleNamespace
+from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
+from sd_mecha.extensions.model_config import ModelConfig
+from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 
 
@@ -27,6 +27,61 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
     @abc.abstractmethod
     def keys(self) -> Iterable[str]:
         pass
+
+
+@dataclasses.dataclass
+class ParameterData:
+    interface: type
+    merge_space: Optional[str | Iterable[str]]
+    model_config: Optional[ModelConfig | str]
+
+    def __post_init__(self):
+        if self.merge_space is not None:
+            extensions.merge_space.resolve(self.merge_space)
+        if isinstance(self.model_config, str):
+            self.model_config = extensions.model_config.resolve(self.model_config)
+
+
+def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+    supported_types = [StateDict] + list(T.__constraints__)
+    if interface not in supported_types:
+        raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
+
+    if isinstance(merge_space, str):
+        merge_space = (merge_space,)
+    if isinstance(merge_space, Iterable):
+        merge_space = {
+            extensions.merge_space.resolve(m) if isinstance(m, str) else m
+            for m in merge_space
+        }
+
+    if isinstance(model_config, str):
+        model_config = extensions.model_config.resolve(model_config)
+
+    return type(Parameter.__name__, (), {
+        "data": ParameterData(interface, merge_space, model_config)
+    })
+
+
+def Return(interface, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+    supported_types = list(T.__constraints__)
+    if interface not in supported_types:
+        raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
+
+    if isinstance(merge_space, (str, MergeSpace)):
+        merge_space = (merge_space,)
+    if isinstance(merge_space, Iterable):
+        merge_space = {
+            extensions.merge_space.resolve(m) if isinstance(m, str) else m
+            for m in merge_space
+        }
+
+    if isinstance(model_config, str):
+        model_config = extensions.model_config.resolve(model_config)
+
+    return type(Return.__name__, (), {
+        "data": ParameterData(interface, merge_space, model_config)
+    })
 
 
 P = TypeVar('P')
@@ -60,35 +115,6 @@ class FunctionArgs(Generic[P]):
 FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
-_common_valid_type_permutations = tuple(
-    perm
-    for t in T.__constraints__
-    for perm in (
-        (t,),
-        (t, AnyMergeSpaceBase),
-    )
-)
-_valid_return_type_permutations = _common_valid_type_permutations + tuple(
-    perm
-    for t in T.__constraints__
-    for perm in (
-        (t, ModelConfigTag),
-        (t, ModelConfigTag, AnyMergeSpaceBase),
-        (t, AnyMergeSpaceBase, ModelConfigTag),
-    )
-)
-_valid_param_type_permutations = _common_valid_type_permutations + tuple(
-    perm
-    for perm in (
-        (StateDict,),
-        (StateDict, ModelConfigTag),
-        (StateDict, AnyMergeSpaceBase),
-        (StateDict, ModelConfigTag, AnyMergeSpaceBase),
-        (StateDict, AnyMergeSpaceBase, ModelConfigTag),
-    )
-)
-
-
 class MergeMethod:
     def __init__(self, f: Callable, identifier: str):
         self.__wrapped__ = f
@@ -98,7 +124,8 @@ class MergeMethod:
     def __validate_f(self):
         spec = inspect.getfullargspec(self.__wrapped__)
         hints = typing.get_type_hints(self.__wrapped__)
-        params = self.get_param_names()
+        names = self.get_param_names()
+        params = self.get_params()
         defaults = self.get_default_args()
         merge_spaces = self.get_input_merge_spaces()
         input_configs = self.get_input_configs()
@@ -106,46 +133,26 @@ class MergeMethod:
         if spec.varkw is None:
             raise TypeError(f"for forward compatibility reasons, **kwargs must be included in the function parameters")
 
-        def type_to_str(a: type):
-            if typing.get_origin(a) is UnionType or issubclass(a, AnyMergeSpaceBase):
-                return "MergeSpace[...]"
-            elif issubclass(a, ModelConfigTag):
-                return "ModelConfig[...]"
-            else:
-                return a.__name__
-
-        def validate_type_permutation(parameter_name, parameter_types, type_perms):
-            is_valid_type_combination = any(
-                len(valid_type_combination) == len(parameter_types) and
-                all(issubclass(t, p) for t, p in zip(parameter_types, valid_type_combination))
-                for valid_type_combination in type_perms
+        for param_idx in params.as_dict(1):
+            is_default_arg = (
+                isinstance(param_idx, int) and
+                len(params.args) - len(defaults.args) <= param_idx < len(params.args)
             )
-            if not is_valid_type_combination:
-                raise TypeError(
-                    f"The type annotation for '{parameter_name}' is invalid. \n"
-                    f"Got: {' | '.join(map(type_to_str, parameter_types))}\n"
-                    "Valid choices are:\n\t" + "\n\t".join(" | ".join(map(type_to_str, type_comb)) for type_comb in type_perms)
-                )
-
-        for param_idx in itertools.chain(range(len(spec.args) + int(spec.varargs is not None)), ["return"] + spec.kwonlyargs):
-            param_name = (spec.args + [spec.varargs] * int(spec.varargs is not None))[param_idx] if isinstance(param_idx, int) else param_idx
-
-            if (
-                isinstance(param_idx, int) and param_idx >= len(params.args) - len(defaults.args) and param_idx < len(params.args) or
-                isinstance(param_idx, str) and param_idx in (spec.kwonlydefaults or {})
-            ):
-                param_merge_space = merge_spaces.args_varags()[param_idx] if isinstance(param_idx, int) else merge_spaces.kwargs[param_idx]
-                if param_merge_space != MergeSpace["param"]:
+            is_default_kwarg = isinstance(param_idx, str) and param_idx in (spec.kwonlydefaults or {})
+            if is_default_arg or is_default_kwarg:
+                param_merge_space = merge_spaces.as_dict(1)[param_idx]
+                if param_merge_space != {extensions.merge_space.resolve("param")}:
+                    param_name = names.args_varags()[param_idx] if isinstance(param_idx, int) else param_idx
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
-
-            param_type = hints[param_name]
-            union_types = typing.get_args(param_type) if typing.get_origin(param_type) is UnionType else (param_type,)
-            type_perms = _valid_param_type_permutations if param_name != "return" else _valid_return_type_permutations
-            validate_type_permutation(param_name, union_types, type_perms)
 
         input_configs_are_explicit = all(config is not None for config in input_configs.as_dict(1).values())
         if input_configs_are_explicit and self.get_return_config(input_configs.args_varags(), input_configs.kwargs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
+
+        return_data = self.__get_return_data(hints.get("return"))
+        if isinstance(return_data.merge_space, MergeSpaceSymbol):
+            if not any(k.merge_space for k in params.as_dict(1).values()):
+                raise RuntimeError("when using a merge space symbol as output, it must also be used by at least one input parameter")
 
     def merge_key(
         self,
@@ -210,117 +217,94 @@ class MergeMethod:
         return MergeRecipeNode(self, args, kwargs)
 
     def get_input_types(self) -> FunctionArgs[type]:
-        params = self.get_param_names()
-        type_hints = typing.get_type_hints(self.__wrapped__)
-
-        def get_empirical_type(annotation):
-            if annotation is None or typing.get_origin(annotation) is not UnionType:
-                return annotation
-            return typing.get_args(annotation)[0]  # validation ensures the input type is index 0
-
+        params = self.get_params()
         arg_types = [
-            get_empirical_type(annotation)
-            for k, annotation in type_hints.items()
-            if k in params.args
+            param.interface
+            for param in params.args
         ]
-        vararg_type = get_empirical_type(type_hints.get(params.vararg)) if params.has_varargs() else FunctionArgs.EMPTY_VARARGS
+        vararg_type = params.vararg.interface if params.has_varargs() else FunctionArgs.EMPTY_VARARGS
         kwarg_types = {
-            k: get_empirical_type(annotation)
-            for k, annotation in type_hints.items()
-            if k in params.kwargs
+            k: param.interface
+            for k, param in params.kwargs.items()
         }
         return FunctionArgs(arg_types, vararg_type, kwarg_types)
 
-    def get_return_merge_space(self, merge_space_args: List[str], merge_space_kwargs: Dict[str, str]) -> str:
-        type_hints = typing.get_type_hints(self.__wrapped__)
-        params = self.get_param_names()
+    def get_return_merge_space(self, merge_space_args: List[MergeSpace], merge_space_kwargs: Dict[str, MergeSpace]) -> MergeSpace:
+        names = self.get_param_names()
+        num_varargs = max(0, len(merge_space_args) - len(names.args))
+        input_merge_spaces = self.get_input_merge_spaces().as_dict(num_varargs)
 
         resolved_input_spaces = {}
-        arg_tuples = zip(params.args_varags(max(0, len(merge_space_args) - len(params.args))), merge_space_args)
+        arg_tuples = enumerate(merge_space_args)
         kwarg_tuples = ((k, v) for k, v in merge_space_kwargs.items())
-        for param_name, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
-            annotation = type_hints.get(param_name)
-            if annotation:
-                merge_space_param, key, _ = self.__extract_merge_space(annotation, param_name)
+        for name, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
+            merge_space_param = input_merge_spaces[name]
+            if not isinstance(merge_space_param, MergeSpaceSymbol):
+                continue
 
-                if key in resolved_input_spaces:
-                    # occurrence of already seen type var
-                    if merge_space_arg != resolved_input_spaces[key]:
-                        raise TypeError(f"parameter '{param_name}' of method {self.identifier} expects {resolved_input_spaces[key]} but got {merge_space_arg}")
-                elif merge_space_arg in merge_space_param:
-                    resolved_input_spaces[key] = merge_space_arg
-                else:
-                    raise TypeError(f"parameter '{param_name}' of method {self.identifier} expects {merge_space_param} but got {merge_space_arg}")
+            if (resolved_input_space := resolved_input_spaces.get(merge_space_param)) is not None:
+                # occurrence of already seen type var
+                if merge_space_arg != resolved_input_space:
+                    raise TypeError(f"parameter '{name}' of method {self.identifier} expects {resolved_input_space} but got {merge_space_arg}")
+            elif merge_space_arg in merge_space_param.merge_spaces:
+                resolved_input_spaces[merge_space_param] = merge_space_arg
+            else:
+                raise TypeError(f"parameter '{name}' of method {self.identifier} expects one of {merge_space_param.merge_spaces} but got {merge_space_arg}")
 
-        merge_space_param, key, _ = self.__extract_merge_space(type_hints.get("return"), "return")
-        if key in resolved_input_spaces:
-            return resolved_input_spaces[key]
-        else:
-            return next(iter(merge_space_param))
-
-    def get_input_merge_spaces(self) -> FunctionArgs[type]:
         type_hints = typing.get_type_hints(self.__wrapped__)
-        params = self.get_param_names()
+        merge_space_param = self.__get_return_data(type_hints.get("return"))
+        if isinstance(merge_space_param, MergeSpaceSymbol):
+            return resolved_input_spaces[merge_space_param]
+        else:
+            return next(iter(merge_space_param))  # get the only value
+
+    def get_input_merge_spaces(self) -> FunctionArgs[AnyMergeSpace]:
+        params = self.get_params()
+        names = self.get_param_names()
         defaults = self.get_default_args()
 
+        def get_merge_space_or_default(merge_space, has_default):
+            if merge_space is None:
+                if has_default:
+                    merge_space = {extensions.merge_space.resolve("param")}
+                else:
+                    merge_space = extensions.merge_space.get_all()
+            return merge_space
+
         merge_spaces = []
-        for i, param in enumerate(params.args):
-            annotation = type_hints.get(param)
-            merge_space, _, explicit = self.__extract_merge_space(annotation, param)
-            if not explicit and i >= len(params.args) - len(defaults.args):
-                merge_space = "param",
-            merge_spaces.append(MergeSpace[tuple(merge_space)])
+        for i in range(len(names.args)):
+            merge_space = params.args[i].merge_space
+            merge_space = get_merge_space_or_default(merge_space, i >= len(names.args) - len(defaults.args))
+            merge_spaces.append(merge_space)
 
         varargs_merge_space = FunctionArgs.EMPTY_VARARGS
         if params.has_varargs():
-            annotation = type_hints.get(params.vararg)
-            varargs_merge_space, _, explicit = self.__extract_merge_space(annotation, params.vararg)
-            varargs_merge_space = MergeSpace[tuple(varargs_merge_space)]
+            varargs_merge_space = params.vararg.merge_space
+            if varargs_merge_space is None:
+                varargs_merge_space = extensions.merge_space.get_all()
 
         kw_merge_spaces = {}
-        for param in params.kwargs:
-            annotation = type_hints.get(param)
-            merge_space, _, explicit = self.__extract_merge_space(annotation, param)
-            if not explicit and param in defaults.kwargs:
-                merge_space = "param",
-            kw_merge_spaces[param] = MergeSpace[tuple(merge_space)]
+        for name in names.kwargs:
+            merge_space = params.kwargs[name]
+            merge_space = get_merge_space_or_default(merge_space, name in defaults.kwargs)
+            kw_merge_spaces[name] = merge_space
 
         return FunctionArgs(merge_spaces, varargs_merge_space, kw_merge_spaces)
 
-    def __extract_merge_space(self, annotation: type, param_name: str) -> Tuple[List[str], str, bool]:
-        if typing.get_origin(annotation) is UnionType:
-            type_args = typing.get_args(annotation)
-        elif annotation is not None:
-            type_args = (annotation,)
-        else:
-            type_args = ()
-
-        key = param_name
-        for type_arg in type_args:
-            if issubclass(type_arg, MergeSpaceSymbolBase):
-                key = type_arg.__name__
-                break
-
-        merge_space_ids = extensions.merge_space.get_identifiers(annotation)
-        explicit = True
-        if not merge_space_ids:
-            merge_space_ids = extensions.merge_space.get_all()
-            explicit = False
-        return merge_space_ids, key, explicit
-
     def get_return_config(self, arg_configs: List[Optional[ModelConfig]], kwarg_configs: Dict[str, Optional[ModelConfig]]) -> ModelConfig:
         type_hints = typing.get_type_hints(self.__wrapped__)
-        params = self.get_param_names()
-        default_config = self.__extract_model_config(type_hints.get("return"))
+        names = self.get_param_names()
+        num_varargs = max(0, len(arg_configs) - len(names.args))
+        input_configs = self.get_input_configs().as_dict(num_varargs)
+        default_config = self.__get_return_data(type_hints.get("return")).model_config
 
-        arg_tuples = zip(params.args_varags(max(0, len(arg_configs) - len(params.args))), arg_configs)
+        arg_tuples = enumerate(arg_configs)
         kwarg_tuples = ((k, kwarg_configs.get(k)) for k in kwarg_configs)
         for param, arg_config in itertools.chain(arg_tuples, kwarg_tuples):
             if arg_config is None:
                 continue
 
-            annotation = type_hints.get(param)
-            param_config = self.__extract_model_config(annotation)
+            param_config = input_configs[param]
             if param_config is None:
                 param_config = default_config
             if param_config is None:
@@ -332,41 +316,12 @@ class MergeMethod:
         return default_config
 
     def get_input_configs(self) -> FunctionArgs[Optional[ModelConfig]]:
-        type_hints = typing.get_type_hints(self.__wrapped__)
-        param_names = self.get_param_names()
-
-        arg_configs = []
-        for param_name in param_names.args:
-            annotation = type_hints.get(param_name)
-            config = self.__extract_model_config(annotation)
-            arg_configs.append(config)
-
-        vararg_model_config = FunctionArgs.EMPTY_VARARGS
-        if param_names.has_varargs():
-            annotation = type_hints.get(param_names.vararg)
-            vararg_model_config = self.__extract_model_config(annotation)
-
-        kwarg_configs = {}
-        for param_name in param_names.kwargs:
-            annotation = type_hints.get(param_name)
-            config = self.__extract_model_config(annotation)
-            kwarg_configs[param_name] = config
-
-        return FunctionArgs(arg_configs, vararg_model_config, kwarg_configs)
-
-    def __extract_model_config(self, annotation) -> Optional[ModelConfig]:
-        if typing.get_origin(annotation) is UnionType:
-            type_args = typing.get_args(annotation)
-        elif annotation is not None:
-            type_args = (annotation,)
-        else:
-            type_args = ()
-
-        for type_arg in type_args:
-            if issubclass(type_arg, ModelConfigTag):
-                return type_arg.config
-
-        return None
+        params = self.get_params()
+        return FunctionArgs(
+            [arg.model_config for arg in params.args],
+            params.vararg.model_config if params.has_varargs() else FunctionArgs.EMPTY_VARARGS,
+            {k: v.model_config for k, v in params.kwargs.items()},
+        )
 
     def get_param_names(self) -> FunctionArgs[str]:
         spec = inspect.getfullargspec(self.__wrapped__)
@@ -381,8 +336,30 @@ class MergeMethod:
         return FunctionArgs(
             spec.defaults or [],
             FunctionArgs.EMPTY_VARARGS,
-            spec.kwonlydefaults or {}
+            spec.kwonlydefaults or {},
         )
+
+    def get_params(self) -> FunctionArgs[ParameterData]:
+        names = self.get_param_names()
+        annotations = typing.get_type_hints(self.__wrapped__)
+
+        return FunctionArgs(
+            [self.__get_parameter_data(annotations[k]) for k in names.args],
+            self.__get_parameter_data(annotations[names.vararg]) if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
+            {k: self.__get_parameter_data(annotations[k]) for k in names.kwargs},
+        )
+
+    @staticmethod
+    def __get_parameter_data(hint: type):
+        if isinstance(getattr(hint, "data", None), ParameterData):
+            return hint.data
+        return Parameter(hint).data
+
+    @staticmethod
+    def __get_return_data(hint: type):
+        if isinstance(getattr(hint, "data", None), ParameterData):
+            return hint.data
+        return Return(hint).data
 
     def get_identifier(self) -> str:
         return self.identifier

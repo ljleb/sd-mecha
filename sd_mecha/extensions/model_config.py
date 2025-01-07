@@ -20,12 +20,6 @@ StateDictKey = str
 
 @runtime_checkable
 class ModelConfig(Protocol):
-    def __class_getitem__(cls, item) -> type:
-        config = resolve(item)
-        return type(f"{config.identifier}ModelConfigTag", (ModelConfigTag,), {
-            "config": config,
-        })
-
     def eq(self, other):
         return self.identifier == getattr(other, "identifier", None)
 
@@ -151,10 +145,6 @@ class YamlModelConfig(LazyModelConfigBase):
 
 _model_configs_registry_base: Dict[str, ModelConfig] = {}
 _model_configs_registry_aux: Dict[str, ModelConfig] = {}
-
-
-class ModelConfigTag:
-    config: ModelConfig
 
 
 def serialize(obj):
