@@ -1,20 +1,23 @@
-import dataclasses
 import functools
 from typing import List, TypeVar, Dict, Set
 import fuzzywuzzy.process
 
 
-@dataclasses.dataclass
 class MergeSpace:
-    identifier: str
+    def __init__(self, identifier: str):
+        self.identifier = identifier
+
+    def __eq__(self, other):
+        if isinstance(other, str):
+            other = MergeSpace(other)
+        return self.identifier == other.identifier
+
+    def __hash__(self):
+        return hash(self.identifier)
 
 
-@dataclasses.dataclass
 class MergeSpaceSymbol:
-    merge_spaces: Set[MergeSpace]
-
-    def __post_init__(self):
-        merge_spaces = self.merge_spaces
+    def __init__(self, *merge_spaces):
         if isinstance(merge_spaces, (str, MergeSpace)):
             merge_spaces = {merge_spaces}
         self.merge_spaces = {
@@ -37,7 +40,7 @@ def resolve(identifier: str) -> MergeSpace:
         return _merge_space_registry[identifier]
     except KeyError as e:
         suggestion = fuzzywuzzy.process.extractOne(str(e), _merge_space_registry.keys())[0]
-        raise ValueError(f"unknown merge method: {e}. Nearest match is '{suggestion}'")
+        raise ValueError(f"unknown merge space: {e}. Nearest match is '{suggestion}'")
 
 
 def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
@@ -49,7 +52,7 @@ def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
         raise TypeError(f"expected {MergeSpaceSymbol.__name__} or Tuple[{MergeSpace.__name__}, ...], got {type(merge_space)}")
 
 
-def get_all() -> Set[MergeSpace, ...]:
+def get_all() -> Set[MergeSpace]:
     return set(_merge_space_registry.values())
 
 

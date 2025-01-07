@@ -3,7 +3,7 @@ import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha import extensions
 from sd_mecha.extensions.merge_space import MergeSpace
-from sd_mecha.extensions.merge_method import convert_to_recipe, implicit_config_conversion, StateDict
+from sd_mecha.extensions.merge_method import convert_to_recipe, implicit_config_conversion, StateDict, Parameter, Return
 from sd_mecha.extensions.model_config import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
 from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 
@@ -22,9 +22,9 @@ def _register_all_lycoris_configs():
             @implicit_config_conversion
             @convert_to_recipe(identifier=f"convert_'{lora_config_id}'_to_base")
             def diffusers_lora_to_base(
-                lora: StateDict | ModelConfig[lora_config_id] | MergeSpace["weight"],
+                lora: Parameter(StateDict, "weight", lora_config_id),
                 **kwargs,
-            ) -> torch.Tensor | ModelConfig[base_config_id] | MergeSpace["delta"]:
+            ) -> Return(torch.Tensor, "delta", base_config_id):
                 key = kwargs["key"]
                 lycoris_keys = lyco_config.to_lycoris_keys(key)
                 if not lycoris_keys:

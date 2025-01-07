@@ -12,7 +12,7 @@ import warnings
 from collections import OrderedDict
 from typing import Optional, Mapping, Iterator, Iterable, Tuple
 from tqdm import tqdm
-from sd_mecha.typing import WriteOnlyMapping
+from .typing_ import WriteOnlyMapping
 
 
 @dataclasses.dataclass

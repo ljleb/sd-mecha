@@ -1,6 +1,6 @@
 from torch import Tensor
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, implicit_config_conversion
+from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, implicit_config_conversion, Parameter, Return
 from sd_mecha.merge_methods import SameMergeSpace
 from .convert_vae_to_original import convert_vae
 
@@ -12,9 +12,9 @@ from .convert_vae_to_original import convert_vae
 @implicit_config_conversion
 @convert_to_recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'")
 def convert_sd1_kohya_to_original(
-    kohya_sd: StateDict | ModelConfig["sd1-kohya"] | SameMergeSpace,
+    kohya_sd: Parameter(StateDict, SameMergeSpace, "sd1-kohya"),
     **kwargs,
-) -> Tensor | ModelConfig["sd1-ldm"] | SameMergeSpace:
+) -> Return(Tensor, SameMergeSpace, "sd1-ldm"):
     ldm_key = kwargs["key"]
     if ldm_key.startswith("model.diffusion_model."):
         return convert_unet(kohya_sd, ldm_key)

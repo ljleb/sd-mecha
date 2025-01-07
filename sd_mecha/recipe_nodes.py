@@ -3,9 +3,9 @@ import itertools
 import pathlib
 from typing import Optional, Dict, Mapping, Tuple
 from torch import Tensor
-from sd_mecha import extensions
-from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.streaming import MemoryDict
+from . import extensions
+from .extensions.model_config import ModelConfig
+from .streaming import MemoryDict
 
 
 class RecipeNode(abc.ABC):
@@ -15,7 +15,7 @@ class RecipeNode(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def merge_space(self) -> str:
+    def merge_space(self) -> extensions.merge_space.MergeSpace:
         pass
 
     @property
@@ -60,8 +60,8 @@ class LiteralRecipeNode(RecipeNode):
         return visitor.visit_literal(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> str:
-        return "param"
+    def merge_space(self) -> extensions.merge_space.MergeSpace:
+        return extensions.merge_space.resolve("param")
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
@@ -100,8 +100,8 @@ class ModelRecipeNode(RecipeNode):
         return visitor.visit_model(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> str:
-        return self.__merge_space
+    def merge_space(self) -> extensions.merge_space.MergeSpace:
+        return extensions.merge_space.resolve(self.__merge_space)
 
     @property
     def model_config(self) -> Optional[ModelConfig]:
@@ -135,7 +135,7 @@ class MergeRecipeNode(RecipeNode):
         return visitor.visit_merge(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> str:
+    def merge_space(self) -> extensions.merge_space.MergeSpace:
         return self.merge_method.get_return_merge_space(
             [v.merge_space for v in self.args],
             {k: v.merge_space for k, v in self.kwargs.items()},

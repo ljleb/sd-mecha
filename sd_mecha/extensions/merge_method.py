@@ -32,18 +32,15 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
 @dataclasses.dataclass
 class ParameterData:
     interface: type
-    merge_space: Optional[str | Iterable[str]]
-    model_config: Optional[ModelConfig | str]
-
-    def __post_init__(self):
-        if self.merge_space is not None:
-            extensions.merge_space.resolve(self.merge_space)
-        if isinstance(self.model_config, str):
-            self.model_config = extensions.model_config.resolve(self.model_config)
+    merge_space: Optional[AnyMergeSpace]
+    model_config: Optional[ModelConfig]
 
 
 def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
     supported_types = [StateDict] + list(T.__constraints__)
+    if type(None) in (typing.get_args(interface) or ()):
+        interface = typing.get_args(interface)[0]
+
     if interface not in supported_types:
         raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
 
@@ -252,11 +249,13 @@ class MergeMethod:
                 raise TypeError(f"parameter '{name}' of method {self.identifier} expects one of {merge_space_param.merge_spaces} but got {merge_space_arg}")
 
         type_hints = typing.get_type_hints(self.__wrapped__)
-        merge_space_param = self.__get_return_data(type_hints.get("return"))
+        merge_space_param = self.__get_return_data(type_hints.get("return")).merge_space
         if isinstance(merge_space_param, MergeSpaceSymbol):
             return resolved_input_spaces[merge_space_param]
-        else:
-            return next(iter(merge_space_param))  # get the only value
+        if merge_space_param is None:
+            merge_space_param = extensions.merge_space.get_all()
+        print(type_hints.get("return"))
+        return next(iter(merge_space_param))  # get the only value
 
     def get_input_merge_spaces(self) -> FunctionArgs[AnyMergeSpace]:
         params = self.get_params()
@@ -285,7 +284,7 @@ class MergeMethod:
 
         kw_merge_spaces = {}
         for name in names.kwargs:
-            merge_space = params.kwargs[name]
+            merge_space = params.kwargs[name].merge_space
             merge_space = get_merge_space_or_default(merge_space, name in defaults.kwargs)
             kw_merge_spaces[name] = merge_space
 
