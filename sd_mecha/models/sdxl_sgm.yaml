@@ -1,6 +1,9 @@
 passthrough:
 - conditioner.embedders.0.transformer.text_model.embeddings.position_ids
 - first_stage_model
+- edm_vpred
+- v_pred
+- ztsnr
 
 merge:
   unet:

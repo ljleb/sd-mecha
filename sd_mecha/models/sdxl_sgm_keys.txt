@@ -585,6 +585,8 @@ conditioner.embedders.1.model.transformer.resblocks.9.mlp.c_fc.bias
 conditioner.embedders.1.model.transformer.resblocks.9.mlp.c_fc.weight
 conditioner.embedders.1.model.transformer.resblocks.9.mlp.c_proj.bias
 conditioner.embedders.1.model.transformer.resblocks.9.mlp.c_proj.weight
+edm_vpred.sigma_max
+edm_vpred.sigma_min
 first_stage_model.decoder.conv_in.bias
 first_stage_model.decoder.conv_in.weight
 first_stage_model.decoder.conv_out.bias
@@ -2513,3 +2515,5 @@ model.diffusion_model.time_embed.0.bias
 model.diffusion_model.time_embed.0.weight
 model.diffusion_model.time_embed.2.bias
 model.diffusion_model.time_embed.2.weight
+v_pred
+ztsnr
