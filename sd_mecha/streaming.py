@@ -191,6 +191,9 @@ class InSafetensorsDict:
         dtype, dtype_bytes = DTYPE_MAPPING[tensor_info['dtype']]
         shape = tensor_info['shape']
         total_bytes = offsets[1] - offsets[0]
+        if total_bytes == 0:
+            return torch.tensor([], dtype=dtype).reshape(shape)
+
         absolute_start_pos = 8 + self.header_size + offsets[0]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
