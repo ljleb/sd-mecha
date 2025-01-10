@@ -3,7 +3,7 @@ import math
 import operator
 import numpy as np
 import torch
-from scipy.stats import binom
+from scipy.stats import binom, rankdata
 from torch import Tensor
 from typing import Tuple, TypeVar, Dict, Optional
 from sd_mecha.hypers import Hyper
@@ -654,6 +654,7 @@ def dropout(  # aka n-supermario
 def ties_sum_with_dropout(
     *deltas: Tensor | LiftFlag[MergeSpace.DELTA],
     probability: Hyper = 0.9,
+    della_eps: Hyper = 0.0,
     rescale: Hyper = 1.0,
     k: Hyper = 0.2,
     vote_sgn: Hyper = 0.0,
@@ -675,7 +676,7 @@ def ties_sum_with_dropout(
 
     # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
     # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$
-    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability, device=delta.device, dtype=delta.dtype), generator=generator) for delta in deltas]
+    deltas = [delta * find_della_dropout(delta, probability, della_eps, generator) for delta in deltas]
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
     deltas = ties_sum_extended.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
@@ -687,6 +688,25 @@ def ties_sum_with_dropout(
         rescalar = rescalar if math.isfinite(rescalar) else 1
     return deltas / rescalar
 
+# Parts of DARE / DELLA (MAGPRUNE)
+# Notice that della_eps can be negative number. 0.0 for DARE. 
+# - `probability`: $$ p_{min} $$
+# - `della_eps`: $$ \epsilon $$
+# - `p_i`: $$ p_min + \Delta_i $$
+# - `return`: $$ m_i \sim Bernoulli(p_i) $$
+def find_della_dropout(delta, probability, della_eps, generator):
+    p_min = torch.full(delta.shape, 1 - probability, device=delta.device, dtype=delta.dtype)
+    if della_eps != 0.0:
+        # 4 - 6x time required
+        rank_per_element = torch.from_numpy(rankdata(delta.abs(), method="ordinal").reshape(delta.shape))
+        # A lot slower: 9x time required
+        #rank_per_element = torch.argsort(torch.argsort(delta.abs().ravel())).reshape(delta.shape) + 1
+        ne = delta.numel()
+        # Window has been centered to elements.
+        delta_i = (rank_per_element / ne - ((ne + 1) / (ne * 2))) * della_eps 
+    else:
+        delta_i = 0.0
+    return torch.bernoulli(p_min + delta_i, generator=generator)
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, round(overlap)):

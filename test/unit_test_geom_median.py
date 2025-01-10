@@ -2,14 +2,13 @@ import torch
 import sd_mecha
 import time
 
-
 _k = 1.0
 _use_delta = 0.0
 _use_signs = 1.0
 
 _probability = 0.25
-_use_rescale = 0.0
-_no_rescale = 1.0
+_use_rescale = 1.0 #Since 0.0.26
+_no_rescale = 0.0 #Since 0.0.26
 _seed = 114514
 
 _alpha = 0.0 #Not used
@@ -70,13 +69,22 @@ median = sd_mecha.geometric_median.__wrapped__(*_models, eps=_eps, maxiter=_maxi
 #print(median2)
 assert torch.allclose(median, _expected, atol = 0.0001)
 
-_with_dare = sd_mecha.ties_sum_with_dropout.__wrapped__(*_models, probability=_probability, no_rescale=_no_rescale, k=_k, vote_sgn=_use_signs, seed=_seed, apply_stock = _no_stock, apply_median = _apply_median, cos_eps = _cos_eps, eps=_eps, maxiter=_maxiter, ftol=_ftol)
+_with_dare = sd_mecha.ties_sum_with_dropout.__wrapped__(*_models, probability=_probability, rescale=_no_rescale, k=_k, vote_sgn=_use_signs, seed=_seed, apply_stock = _no_stock, apply_median = _apply_median, cos_eps = _cos_eps, eps=_eps, maxiter=_maxiter, ftol=_ftol)
 #print(_with_dare)
 assert torch.allclose(_with_dare, _expected2, atol = 0.0001)
 
+# WS = 0.9 - 2.1, Notebook = 1.76 before 0.0.26 
+# WS = 2.0 - 4.5, since 0.0.26 (Why?)
 ts = time.time()
 median2 = sd_mecha.geometric_median.__wrapped__(*_models2, eps=_eps, maxiter=_maxiter, ftol=_ftol)
-#print(median2) #Around 0.5 but will flutter
 te = time.time()
-#print(te - ts) #WS = 0.9, Notebook = 1.76
+#print(te - ts) 
 assert (te - ts) < 10.0 
+
+# Integration test: TGMD
+# WS = 10.5, before AND after 0.0.26
+ts = time.time()
+stress_test = sd_mecha.ties_sum_with_dropout.__wrapped__(*_models2, probability=_probability, rescale=_no_rescale, k=_k, vote_sgn=_use_signs, seed=_seed, apply_stock = _no_stock, apply_median = _apply_median, cos_eps = _cos_eps, eps=_eps, maxiter=_maxiter, ftol=_ftol)
+te = time.time()
+#print(te - ts) 
+assert (te - ts) < 30.0 
