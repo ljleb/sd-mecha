@@ -14,10 +14,10 @@ from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 
 
-RecipeNodeOrLiteral = RecipeNode | pathlib.Path | str | int | float | dict
+RecipeNodeOrValue = RecipeNode | pathlib.Path | str | int | float | bool | dict
 
 
-T = TypeVar('T', torch.Tensor, str, int, float)
+T = TypeVar('T', torch.Tensor, str, int, float | bool)
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
     @property
     @abc.abstractmethod
@@ -41,8 +41,8 @@ def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpa
     if type(None) in (typing.get_args(interface) or ()):
         interface = typing.get_args(interface)[0]
 
-    if interface not in supported_types:
-        raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
+    if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
+        raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, str):
         merge_space = (merge_space,)
@@ -61,9 +61,10 @@ def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpa
 
 
 def Return(interface, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
-    supported_types = list(T.__constraints__)
-    if interface not in supported_types:
-        raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
+    if not isinstance(interface, TypeVar):
+        supported_types = list(T.__constraints__)
+        if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
+            raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
 
     if isinstance(merge_space, (str, MergeSpace)):
         merge_space = (merge_space,)
@@ -199,7 +200,10 @@ class MergeMethod:
         def arg_to_node(k: int | str, arg: Any, expected_type: type):
             nonlocal default_config
             merge_space = merge_spaces.as_dict(varargs_count)[k]
-            return value_to_node(arg, expected_type).accept(InferModelConfigVisitor(default_config, merge_space))
+            config = input_configs.as_dict(varargs_count)[k]
+            if config is None:
+                config = default_config
+            return value_to_node(arg, expected_type).accept(InferModelConfigVisitor(config, merge_space))
 
         input_types = self.get_input_types()
         args = tuple(
@@ -234,27 +238,30 @@ class MergeMethod:
         resolved_input_spaces = {}
         arg_tuples = enumerate(merge_space_args)
         kwarg_tuples = ((k, v) for k, v in merge_space_kwargs.items())
-        for name, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
-            merge_space_param = input_merge_spaces[name]
-            if not isinstance(merge_space_param, MergeSpaceSymbol):
+        for idx, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
+            name = names.args_varags(num_varargs)[idx] if isinstance(idx, int) else idx
+            merge_space_param = input_merge_spaces[idx]
+            is_symbol = isinstance(merge_space_param, MergeSpaceSymbol)
+            valid_merge_spaces = merge_space_param.merge_spaces if is_symbol else merge_space_param
+            if merge_space_arg not in valid_merge_spaces:
+                valid_str_merge_spaces = tuple(m.identifier for m in valid_merge_spaces)
+                raise TypeError(f"parameter '{name}' of method {self.identifier} expects a merge space in {valid_str_merge_spaces} but got {merge_space_arg}")
+            if not is_symbol:
                 continue
 
             if (resolved_input_space := resolved_input_spaces.get(merge_space_param)) is not None:
                 # occurrence of already seen type var
                 if merge_space_arg != resolved_input_space:
-                    raise TypeError(f"parameter '{name}' of method {self.identifier} expects {resolved_input_space} but got {merge_space_arg}")
-            elif merge_space_arg in merge_space_param.merge_spaces:
-                resolved_input_spaces[merge_space_param] = merge_space_arg
+                    raise TypeError(f"parameter '{name}' of method {self.identifier} was resolved to {resolved_input_space} but got {merge_space_arg}")
             else:
-                raise TypeError(f"parameter '{name}' of method {self.identifier} expects one of {merge_space_param.merge_spaces} but got {merge_space_arg}")
+                resolved_input_spaces[merge_space_param] = merge_space_arg
 
         type_hints = typing.get_type_hints(self.__wrapped__)
         merge_space_param = self.__get_return_data(type_hints.get("return")).merge_space
         if isinstance(merge_space_param, MergeSpaceSymbol):
             return resolved_input_spaces[merge_space_param]
         if merge_space_param is None:
-            merge_space_param = extensions.merge_space.get_all()
-        print(type_hints.get("return"))
+            raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
         return next(iter(merge_space_param))  # get the only value
 
     def get_input_merge_spaces(self) -> FunctionArgs[AnyMergeSpace]:
@@ -350,6 +357,10 @@ class MergeMethod:
 
     @staticmethod
     def __get_parameter_data(hint: type):
+        hint_args = [arg for arg in (typing.get_args(hint) or ()) if arg is not type(None)]
+        if hint_args:
+            hint = hint_args[0]
+
         if isinstance(getattr(hint, "data", None), ParameterData):
             return hint.data
         return Parameter(hint).data
@@ -416,7 +427,7 @@ def __convert_to_recipe_impl(
     return merge_method
 
 
-def implicit_config_conversion(merge_method: MergeMethod):
+def validate_config_conversion(merge_method: MergeMethod):
     params = merge_method.get_param_names()
     args_varargs = params.args if params.args else params.args_varags(1)
     assert len(args_varargs) == 1, f"the merge method should be able to take exactly 1 positional argument"
@@ -441,36 +452,51 @@ def get_all() -> List[MergeMethod]:
     return list(_merge_methods_registry.values())
 
 
-def value_to_node(node_or_value: RecipeNodeOrLiteral, expected_value_type: type = torch.Tensor) -> RecipeNode:
-    valid_input_types = RecipeNode | torch.Tensor | int | float | dict | str
-    if not isinstance(node_or_value, valid_input_types):
-        raise TypeError(f"type of 'node_or_value' should be {valid_input_types}")
+def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = torch.Tensor) -> RecipeNode:
+    # todo: test this crap :>
 
-    if issubclass(expected_value_type, StateDict):
-        expected_value_type = (typing.get_args(expected_value_type) + (torch.Tensor,))[0]
+    valid_input_types = RecipeNode | torch.Tensor | int | float | bool | dict | str | pathlib.Path
+    if not isinstance(node_or_value, valid_input_types):
+        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(valid_input_types)}")
 
     if isinstance(node_or_value, RecipeNode):
         return node_or_value
 
-    if isinstance(node_or_value, expected_value_type):
+    try:
+        if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):
+            expected_type = (typing.get_args(expected_type) + (torch.Tensor,))[0]
+    except TypeError:
+        pass
+
+    numeric = int | float
+    if (
+        isinstance(node_or_value, numeric) or
+        isinstance(node_or_value, Mapping) and all(isinstance(v, expected_type) for v in node_or_value.values())
+    ) and issubclass(expected_type, torch.Tensor):
+        if isinstance(node_or_value, Mapping):
+            node_or_value = {k: torch.tensor(v) for k, v in node_or_value.items()}
+        else:
+            node_or_value = torch.tensor(node_or_value)
+
+    if (
+        isinstance(expected_type, TypeVar) or
+        isinstance(node_or_value, expected_type) or  # identity case
+        isinstance(node_or_value, Mapping) and all(isinstance(v, expected_type) for v in node_or_value.values()) or
+        issubclass(expected_type, numeric | torch.Tensor) and (
+            isinstance(node_or_value, numeric) or
+            isinstance(node_or_value, Mapping) and all(isinstance(v, numeric) for v in node_or_value.values())
+        )
+    ):
         return LiteralRecipeNode(node_or_value)
 
-    if issubclass(expected_value_type, torch.Tensor):
-        if (
-            isinstance(node_or_value, int | float) or
-            isinstance(node_or_value, dict) and all(isinstance(v, int | float) for v in node_or_value.values())
-        ):
-            return LiteralRecipeNode(node_or_value)
-        return ModelRecipeNode(node_or_value)
+    if issubclass(expected_type, torch.Tensor):
+        try:
+            return ModelRecipeNode(node_or_value)
+        except TypeError as e:
+            base_error_message = f"No implicit conversion exists from {type(node_or_value)} to Dict[Tensor]"
+            if isinstance(node_or_value, str):
+                raise TypeError(f"{base_error_message}. Consider using pathlib.Path instead if a model path was intended") from e
+            if not isinstance(node_or_value, pathlib.Path):
+                raise TypeError(base_error_message) from e
 
-    if issubclass(expected_value_type, int | float):
-        if isinstance(node_or_value, dict | int | float):
-            return LiteralRecipeNode(node_or_value)
-        raise TypeError(f"No implicit conversion exists from {type(node_or_value)} to {expected_value_type}")
-
-    if issubclass(expected_value_type, str):
-        if isinstance(node_or_value, dict):
-            return LiteralRecipeNode(node_or_value)
-        raise TypeError(f"No implicit conversion exists from {type(node_or_value)} to str")
-
-    raise TypeError(f"Type {expected_value_type} is not yet supported in merge methods")
+    raise TypeError(f"No implicit conversion exists from {type(node_or_value)} to {expected_type}")

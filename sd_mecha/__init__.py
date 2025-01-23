@@ -7,7 +7,7 @@ from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
-from sd_mecha.extensions.merge_method import RecipeNodeOrLiteral, value_to_node
+from sd_mecha.extensions.merge_method import value_to_node, RecipeNodeOrValue, Parameter, Return
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 from sd_mecha.merge_methods import (
     weighted_sum,
@@ -24,7 +24,6 @@ from sd_mecha.merge_methods import (
     add_cosine_b,
     ties_sum,
     ties_sum_extended,
-    distribution_crossover,
     crossover,
     clamp,
     model_stock,
@@ -50,7 +49,7 @@ def serialize_and_save(
 
 
 def add_difference(
-    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
+    a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     alpha: float = 1.0,
     clamp_to_ab: Optional[bool] = None,
     device: Optional[str] = None,
@@ -94,7 +93,7 @@ def add_difference(
 
 
 def add_perpendicular(
-    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: RecipeNodeOrLiteral, *,
+    a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: RecipeNodeOrValue, *,
     alpha: float = 1.0,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -139,8 +138,8 @@ def add_perpendicular(
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 # Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 def add_difference_ties(
-    base: RecipeNodeOrLiteral,
-    *models: RecipeNodeOrLiteral,
+    base: RecipeNodeOrValue,
+    *models: RecipeNodeOrValue,
     alpha: float,
     k: float = 0.2,
     device: Optional[str] = None,
@@ -179,8 +178,8 @@ def add_difference_ties(
 
 
 def add_difference_ties_extended(
-    base: RecipeNodeOrLiteral,
-    *models: RecipeNodeOrLiteral,
+    base: RecipeNodeOrValue,
+    *models: RecipeNodeOrValue,
     alpha: float = 1.0,
     k: float = 0.2,
     vote_sgn: float = 0.0,
@@ -229,7 +228,7 @@ def add_difference_ties_extended(
 
 
 def copy_region(
-    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
+    a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     width: float = 1.0,
     offset: float = 0.0,
     top_k: bool = False,
@@ -269,7 +268,7 @@ tensor_sum = copy_region
 
 
 def rotate(
-    a: RecipeNodeOrLiteral, b: RecipeNodeOrLiteral, c: Optional[RecipeNodeOrLiteral] = None, *,
+    a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     alignment: float = 1.0,
     alpha: float = 0.0,
     cache: Optional[Dict[str, torch.Tensor]] = None,
@@ -304,8 +303,8 @@ def rotate(
 
 
 def dropout(
-    a: RecipeNodeOrLiteral,
-    *models: RecipeNodeOrLiteral,
+    a: RecipeNodeOrValue,
+    *models: RecipeNodeOrValue,
     probability: float = 0.9,
     alpha: float = 0.5,
     overlap: float = 1.0,
@@ -338,8 +337,8 @@ ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
 # - `return`: $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 def ties_with_dare(
-    base: RecipeNodeOrLiteral,
-    *models: RecipeNodeOrLiteral,
+    base: RecipeNodeOrValue,
+    *models: RecipeNodeOrValue,
     probability: float = 0.9,
     rescale: float = 1.0,
     alpha: float = 0.5,
@@ -390,8 +389,8 @@ def ties_with_dare(
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
 # https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
 def model_stock_n_models(
-    base: RecipeNodeOrLiteral,
-    *models: RecipeNodeOrLiteral,
+    base: RecipeNodeOrValue,
+    *models: RecipeNodeOrValue,
     cos_eps: float = 1e-6,
     device: Optional[str] = None,
     dtype: Optional[torch.dtype] = None,
@@ -418,8 +417,10 @@ def model_stock_n_models(
     return merge_methods.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
 
 
-def model(state_dict: str | pathlib.Path | Mapping[str, Tensor], model_config: Optional[str] = None):
-    return recipe_nodes.ModelRecipeNode(state_dict, model_config)
+def model(path: str | pathlib.Path, model_config: Optional[str] = None):
+    if isinstance(path, str):
+        path = pathlib.Path(path)
+    return recipe_nodes.ModelRecipeNode(path, model_config)
 
 
 def set_log_level(level: str = "INFO"):

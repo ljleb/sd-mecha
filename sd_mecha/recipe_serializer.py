@@ -73,8 +73,8 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
 
     def get_arg_value(arg, arg_index):
         try:
-            if arg == "null":
-                return None
+            if arg in CONSTANTS:
+                return CONSTANTS[arg]
             elif arg.startswith('&'):
                 ref_index = int(arg[1:])
                 if ref_index < 0 or ref_index >= len(results):
@@ -157,7 +157,7 @@ class SerializerVisitor(RecipeVisitor):
             return self.__add_instruction(line)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> str:
-        path = self.__serialize_value(node.path)
+        path = self.__serialize_value(str(node.path))
         config = self.__serialize_value(getattr(node.model_config, "identifier", None))
         line = f'model {path} {config}'
         return self.__add_instruction(line)
@@ -176,10 +176,10 @@ class SerializerVisitor(RecipeVisitor):
         return self.__add_instruction(line)
 
     def __serialize_value(self, value) -> str:
-        if value is None:
-            return "null"
-        if isinstance(value, (str, pathlib.Path)):
-            value = str(value).replace("\\", "\\\\").replace('"', "\\\"")
+        if value in REVERSE_CONSTANTS:
+            return REVERSE_CONSTANTS[value]
+        if isinstance(value, str):
+            value = value.replace("\\", "\\\\").replace('"', "\\\"")
             return f'"{value}"'
         if isinstance(value, dict):
             dict_line = "dict " + " ".join(f"{k}={self.__serialize_value(v)}" for k, v in value.items())
@@ -188,7 +188,7 @@ class SerializerVisitor(RecipeVisitor):
             return value.accept(self)
         if isinstance(value, (int, float)):
             return str(value)
-        raise ValueError(value)
+        raise TypeError(f"type {type(value)} cannot be serialized: {value}")
 
     def __add_instruction(self, instruction: str) -> str:
         try:
@@ -196,3 +196,13 @@ class SerializerVisitor(RecipeVisitor):
         except ValueError:
             self.instructions.append(instruction)
             return f"&{len(self.instructions) - 1}"
+
+
+CONSTANTS = {
+    "null": None,
+    "true": True,
+    "false": False,
+}
+REVERSE_CONSTANTS = {
+    v: k for k, v in CONSTANTS.items()
+}

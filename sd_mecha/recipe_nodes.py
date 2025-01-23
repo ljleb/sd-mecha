@@ -1,11 +1,9 @@
 import abc
 import itertools
 import pathlib
-from typing import Optional, Dict, Mapping, Tuple
-from torch import Tensor
+from typing import Optional, Dict, Tuple
 from . import extensions
 from .extensions.model_config import ModelConfig
-from .streaming import MemoryDict
 
 
 class RecipeNode(abc.ABC):
@@ -83,16 +81,15 @@ class LiteralRecipeNode(RecipeNode):
 class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
-        state_dict: str | pathlib.Path | Mapping[str, Tensor],
+        path: pathlib.Path,
         model_config: Optional[str | ModelConfig] = None,
         merge_space: str = "weight",
     ):
-        if isinstance(state_dict, Mapping):
-            self.path = "<memory>"
-            self.state_dict = MemoryDict(state_dict)
-        else:
-            self.path = state_dict
-            self.state_dict = None
+        if not isinstance(path, pathlib.Path):
+            raise TypeError(f"The type of 'state_dict' must be Path, not {type(path).__name__}")
+
+        self.path = path
+        self.state_dict = None
         self.__model_config = model_config
         self.__merge_space = merge_space
 
@@ -130,6 +127,14 @@ class MergeRecipeNode(RecipeNode):
         self.merge_method = merge_method
         self.args = args
         self.kwargs = kwargs
+        self.__validate_args()
+
+    def __validate_args(self):
+        if self.merge_method.get_return_merge_space(
+            [arg.merge_space for arg in self.args],
+            {k: v.merge_space for k, v in self.kwargs.items()}
+        ) is None:
+            raise RuntimeError(f"Could not infer merge space from arguments for method {self.merge_method.identifier}")
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_merge(self, *args, **kwargs)

@@ -47,9 +47,9 @@ class RecipeMerger:
 
     def merge_and_save(
         self,
-        recipe: extensions.merge_method.RecipeNodeOrLiteral,
+        recipe: extensions.merge_method.RecipeNodeOrValue,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge.safetensors",
-        fallback_model: Optional[extensions.merge_method.RecipeNodeOrLiteral] = None,
+        fallback_model: Optional[extensions.merge_method.RecipeNodeOrValue] = None,
         save_device: Optional[str] = "cpu",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
@@ -203,6 +203,8 @@ class LoadInputDictsVisitor(RecipeVisitor):
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode):
+        if isinstance(node.value, Mapping) and node.model_config is None:
+            node.model_config = self.__detect_model_config(node.value, None)
         return node
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
@@ -258,7 +260,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         best_config = max(configs_affinity, key=configs_affinity.get)
         best_config = extensions.model_config.resolve(best_config)
         if configs_affinity[best_config.identifier] == 0:
-            raise ValueError(f"No configuration matches any key of {path}")
+            raise ValueError(f"No configuration matches any key in state dict{' ' + str(path) or ''}")
 
         return best_config
 
@@ -303,10 +305,8 @@ class KeyMergeVisitor(RecipeVisitor):
                 value = value[self.key]
             except KeyError as e:
                 raise StateDictKeyError(str(e)) from e
-        if isinstance(value, str):
+        if isinstance(value, torch.Tensor | str | int | float | bool):
             return value
-        if isinstance(value, int | float):
-            return torch.tensor(value)
         raise RuntimeError(f"Unexpected literal node value of type {type(value)}")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:

@@ -4,15 +4,16 @@ import numpy as np
 import torch
 from scipy.stats import binom
 from torch import Tensor
-from typing import Tuple
+from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_space import MergeSpaceSymbol
 from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
+from sd_mecha import extensions
 
 
-EPSILON = 1e-10
-SameMergeSpace = MergeSpaceSymbol("weight", "delta")
+T = TypeVar("T")
+SameMergeSpace = MergeSpaceSymbol(*extensions.merge_space.get_all())
 
 
 @convert_to_recipe
@@ -150,8 +151,8 @@ def tensor_sum(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
     *,
-    width: float = 0.5,
-    offset: float = 0.0,
+    width: Parameter(float) = 0.5,
+    offset: Parameter(float) = 0.0,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
     if a.shape == ():
@@ -173,8 +174,8 @@ def top_k_tensor_sum(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
     *,
-    width: float = 1.0,
-    offset: float = 0.0,
+    width: Parameter(float) = 1.0,
+    offset: Parameter(float) = 0.0,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
     a_flat = torch.flatten(a)
@@ -319,44 +320,12 @@ def multiply_quotient(
 
 
 @convert_to_recipe
-def distribution_crossover(
-    a: Parameter(Tensor, SameMergeSpace),
-    b: Parameter(Tensor, SameMergeSpace),
-    c: Parameter(Tensor, SameMergeSpace),
-    *,
-    alpha: float,
-    tilt: float,
-    **kwargs,
-) -> Return(Tensor, SameMergeSpace):
-    if alpha == 0:
-        return a
-    if alpha == 1:
-        return b
-    if tilt == 1 or a.shape == ():
-        return weighted_sum.__wrapped__(a, b, alpha=alpha)
-
-    c_indices = torch.argsort(torch.flatten(c))
-    a_dist = torch.gather(torch.flatten(a), 0, c_indices)
-    b_dist = torch.gather(torch.flatten(b), 0, c_indices)
-
-    a_dft = torch.fft.rfft(a_dist)
-    b_dft = torch.fft.rfft(b_dist)
-
-    dft_filter = create_filter((a_dft.numel(),), alpha, tilt, device=a.device)
-
-    x_dft = (1 - dft_filter) * a_dft + dft_filter * b_dft
-    x_dist = torch.fft.irfft(x_dft, a_dist.shape[0])
-    x_values = torch.gather(x_dist, 0, torch.argsort(c_indices))
-    return x_values.reshape_as(a)
-
-
-@convert_to_recipe
 def crossover(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
     *,
-    alpha: float = 0.5,
-    tilt: float = 0.0,
+    alpha: Parameter(float) = 0.5,
+    tilt: Parameter(float) = 0.0,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
     if alpha == 0:
@@ -418,9 +387,9 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
     else:
         mesh = gradients[0]
 
-    if tilt < EPSILON or abs(tilt - 4) < EPSILON:
+    if tilt < 1e-10 or abs(tilt - 4) < 1e-10:
         dft_filter = (mesh > 1 - alpha).float()
-    elif abs(tilt - 2) < EPSILON:
+    elif abs(tilt - 2) < 1e-10:
         dft_filter = (mesh < 1 - alpha).float()
     else:
         tilt_cot = 1 / math.tan(math.pi * tilt / 2)
@@ -440,7 +409,7 @@ def rotate(
     a_dict: Parameter(Tensor, SameMergeSpace),
     b_dict: Parameter(Tensor, SameMergeSpace),
     *,
-    alignment: float = 1.0,
+    alignment: Parameter(float) = 1.0,
     alpha: Parameter(Tensor) = 0.0,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
@@ -510,7 +479,7 @@ def rotate(
 def clamp(
     a: Parameter(Tensor, SameMergeSpace),
     *bounds: Parameter(Tensor, SameMergeSpace),
-    stiffness: Parameter(Tensor) = 0.0,
+    stiffness: Parameter(float) = 0.0,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
     maximums = functools.reduce(torch.maximum, bounds)
@@ -546,21 +515,21 @@ def copy_distribution(
 @convert_to_recipe
 def ties_sum_extended(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
-    k: Parameter(Tensor) = 0.2,
-    vote_sgn: Parameter(Tensor) = 0.0,
-    apply_stock: Parameter(Tensor) = 0.0,
-    apply_median: Parameter(Tensor) = 0.0,
-    cos_eps: Parameter(Tensor) = 1e-6,
-    eps: Parameter(Tensor) = 1e-6,
-    maxiter: Parameter(Tensor) = 100,
-    ftol: Parameter(Tensor) = 1e-20,
+    k: Parameter(float) = 0.2,
+    vote_sgn: Parameter(bool) = False,
+    apply_stock: Parameter(bool) = False,
+    apply_median: Parameter(bool) = False,
+    cos_eps: Parameter(float) = 1e-6,
+    eps: Parameter(float) = 1e-6,
+    maxiter: Parameter(int) = 100,
+    ftol: Parameter(float) = 1e-20,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
-    if apply_median <= 0.0:
+    if apply_median:
         # Model Stock
-        t = 1.0 if apply_stock <= 0.0 else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
+        t = 1.0 if apply_stock else get_model_stock_t(torch.unbind(filtered_delta), cos_eps=cos_eps)
 
         filtered_delta = filtered_delta.sum(dim=0)
 
@@ -586,8 +555,8 @@ def ties_sum_extended(  # aka add_difference_ties
 @convert_to_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
-    k: Parameter(Tensor) = 0.2,
-    vote_sgn: Parameter(Tensor) = 0.0,
+    k: Parameter(float) = 0.2,
+    vote_sgn: Parameter(bool) = 0.0,
     **kwargs,
 ) -> Return(Tensor, "delta"):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
@@ -597,9 +566,9 @@ def ties_sum(  # aka add_difference_ties
 
 
 def ties_sum_deltas(
-    *models: Parameter(Tensor),
-    k: Parameter(Tensor) = 0.2,
-    vote_sgn: Parameter(Tensor) = 0.0,
+    *models: Tensor,
+    k: float = 0.2,
+    vote_sgn: bool = False,
 ):
     # Step 1: Trim redundant parameters
 
@@ -618,7 +587,7 @@ def ties_sum_deltas(
 
     # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \hat{\tau}_t^p) $$ for normal TIES
     # $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$ if "TIES-SOUP" is activated
-    final_sign = torch.sign(torch.sum(deltas if vote_sgn <= 0.0 else signs, dim=0))
+    final_sign = torch.sign(torch.sum(deltas if vote_sgn else signs, dim=0))
 
     # Step 3: Disjoint merge.
 
@@ -635,40 +604,35 @@ def ties_sum_deltas(
     return filtered_delta, param_counts
 
 
-def filter_top_k(a: Tensor, k: Tensor):
-    k = max(int((1 - k.item()) * torch.numel(a)), 1)
-    k_value, _ = torch.kthvalue(torch.abs(a.flatten()).float(), k)
-    top_k_filter = (torch.abs(a) >= k_value).float()
+def filter_top_k(a: Tensor, k: float):
+    k = max(int((1 - k) * a.numel()), 1)
+    k_value, _ = a.flatten().abs().float().kthvalue(k)
+    top_k_filter = (a.abs() >= k_value).float()
     return a * top_k_filter
 
 
 @convert_to_recipe
 def dropout(  # aka n-supermario
     *deltas: Parameter(Tensor, "delta"),
-    probability: Parameter(Tensor) = 0.9,
-    rescale: Parameter(Tensor) = 1.0,
-    overlap: Parameter(Tensor) = 1.0,
-    overlap_emphasis: Parameter(Tensor) = 0.0,
-    seed: Parameter(Tensor) = -1,
+    probability: Parameter(float) = 0.9,
+    rescale: Parameter(float) = 1.0,
+    overlap: Parameter(float) = 1.0,
+    overlap_emphasis: Parameter(float) = 0.0,
+    seed: Parameter(int) = None,
     **kwargs,
 ) -> Return(Tensor, "delta"):
     if len(deltas) == 0:
         return 0
-
-    if seed < 0:
-        seed = None
-    else:
-        seed = int(seed)
 
     delta0 = deltas[0]
     deltas = torch.stack(deltas)
     rng = np.random.default_rng(seed)
 
     if overlap % 2 == 1:
-        masks = torch.stack([
+        masks = tuple(
             torch.from_numpy(rng.binomial(n=1, p=1 - probability, size=delta0.shape)).to(device=delta0.device, dtype=torch.bool)
             for _ in range(len(deltas))
-        ])
+        )
     else:
         ks = np.arange(2 ** len(deltas))
         pmf = overlapping_sets_pmf(len(deltas), probability, overlap, overlap_emphasis)
@@ -726,37 +690,48 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
 @convert_to_recipe
 def ties_sum_with_dropout(
     *deltas: Parameter(Tensor, "delta"),
-    probability: Parameter(Tensor) = 0.9,
-    no_rescale: Parameter(Tensor) = 0.0,
-    k: Parameter(Tensor) = 0.2,
-    vote_sgn: Parameter(Tensor) = 0.0,
-    apply_stock: Parameter(Tensor) = 0.0,
-    cos_eps: Parameter(Tensor) = 1e-6,
-    apply_median: Parameter(Tensor) = 0.0,
-    eps: Parameter(Tensor) = 1e-6,
-    maxiter: Parameter(Tensor) = 100,
-    ftol: Parameter(Tensor) = 1e-20,
-    seed: Parameter(Tensor) = -1,
+    probability: Parameter(float) = 0.9,
+    no_rescale: Parameter(bool) = False,
+    k: Parameter(float) = 0.2,
+    vote_sgn: Parameter(bool) = False,
+    apply_stock: Parameter(bool) = False,
+    cos_eps: Parameter(float) = 1e-6,
+    apply_median: Parameter(bool) = False,
+    eps: Parameter(float) = 1e-6,
+    maxiter: Parameter(int) = 100,
+    ftol: Parameter(float) = 1e-20,
+    seed: Parameter(int) = None,
     **kwargs,
 ) -> Return(Tensor, "delta"):
     # Set seed
-    if seed < 0:
-        seed = None
-    else:
-        seed = int(seed)
-    torch.manual_seed(seed)
+    generator = torch.Generator(device=deltas[0].device)
+    if seed is not None:
+        generator.manual_seed(seed)
 
     # Under "Dropout", delta will be 0 by definition. Multiply it (Hadamard product) will return 0 also.
     # $$ \tilde{\delta}^t = (1 - m^t) \odot \delta^t $$
-    deltas = [delta * torch.bernoulli(torch.full(delta.shape, 1 - probability, device=deltas[0].device, dtype=deltas[0].dtype)) for delta in deltas]
+    deltas = tuple(
+        delta * torch.bernoulli(torch.full(delta.shape, 1 - probability, device=deltas[0].device, dtype=deltas[0].dtype), generator=generator)
+        for delta in deltas
+    )
 
     # $$ \tilde{\delta}^t = \tau_m = \hat{\tau}_t $$ O(N) in space
-    deltas = ties_sum_extended.__wrapped__(*deltas, k=k, vote_sgn=vote_sgn, apply_stock=apply_stock, cos_eps=cos_eps, apply_median=apply_median, eps=eps, maxiter=maxiter, ftol=ftol)
+    deltas = ties_sum_extended.__wrapped__(
+        *deltas,
+        k=k,
+        vote_sgn=vote_sgn,
+        apply_stock=apply_stock,
+        cos_eps=cos_eps,
+        apply_median=apply_median,
+        eps=eps,
+        maxiter=maxiter,
+        ftol=ftol,
+    )
 
-    if probability == 1.0:
+    if math.isclose(probability, 1.0):
         # Corner case
         return deltas * 0.0
-    elif no_rescale <= 0.0:
+    elif no_rescale:
         # Rescale
         # $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
         return deltas / (1.0 - probability) 
@@ -779,7 +754,7 @@ def binomial_coefficient_np(n, k):
 @convert_to_recipe
 def model_stock(
     *deltas: Parameter(Tensor, "delta"),
-    cos_eps: Parameter(Tensor) = 1e-6,
+    cos_eps: Parameter(float) = 1e-6,
     **kwargs,
 ) -> Return(Tensor, "delta"):
     w_avg = n_average.__wrapped__(*deltas)
@@ -793,11 +768,11 @@ def model_stock(
 
 # The guess from mergekit: Average of cos(theta). Expected value is 0, somehow match with paper.
 # However this may be very unstable, and the range is still -1 to 1.
-def get_model_stock_t(deltas, cos_eps: Tensor):
+def get_model_stock_t(deltas: Sequence[Tensor], cos_eps: float):
     n = len(deltas)
 
     # Generator function
-    cos = torch.nn.CosineSimilarity(dim=-1, eps=cos_eps.item())
+    cos = torch.nn.CosineSimilarity(dim=-1, eps=cos_eps)
     cos_thetas = [cos(deltas[i], deltas[i + 1]) for i, _ in enumerate(deltas) if (i + 1) < n]
 
     # Still a vector
@@ -812,9 +787,9 @@ def get_model_stock_t(deltas, cos_eps: Tensor):
 @convert_to_recipe
 def geometric_median(
     *models: Parameter(Tensor, SameMergeSpace),
-    eps: Parameter(Tensor) = 1e-6,
-    maxiter: Parameter(Tensor) = 100,
-    ftol: Parameter(Tensor) = 1e-20,
+    eps: Parameter(float) = 1e-6,
+    maxiter: Parameter(int) = 100,
+    ftol: Parameter(float) = 1e-20,
     **kwargs,
 ) -> Return(Tensor, SameMergeSpace):
     weights = torch.ones(len(models), device=models[0].device)
@@ -848,10 +823,10 @@ def geometric_median_objective(median, points: Tuple, weights):
 
 @convert_to_recipe
 def fallback(
-    a: StateDict,
-    default: StateDict,
+    a: Parameter(StateDict[T], SameMergeSpace),
+    default: Parameter(StateDict[T], SameMergeSpace),
     **kwargs
-) -> Tensor:
+) -> Return(T, SameMergeSpace):
     key = kwargs["key"]
     try:
         return a[key]
@@ -861,11 +836,11 @@ def fallback(
 
 @convert_to_recipe
 def cast(
-    a: Parameter(Tensor),
-    device: str = None,
-    dtype: str = None,
+    a: Parameter(Tensor, SameMergeSpace),
+    device: Parameter(str) = None,
+    dtype: Parameter(str) = None,
     **kwargs,
-) -> Tensor:
+) -> Return(Tensor, SameMergeSpace):
     to_kwargs = {}
     if device is not None:
         to_kwargs["device"] = device
