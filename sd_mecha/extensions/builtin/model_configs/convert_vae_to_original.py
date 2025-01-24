@@ -1,8 +1,8 @@
-from torch import Tensor
+import torch
 from sd_mecha.extensions.merge_method import StateDict
 
 
-def convert_vae(diffusers_sd: StateDict, ldm_key: str) -> Tensor:
+def convert_vae(diffusers_sd: StateDict[torch.Tensor], ldm_key: str) -> torch.Tensor:
     diffusers_key = '.'.join(ldm_key.split(".")[1:])
 
     needs_reshape = False

@@ -1,14 +1,13 @@
 import torch
-from torch import Tensor
 from sd_mecha.extensions.merge_method import recipe, StateDict, Return, Parameter
 from .convert_vae_to_original import convert_vae
 
 
 @recipe(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
 def convert_sdxl_kohya_to_original(
-    kohya_sd: Parameter(StateDict, model_config="sdxl-kohya"),
+    kohya_sd: Parameter(StateDict[torch.Tensor], model_config="sdxl-kohya"),
     **kwargs,
-) -> Return(Tensor, model_config="sdxl-sgm"):
+) -> Return(torch.Tensor, model_config="sdxl-sgm"):
     sgm_key = kwargs["key"]
 
     if sgm_key.startswith("model.diffusion_model."):

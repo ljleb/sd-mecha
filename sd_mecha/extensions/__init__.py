@@ -5,4 +5,5 @@ from . import merge_method
 from .external import load_extensions
 
 
+# todo: delete extensions
 load_extensions()

@@ -20,7 +20,7 @@ def _register_all_lycoris_configs():
 
             @recipe(identifier=f"convert_'{lora_config_id}'_to_base", is_conversion=True)
             def diffusers_lora_to_base(
-                lora: Parameter(StateDict, "weight", lora_config_id),
+                lora: Parameter(StateDict[torch.Tensor], "weight", lora_config_id),
                 **kwargs,
             ) -> Return(torch.Tensor, "delta", base_config_id):
                 key = kwargs["key"]

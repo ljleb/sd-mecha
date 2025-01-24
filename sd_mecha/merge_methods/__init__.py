@@ -15,8 +15,8 @@ T = TypeVar("T")
 
 @recipe
 def weighted_sum(
-    a: Parameter(StateDict),
-    b: Parameter(StateDict),
+    a: Parameter(StateDict[torch.Tensor]),
+    b: Parameter(StateDict[torch.Tensor]),
     *,
     alpha: Parameter(Tensor) = 0.5,
     **kwargs,

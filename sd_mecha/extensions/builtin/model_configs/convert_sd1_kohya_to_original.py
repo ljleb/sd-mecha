@@ -1,4 +1,4 @@
-from torch import Tensor
+import torch
 from sd_mecha.extensions.merge_method import recipe, StateDict, Parameter, Return
 from .convert_vae_to_original import convert_vae
 
@@ -9,9 +9,9 @@ from .convert_vae_to_original import convert_vae
 
 @recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'", is_conversion=True)
 def convert_sd1_kohya_to_original(
-    kohya_sd: Parameter(StateDict, model_config="sd1-kohya"),
+    kohya_sd: Parameter(StateDict[torch.Tensor], model_config="sd1-kohya"),
     **kwargs,
-) -> Return(Tensor, model_config="sd1-ldm"):
+) -> Return(torch.Tensor, model_config="sd1-ldm"):
     ldm_key = kwargs["key"]
     if ldm_key.startswith("model.diffusion_model."):
         return convert_unet(kohya_sd, ldm_key)
@@ -23,7 +23,7 @@ def convert_sd1_kohya_to_original(
         return kohya_sd[ldm_key]
 
 
-def convert_unet(diffusers_sd: StateDict, ldm_key: str) -> Tensor:
+def convert_unet(diffusers_sd: StateDict, ldm_key: str) -> torch.Tensor:
     diffusers_key = '.'.join(ldm_key.split(".")[2:])  # model.diffusion_model.
 
     for sd_part, hf_part in unet_conversion_map_layer.items():
@@ -116,7 +116,7 @@ for j in range(2):
     unet_conversion_map_layer[sd_mid_res_prefix] = hf_mid_res_prefix
 
 
-def convert_clip_l(diffusers_sd: StateDict, ldm_key: str) -> Tensor:
+def convert_clip_l(diffusers_sd: StateDict, ldm_key: str) -> torch.Tensor:
     diffusers_key = '.'.join(ldm_key.split(".")[2:])  # cond_stage_model.transformer.
     diffusers_key = f"text_encoder.{diffusers_key}"
     return diffusers_sd[diffusers_key]
