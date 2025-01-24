@@ -55,7 +55,7 @@ class RecipeMerger:
         recipe: extensions.merge_method.RecipeNodeOrValue,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge.safetensors",
         fallback_model: Optional[extensions.merge_method.RecipeNodeOrValue] = None,
-        save_device: Optional[str] = "cpu",
+        save_device: Optional[str | torch.device] = "cpu",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
@@ -64,11 +64,10 @@ class RecipeMerger:
     ):
         recipe = extensions.merge_method.value_to_node(recipe)
         if fallback_model is not None:
-            recipe = extensions.merge_method.resolve("fallback").create_recipe(recipe, fallback_model)
+            recipe = recipe | fallback_model
 
         if save_device is not None or save_dtype is not None:
-            from sd_mecha.merge_methods import cast_dtype_map_reversed
-            recipe = extensions.merge_method.resolve("cast").create_recipe(recipe, str(save_device), cast_dtype_map_reversed[save_dtype])
+            recipe = recipe.to(device=save_device, dtype=save_dtype)
 
         if threads is not None and (threads < 0 or not isinstance(threads, int)):
             raise RuntimeError("threads should be a non-negative integer or None")
@@ -262,8 +261,8 @@ def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path])
             break
 
     best_configs = sorted(configs_affinity, key=configs_affinity.get, reverse=True)
-    if configs_affinity[best_configs[0]] == 0:
-        raise ValueError(f"No configuration was found for the given state dict{' ' + str(path) or ''}")
+    if not best_configs or configs_affinity[best_configs[0]] == 0:
+        raise ValueError(f"No configuration was found for the given state dict{' ' + str(path) if path is not None else ''}")
 
     return best_configs
 

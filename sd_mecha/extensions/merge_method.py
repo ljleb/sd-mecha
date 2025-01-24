@@ -7,18 +7,16 @@ import pathlib
 import torch
 import typing
 from sd_mecha import extensions
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor, NonDictLiteralValue, RecipeNodeOrValue
 from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from sd_mecha.extensions.model_config import ModelConfig
 from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 
 
-NonDictLiteralValue = str | int | float | bool
-RecipeNodeOrValue = RecipeNode | pathlib.Path | NonDictLiteralValue | dict
+T = TypeVar('T', torch.Tensor, *typing.get_args(NonDictLiteralValue))
 
 
-T = TypeVar('T', torch.Tensor, str, int, float | bool)
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
     @property
     @abc.abstractmethod

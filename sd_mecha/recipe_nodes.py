@@ -1,7 +1,8 @@
 import abc
 import itertools
 import pathlib
-from typing import Optional, Dict, Tuple, Union
+from typing import Optional, Dict, Tuple
+import torch
 from . import extensions
 from .extensions.model_config import ModelConfig
 
@@ -28,34 +29,51 @@ class RecipeNode(abc.ABC):
     def set_cache(self, _cache: dict = ...):
         return self
 
-    def __add__(self, other):
+    def __add__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
         other = extensions.merge_method.value_to_node(other)
         base, delta = self, other
         if other.merge_space == "weight":
             base, delta = other, self
         return extensions.merge_method.resolve("add_difference")(base, delta)
 
-    def __radd__(self, other):
+    def __radd__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
         other = extensions.merge_method.value_to_node(other)
         return other + self
 
-    def __sub__(self, other):
+    def __sub__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
         other = extensions.merge_method.value_to_node(other)
         return extensions.merge_method.resolve("subtract")(self, other)
 
-    def __rsub__(self, other):
+    def __rsub__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
         other = extensions.merge_method.value_to_node(other)
         return other - self
 
-    def __or__(self, other: Union["RecipeNode", str | int | float | dict]) -> "RecipeNode":
+    def __or__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
         other = extensions.merge_method.value_to_node(other)
         return extensions.merge_method.resolve("fallback")(self, other)
+
+    def __ror__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
+        other = extensions.merge_method.value_to_node(other)
+        return other | self
+
+    def to(self, *, device: Optional[str | torch.device] = None, dtype: Optional[torch.dtype] = None):
+        if device is not None:
+            device = str(device)
+        if dtype is not None:
+            from sd_mecha.merge_methods import cast_dtype_map_reversed
+            dtype = cast_dtype_map_reversed[dtype]
+        return extensions.merge_method.resolve("cast").create_recipe(self, device, dtype)
+
+
+NonDictLiteralValue = str | int | float | bool
+LiteralValue = NonDictLiteralValue | dict
+RecipeNodeOrValue = RecipeNode | LiteralValue | pathlib.Path
 
 
 class LiteralRecipeNode(RecipeNode):
     def __init__(
         self,
-        value: str | int | float | Dict[str, str | int | float],
+        value: LiteralValue,
         model_config: Optional[str | ModelConfig] = None,
     ):
         self.value = value
@@ -209,15 +227,15 @@ class ModelsCountVisitor(RecipeVisitor):
     def __init__(self):
         self.__seen_nodes = []
 
-    def visit_literal(self, node: LiteralRecipeNode):
+    def visit_literal(self, node: LiteralRecipeNode) -> int:
         return 0
 
-    def visit_model(self, node: ModelRecipeNode):
+    def visit_model(self, node: ModelRecipeNode) -> int:
         seen = node in self.__seen_nodes
         self.__seen_nodes.append(node)
         return int(not seen)
 
-    def visit_merge(self, node: MergeRecipeNode):
+    def visit_merge(self, node: MergeRecipeNode) -> int:
         return sum(
             child.accept(self)
             for children in (node.args, node.kwargs.values())
