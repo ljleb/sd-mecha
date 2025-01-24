@@ -7,7 +7,7 @@ import fuzzywuzzy.process
 import torch
 from typing import Mapping, Protocol, Optional, Iterable, Tuple, runtime_checkable, List
 from sd_mecha.streaming import InSafetensorsDict, OutSafetensorsDict
-from sd_mecha.typing import WriteOnlyMapping
+from sd_mecha.typing_ import WriteOnlyMapping
 
 
 @runtime_checkable
@@ -81,7 +81,7 @@ def _register_builtin_model_formats():
     class SingleFileModelFormat(ModelFormat):
         def matches(self, path: pathlib.Path) -> bool:
             path = path.resolve()
-            return path.exists() and path.is_file() and path.suffix == ".safetensors"
+            return path.suffix == ".safetensors"
 
         def get_read_dict(self, path: pathlib.Path, buffer_size: int) -> Mapping[str, torch.Tensor]:
             return InSafetensorsDict(path, buffer_size)

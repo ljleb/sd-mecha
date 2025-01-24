@@ -1,13 +1,12 @@
 import logging
 import pathlib
 import torch
-from torch import Tensor
-from typing import Optional, Dict, Mapping
+from typing import Optional, Dict
 from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_merger import RecipeMerger
 from sd_mecha import recipe_nodes, merge_methods, extensions
-from sd_mecha.extensions.merge_method import value_to_node, RecipeNodeOrValue, Parameter, Return
+from sd_mecha.extensions.merge_method import convert_to_recipe, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
 from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 from sd_mecha.merge_methods import (
     weighted_sum,
@@ -52,8 +51,6 @@ def add_difference(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     alpha: float = 1.0,
     clamp_to_ab: Optional[bool] = None,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     a = extensions.merge_method.value_to_node(a)
     b = extensions.merge_method.value_to_node(b)
@@ -63,15 +60,11 @@ def add_difference(
         c = extensions.merge_method.value_to_node(c)
         b = subtract(
             b, c,
-            device=device,
-            dtype=dtype,
         )
 
     res = merge_methods.add_difference(
         a, b,
         alpha=alpha,
-        device=device,
-        dtype=dtype,
     )
 
     if a.merge_space == original_b.merge_space:
@@ -85,8 +78,6 @@ def add_difference(
             raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clamp the merge.")
         res = clamp(
             res, a, b,
-            device=device,
-            dtype=dtype,
         )
 
     return res
@@ -95,8 +86,6 @@ def add_difference(
 def add_perpendicular(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: RecipeNodeOrValue, *,
     alpha: float = 1.0,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -104,26 +93,18 @@ def add_perpendicular(
 
     a_diff = subtract(
         a, c,
-        device=device,
-        dtype=dtype,
     )
     b_diff = subtract(
         b, c,
-        device=device,
-        dtype=dtype,
     )
 
     perp_diff = merge_methods.perpendicular_component(
         a_diff, b_diff,
-        device=device,
-        dtype=dtype,
     )
 
     return merge_methods.add_difference(
         a, perp_diff,
         alpha=alpha,
-        device=device,
-        dtype=dtype,
     )
 
 
@@ -142,8 +123,6 @@ def add_difference_ties(
     *models: RecipeNodeOrValue,
     alpha: float,
     k: float = 0.2,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
     base = value_to_node(base)
@@ -162,8 +141,6 @@ def add_difference_ties(
     res = ties_sum(
         *models,
         k=k,
-        device=device,
-        dtype=dtype,
     )
 
     # Obtain merged checkpoint
@@ -172,8 +149,6 @@ def add_difference_ties(
     return add_difference(
         base, res,
         alpha=alpha,
-        device=device,
-        dtype=dtype,
     )
 
 
@@ -189,8 +164,6 @@ def add_difference_ties_extended(
     eps: float = 1e-6,
     maxiter: float = 100,
     ftol: float =1e-20,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
     base = value_to_node(base)
@@ -232,8 +205,6 @@ def copy_region(
     width: float = 1.0,
     offset: float = 0.0,
     top_k: bool = False,
-    device: Optional[str] = "cuda",
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -310,15 +281,13 @@ def dropout(
     overlap: float = 1.0,
     overlap_emphasis: float = 0.0,
     seed: Optional[float] = None,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     deltas = [
         subtract(model, a)
         for model in models
     ]
-    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed, device=device, dtype=dtype)
-    return merge_methods.add_difference(a, ba_delta, alpha=alpha, device=device, dtype=dtype)
+    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed)
+    return merge_methods.add_difference(a, ba_delta, alpha=alpha)
 
 
 ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
@@ -351,8 +320,6 @@ def ties_with_dare(
     eps: float = 1e-6,
     maxiter: float = 100,
     ftol: float = 1e-20,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     # $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
     base = value_to_node(base)
@@ -378,12 +345,10 @@ def ties_with_dare(
         eps=eps,    
         maxiter=maxiter, 
         ftol=ftol,
-        device=device, 
-        dtype=dtype
     )
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
-    return merge_methods.add_difference(base, res, alpha=alpha, device=device, dtype=dtype)
+    return merge_methods.add_difference(base, res, alpha=alpha)
 
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
@@ -392,8 +357,6 @@ def model_stock_n_models(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
     cos_eps: float = 1e-6,
-    device: Optional[str] = None,
-    dtype: Optional[torch.dtype] = None,
 ) -> recipe_nodes.RecipeNode:
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)
@@ -410,11 +373,9 @@ def model_stock_n_models(
     res = model_stock(
         *deltas,
         cos_eps=cos_eps,
-        device=device, 
-        dtype=dtype
     )
 
-    return merge_methods.add_difference(base, res, alpha=1.0, device=device, dtype=dtype)
+    return merge_methods.add_difference(base, res, alpha=1.0)
 
 
 def model(path: str | pathlib.Path, model_config: Optional[str] = None):

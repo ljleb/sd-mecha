@@ -41,7 +41,7 @@ def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpa
     if type(None) in (typing.get_args(interface) or ()):
         interface = typing.get_args(interface)[0]
 
-    if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
+    if not isinstance(interface, TypeVar) and not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
         raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, str):
@@ -117,6 +117,7 @@ class MergeMethod:
     def __init__(self, f: Callable, identifier: str):
         self.__wrapped__ = f
         self.identifier = identifier
+        self.has_varkwargs = True
         self.__validate_f()
 
     def __validate_f(self):
@@ -129,7 +130,7 @@ class MergeMethod:
         input_configs = self.get_input_configs()
 
         if spec.varkw is None:
-            raise TypeError(f"for forward compatibility reasons, **kwargs must be included in the function parameters")
+            self.has_varkwargs = False
 
         for param_idx in params.as_dict(1):
             is_default_arg = (
@@ -167,10 +168,12 @@ class MergeMethod:
         input_kwargs: Dict[str, float],
         key: str,
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
-        return input_args, input_kwargs | {
-            "key": key,
-            "cache": None,
-        }
+        if self.has_varkwargs:
+            input_kwargs |= {
+                "key": key,
+                "cache": None,
+            }
+        return input_args, input_kwargs
 
     def __call__(self, *args, **kwargs):
         return self.create_recipe(*args, **kwargs)
@@ -453,33 +456,31 @@ def get_all() -> List[MergeMethod]:
 
 
 def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = torch.Tensor) -> RecipeNode:
-    # todo: test this crap :>
-
-    valid_input_types = RecipeNode | torch.Tensor | int | float | bool | dict | str | pathlib.Path
-    if not isinstance(node_or_value, valid_input_types):
-        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(valid_input_types)}")
+    if not isinstance(node_or_value, RecipeNodeOrValue):
+        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}")
 
     if isinstance(node_or_value, RecipeNode):
         return node_or_value
 
     try:
         if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):
-            expected_type = (typing.get_args(expected_type) + (torch.Tensor,))[0]
+            expected_type = next(iter(typing.get_args(expected_type) or (T,)))
     except TypeError:
         pass
 
     numeric = int | float
-    if (
-        isinstance(node_or_value, numeric) or
-        isinstance(node_or_value, Mapping) and all(isinstance(v, expected_type) for v in node_or_value.values())
-    ) and issubclass(expected_type, torch.Tensor):
-        if isinstance(node_or_value, Mapping):
-            node_or_value = {k: torch.tensor(v) for k, v in node_or_value.items()}
-        else:
-            node_or_value = torch.tensor(node_or_value)
+
+    # verify dict value type consistency
+    if isinstance(node_or_value, Mapping) and node_or_value:
+        actual_type = type(next(iter(node_or_value.values())))
+        if isinstance(actual_type, numeric):
+            actual_type = numeric
+        if not all(isinstance(v, actual_type) for v in node_or_value.values()):
+            bad_type = next(iter(type(v) for v in node_or_value.values() if not isinstance(v, actual_type)))
+            raise TypeError(f"inconsistent types found in input dict: {actual_type} and {bad_type}")
 
     if (
-        isinstance(expected_type, TypeVar) or
+        (isinstance(expected_type, TypeVar) and isinstance(node_or_value, str | int | float | bool | dict)) or
         isinstance(node_or_value, expected_type) or  # identity case
         isinstance(node_or_value, Mapping) and all(isinstance(v, expected_type) for v in node_or_value.values()) or
         issubclass(expected_type, numeric | torch.Tensor) and (
@@ -489,7 +490,7 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = torch.
     ):
         return LiteralRecipeNode(node_or_value)
 
-    if issubclass(expected_type, torch.Tensor):
+    if isinstance(expected_type, TypeVar) or issubclass(expected_type, torch.Tensor):
         try:
             return ModelRecipeNode(node_or_value)
         except TypeError as e:

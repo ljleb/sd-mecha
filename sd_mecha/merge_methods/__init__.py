@@ -537,7 +537,7 @@ def ties_sum_extended(  # aka add_difference_ties
         return torch.nan_to_num(filtered_delta * t / param_counts)
     else:
         # $$ \tau_m $$, but in geometric median instead of arithmetic mean. Considered to replace model stock.
-        filtered_delta = geometric_median.__wrapped__(torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
+        filtered_delta = geometric_median.__wrapped__(*torch.unbind(filtered_delta), eps=eps, maxiter=maxiter, ftol=ftol)
 
         return torch.nan_to_num(filtered_delta)
 
@@ -556,7 +556,7 @@ def ties_sum_extended(  # aka add_difference_ties
 def ties_sum(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
     k: Parameter(float) = 0.2,
-    vote_sgn: Parameter(bool) = 0.0,
+    vote_sgn: Parameter(bool) = False,
     **kwargs,
 ) -> Return(Tensor, "delta"):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
@@ -800,7 +800,7 @@ def geometric_median(
     objective_value = geometric_median_objective(median, models, weights)
 
     # Weiszfeld iterations
-    for _ in range(max(0, round(maxiter.item()))):
+    for _ in range(max(0, maxiter)):
         prev_obj_value = objective_value
         denom = torch.stack([torch.dist(p, median) for p in models])
         new_weights = weights / torch.clamp(denom, min=eps)
@@ -865,3 +865,4 @@ cast_dtype_map = {
     "int16": torch.int16,
     "int8": torch.int8,
 }
+cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}

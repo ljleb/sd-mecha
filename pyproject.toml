@@ -25,6 +25,14 @@ dependencies = [
     "PyYAML>=6.0.1",
 ]
 
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+pythonpath = "."
+testpaths = [
+    "tests",
+]
+
 [tool.setuptools.package-dir]
 sd_mecha = "sd_mecha"
 

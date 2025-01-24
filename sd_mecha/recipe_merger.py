@@ -8,17 +8,21 @@ import os
 import pathlib
 import sys
 import threading
+import typing
+
 import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from sd_mecha.extensions.merge_method import MergeMethod, StateDict
+from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
-from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict
+from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
+
+from sd_mecha.typing_ import is_subclass
 
 
 class RecipeMerger:
@@ -60,6 +64,10 @@ class RecipeMerger:
         if fallback_model is not None:
             recipe = extensions.merge_method.resolve("fallback").create_recipe(recipe, fallback_model)
 
+        if save_device is not None or save_dtype is not None:
+            from sd_mecha.merge_methods import cast_dtype_map_reversed
+            recipe = extensions.merge_method.resolve("cast").create_recipe(recipe, str(save_device), cast_dtype_map_reversed[save_dtype])
+
         if threads is not None and (threads < 0 or not isinstance(threads, int)):
             raise RuntimeError("threads should be a non-negative integer or None")
 
@@ -67,7 +75,7 @@ class RecipeMerger:
             recipe.accept(recipe_nodes.ModelsCountVisitor()) +
             int(isinstance(output, (str, pathlib.Path)))
         )
-        buffer_size_per_file = total_buffer_size // total_files_open
+        buffer_size_per_file = total_buffer_size // max(1, total_files_open)
         if threads is None:
             threads = min(max(total_files_open, 2), os.cpu_count(), 8)
 
@@ -96,11 +104,11 @@ class RecipeMerger:
             with executor:
                 futures = []
                 for key in recipe_keys:
-                    key_merger = self.__get_key_merger(key, recipe)
-                    key_merger = self.__track_output(key_merger, output, key, save_dtype, save_device)
-                    key_merger = self.__track_progress(key_merger, key, recipe_keys[key].shape, progress)
-                    key_merger = self.__wrap_thread_context(key_merger, thread_local_data)
-                    futures.append(executor.submit(key_merger))
+                    fn = recipe.accept
+                    fn = self.__track_output(fn, output, key)
+                    fn = self.__track_progress(fn, key, recipe_keys[key].shape, progress)
+                    fn = self.__wrap_thread_context(fn, thread_local_data)
+                    futures.append(executor.submit(fn, KeyMergeVisitor(key)))
 
                 for future in as_completed(futures):
                     if future.exception() is not None:
@@ -137,22 +145,11 @@ class RecipeMerger:
             )
         return output
 
-    def __get_key_merger(self, key, recipe):
-        key_merger = KeyMerger(recipe)
-        return functools.partial(key_merger.merge_and_save, key)
-
-    def __track_output(self, f, output, key, save_dtype, save_device):
-        if save_dtype is None:
-            save_dtype = self.__default_dtype
-
-        to_kwargs = {"dtype": save_dtype}
-        if save_device is not None:
-            to_kwargs["device"] = save_device
-
+    def __track_output(self, f, output, key):
         @functools.wraps(f)
         def track_output(*args, **kwargs):
             try:
-                output[key] = f(*args, **kwargs).to(**to_kwargs)
+                output[key] = f(*args, **kwargs)
             except StateDictKeyError as k:
                 logging.debug(f"skipping key {k}")
         return track_output
@@ -281,20 +278,6 @@ class CloseInputDictsVisitor(RecipeVisitor):
 
 
 @dataclasses.dataclass
-class KeyMerger:
-    recipe: recipe_nodes.RecipeNode
-
-    def merge_and_save(
-        self,
-        key: str,
-    ) -> torch.Tensor:
-        key_merger = KeyMergeVisitor(
-            key,
-        )
-        return self.recipe.accept(key_merger)
-
-
-@dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     key: str
 
@@ -339,10 +322,11 @@ class KeyMergeVisitor(RecipeVisitor):
         indices = itertools.chain(range(len(node_args)), node_kwargs.keys())
         for index in sorted(indices, key=depth_of_value, reverse=True):
             nodes = node_args if isinstance(index, int) else node_kwargs
-            if issubclass(input_types[index], torch.Tensor):
-                merged[index] = error_holder.intercept(nodes[index].accept, self)
+            if is_subclass(input_types[index], StateDict):
+                expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, self)
             else:
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], self)
+                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, self), input_types[index])
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
@@ -373,13 +357,19 @@ class ErrorHolder:
 
 
 class MergeNodeWrapperStateDict(StateDict):
-    def __init__(self, merge_node: recipe_nodes.MergeRecipeNode, original_merge_visitor: KeyMergeVisitor):
+    def __init__(
+        self,
+        merge_node: recipe_nodes.MergeRecipeNode,
+        expected_type: type,
+        original_merge_visitor: KeyMergeVisitor,
+    ):
         self.merge_node = merge_node
+        self.expected_type = expected_type
         self.original_merge_visitor = original_merge_visitor
 
     def __getitem__(self, key):
         key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
-        return self.merge_node.accept(key_merger)
+        return cast_node_value(self.merge_node.accept(key_merger), self.expected_type)
 
     def __len__(self):
         return len(self.compute_keys())
@@ -396,3 +386,26 @@ class MergeNodeWrapperStateDict(StateDict):
 
     def compute_keys(self):
         return self.model_config.keys
+
+
+def cast_node_value(value, expected_type):
+    if value is None:
+        return value
+
+    try:
+        if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):
+            expected_type = (typing.get_args(expected_type) + (MergeMethodT,))[0]
+    except TypeError:
+        pass
+
+    if isinstance(expected_type, TypeVar) or isinstance(value, expected_type):
+        return value
+    if isinstance(expected_type, str):
+        raise RuntimeError(f"cannot implicitly convert {type(value)} to {expected_type}")
+    if issubclass(expected_type, int):
+        return int(value)
+    if issubclass(expected_type, float):
+        return float(value)
+    if issubclass(expected_type, torch.Tensor):
+        return torch.tensor(value, dtype=torch.float32)
+    return value

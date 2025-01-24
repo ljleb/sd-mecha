@@ -23,20 +23,20 @@ def convert_sdxl_blocks_to_sgm(
 ) -> Return(T, "param", "sdxl-sgm"):
     sgm_key = kwargs["key"]
 
-    block_key = "base"
+    block_key = "BASE"
     if sgm_key.startswith("model.diffusion_model."):
-        block_key = "out11"
+        block_key = "OUT11"
         if ".time_embed" in sgm_key or ".label_emb" in sgm_key:
-            block_key = "base"  # before input blocks
+            block_key = "BASE"  # before input blocks
         elif ".out." in sgm_key:
-            block_key = "out11"  # after output blocks
+            block_key = "OUT11"  # after output blocks
         elif m := re_inp.search(sgm_key):
-            block_key = f"in{int(m.groups(1)[0]):02}"
+            block_key = f"IN{int(m.groups(1)[0]):02}"
         elif re_mid.search(sgm_key):
-            block_key = "mid00"
+            block_key = "M00"
         elif m := re_out.search(sgm_key):
-            block_key = f"out{int(m.groups(1)[0]):02}"
+            block_key = f"OUT{int(m.groups(1)[0]):02}"
     elif sgm_key.startswith("first_stage_model."):
-        block_key = "vae"
+        block_key = "VAE"
 
     return blocks[block_key]
