@@ -9,6 +9,8 @@ import pathlib
 import sys
 import threading
 import typing
+import warnings
+
 import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
@@ -58,6 +60,7 @@ class RecipeMerger:
         total_buffer_size: int = 2**28,
         strict_weight_space: bool = True,
         cache: Optional[Cache] = None,
+        check_finite: bool = True,
     ):
         recipe = extensions.merge_method.value_to_node(recipe)
         if fallback_model is not None:
@@ -79,7 +82,6 @@ class RecipeMerger:
             threads = min(max(total_files_open, 2), os.cpu_count(), 8)
 
         # todo: use fake tensors to detect keys to merge and output dtype, etc.
-        # todo: wrap recipe in node that calls to(save_device, save_dtype) if any of device or dtype are passed
         with open_input_dicts(recipe, self.__base_dirs, buffer_size_per_file):
             model_config = recipe.model_config
             if strict_weight_space and recipe.merge_space != "weight":
@@ -104,7 +106,7 @@ class RecipeMerger:
                 futures = []
                 for key in recipe_keys:
                     fn = recipe.accept
-                    fn = self.__track_output(fn, output, key)
+                    fn = self.__track_output(fn, output, key, check_finite)
                     fn = self.__track_progress(fn, key, recipe_keys[key].shape, progress)
                     fn = self.__wrap_thread_context(fn, thread_local_data)
                     futures.append(executor.submit(fn, KeyMergeVisitor(key, cache)))
@@ -144,11 +146,14 @@ class RecipeMerger:
             )
         return output
 
-    def __track_output(self, f, output, key):
+    def __track_output(self, f, output, key, check_finite: bool):
         @functools.wraps(f)
         def track_output(*args, **kwargs):
             try:
-                output[key] = f(*args, **kwargs)
+                res = f(*args, **kwargs)
+                if check_finite and not res.isfinite().all():
+                    logging.warning(f"there are non finite values in key '{key}'")
+                output[key] = res
             except StateDictKeyError as k:
                 logging.debug(f"skipping key {k}")
         return track_output
