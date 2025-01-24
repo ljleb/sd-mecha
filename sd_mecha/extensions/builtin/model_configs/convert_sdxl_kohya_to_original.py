@@ -1,13 +1,11 @@
 import torch
 from torch import Tensor
-from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, validate_config_conversion, Return, Parameter
+from sd_mecha.extensions.merge_method import make_recipe, StateDict, Return, Parameter
 from sd_mecha.merge_methods import SameMergeSpace
 from .convert_vae_to_original import convert_vae
 
 
-@validate_config_conversion
-@convert_to_recipe(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'")
+@make_recipe(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
 def convert_sdxl_kohya_to_original(
     kohya_sd: Parameter(StateDict, SameMergeSpace, "sdxl-kohya"),
     **kwargs,

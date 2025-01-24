@@ -264,14 +264,14 @@ class MergeMethod:
             valid_merge_spaces = merge_space_param.merge_spaces if is_symbol else merge_space_param
             if merge_space_arg not in valid_merge_spaces:
                 valid_str_merge_spaces = tuple(m.identifier for m in valid_merge_spaces)
-                raise TypeError(f"parameter '{name}' of method {self.identifier} expects a merge space in {valid_str_merge_spaces} but got {merge_space_arg}")
+                raise TypeError(f"parameter '{name}' of method {self.identifier} expects a merge space in {valid_str_merge_spaces} but got {merge_space_arg.identifier}")
             if not is_symbol:
                 continue
 
             if (resolved_input_space := resolved_input_spaces.get(merge_space_param)) is not None:
                 # occurrence of already seen type var
                 if merge_space_arg != resolved_input_space:
-                    raise TypeError(f"parameter '{name}' of method {self.identifier} was resolved to {resolved_input_space} but got {merge_space_arg}")
+                    raise TypeError(f"parameter '{name}' of method {self.identifier} was resolved to {resolved_input_space.identifier} but got {merge_space_arg.identifier}")
             else:
                 resolved_input_spaces[merge_space_param] = merge_space_arg
 
@@ -422,20 +422,22 @@ class InferModelConfigVisitor(RecipeVisitor):
 F = TypeVar("F", bound=Callable)
 
 
-def convert_to_recipe(
+def make_recipe(
     f: Optional[F] = None, *,
     identifier: Optional[str] = None,
     register: bool = True,
+    is_conversion: bool = False,
 ) -> F:
     if f is None:
-        return lambda f: __convert_to_recipe_impl(f, identifier=identifier, register=register)
-    return __convert_to_recipe_impl(f, identifier=identifier, register=register)
+        return lambda f: __convert_to_recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
+    return __convert_to_recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
 
 
 def __convert_to_recipe_impl(
     fn: Callable, *,
     identifier: Optional[str] = None,
     register: bool,
+    is_conversion: bool,
 ):
     if identifier is None:
         identifier = fn.__name__
@@ -443,6 +445,8 @@ def __convert_to_recipe_impl(
 
     if register:
         _merge_methods_registry[identifier] = merge_method
+        if is_conversion:
+            _conversion_registry[identifier] = validate_config_conversion(merge_method)
     return merge_method
 
 
@@ -457,6 +461,7 @@ def validate_config_conversion(merge_method: MergeMethod):
 
 
 _merge_methods_registry = {}
+_conversion_registry = {}
 
 
 def resolve(identifier: str) -> MergeMethod:
@@ -471,12 +476,16 @@ def get_all() -> List[MergeMethod]:
     return list(_merge_methods_registry.values())
 
 
+def get_all_converters() -> List[MergeMethod]:
+    return list(_conversion_registry.values())
+
+
 def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) -> RecipeNode:
     if isinstance(node_or_value, RecipeNode):
         return node_or_value
 
     if not isinstance(node_or_value, RecipeNodeOrValue):
-        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}")
+        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}, not {type(node_or_value)}")
 
     numeric = int | float
 

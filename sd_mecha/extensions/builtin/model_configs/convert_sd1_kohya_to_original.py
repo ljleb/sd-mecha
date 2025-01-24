@@ -1,6 +1,5 @@
 from torch import Tensor
-from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, validate_config_conversion, Parameter, Return
+from sd_mecha.extensions.merge_method import make_recipe, StateDict, Parameter, Return
 from sd_mecha.merge_methods import SameMergeSpace
 from .convert_vae_to_original import convert_vae
 
@@ -9,8 +8,7 @@ from .convert_vae_to_original import convert_vae
 # https://github.com/huggingface/diffusers/blob/main/scripts/convert_diffusers_to_original_stable_diffusion.py
 
 
-@validate_config_conversion
-@convert_to_recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'")
+@make_recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'", is_conversion=True)
 def convert_sd1_kohya_to_original(
     kohya_sd: Parameter(StateDict, SameMergeSpace, "sd1-kohya"),
     **kwargs,

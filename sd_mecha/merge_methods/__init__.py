@@ -7,7 +7,7 @@ from torch import Tensor
 from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_space import MergeSpaceSymbol
-from sd_mecha.extensions.merge_method import convert_to_recipe, StateDict, Parameter, Return
+from sd_mecha.extensions.merge_method import make_recipe, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
 from sd_mecha import extensions
 
@@ -16,7 +16,7 @@ T = TypeVar("T")
 SameMergeSpace = MergeSpaceSymbol(*extensions.merge_space.get_all())
 
 
-@convert_to_recipe
+@make_recipe
 def weighted_sum(
     a: Parameter(StateDict, SameMergeSpace),
     b: Parameter(StateDict, SameMergeSpace),
@@ -34,7 +34,7 @@ def weighted_sum(
     return (1 - alpha) * a[key] + alpha * b[key]
 
 
-@convert_to_recipe
+@make_recipe
 def n_average(
     *models: Parameter(Tensor, SameMergeSpace),
     **kwargs,
@@ -42,7 +42,7 @@ def n_average(
     return torch.mean(torch.stack(models), dim=0)
 
 
-@convert_to_recipe
+@make_recipe
 def slerp(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -65,7 +65,7 @@ def slerp(
     return res
 
 
-@convert_to_recipe
+@make_recipe
 def add_difference(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, "delta"),
@@ -76,7 +76,7 @@ def add_difference(
     return a + alpha * b
 
 
-@convert_to_recipe
+@make_recipe
 def subtract(
     a: Parameter(Tensor, "weight"),
     b: Parameter(Tensor, "weight"),
@@ -85,7 +85,7 @@ def subtract(
     return a - b
 
 
-@convert_to_recipe
+@make_recipe
 def perpendicular_component(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -98,7 +98,7 @@ def perpendicular_component(
     return res
 
 
-@convert_to_recipe
+@make_recipe
 def geometric_sum(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -112,7 +112,7 @@ def geometric_sum(
     return res.real
 
 
-@convert_to_recipe
+@make_recipe
 def add_cosine_a(
     a: Parameter(Tensor, "weight"),
     b: Parameter(Tensor, "weight"),
@@ -126,7 +126,7 @@ def add_cosine_a(
     return add_cosine_generic(a, b, alpha, similarity)
 
 
-@convert_to_recipe
+@make_recipe
 def add_cosine_b(
     a: Parameter(Tensor, "weight"),
     b: Parameter(Tensor, "weight"),
@@ -146,7 +146,7 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: Tensor, similarity: Tensor) 
     return weighted_sum.__wrapped__(a, b, alpha=k)
 
 
-@convert_to_recipe
+@make_recipe
 def tensor_sum(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -169,7 +169,7 @@ def tensor_sum(
         return a
 
 
-@convert_to_recipe
+@make_recipe
 def top_k_tensor_sum(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -226,7 +226,7 @@ def ratio_to_region(width: float, offset: float, n: int) -> Tuple[int, int, bool
     return round(start), round(end), inverted
 
 
-@convert_to_recipe
+@make_recipe
 def train_difference_mask(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -238,7 +238,7 @@ def train_difference_mask(
     return alpha * 1.8 * torch.nan_to_num((b - a).abs() / ((b - a).abs() + (b - c).abs()), nan=0)
 
 
-@convert_to_recipe
+@make_recipe
 def add_opposite_mask(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -250,7 +250,7 @@ def add_opposite_mask(
     return alpha * 2 * torch.nan_to_num((a - b).abs() / ((a - b).abs() + (a + b - 2*c).abs()), nan=0)
 
 
-@convert_to_recipe
+@make_recipe
 def add_strict_opposite_mask(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -263,7 +263,7 @@ def add_strict_opposite_mask(
     return alpha * torch.clamp(torch.nan_to_num((c - a) * (b - c) / threshold**2, nan=0), 0) * 2
 
 
-@convert_to_recipe
+@make_recipe
 def select_max_delta(
     a: Parameter(Tensor, "delta"),
     b: Parameter(Tensor, "delta"),
@@ -276,7 +276,7 @@ def select_max_delta(
     return torch.where((1 - alpha) * a_abs >= alpha * b_abs, a, b)
 
 
-@convert_to_recipe
+@make_recipe
 def select_max_white_delta(
     a: Parameter(Tensor, "delta"),
     b: Parameter(Tensor, "delta"),
@@ -295,7 +295,7 @@ def select_max_white_delta(
     return torch.where((1 - alpha) * a_w.abs() >= alpha * b_w.abs(), a, b)
 
 
-@convert_to_recipe
+@make_recipe
 def multiply_quotient(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -319,7 +319,7 @@ def multiply_quotient(
     return res.real
 
 
-@convert_to_recipe
+@make_recipe
 def crossover(
     a: Parameter(Tensor, SameMergeSpace),
     b: Parameter(Tensor, SameMergeSpace),
@@ -404,7 +404,7 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
     return dft_filter
 
 
-@convert_to_recipe
+@make_recipe
 def rotate(
     a_dict: Parameter(Tensor, SameMergeSpace),
     b_dict: Parameter(Tensor, SameMergeSpace),
@@ -474,7 +474,7 @@ def rotate(
     return a_neurons.reshape_as(a)
 
 
-@convert_to_recipe
+@make_recipe
 def clamp(
     a: Parameter(Tensor, SameMergeSpace),
     *bounds: Parameter(Tensor, SameMergeSpace),
@@ -501,7 +501,7 @@ def clamp(
     return torch.minimum(torch.maximum(a, minimums), maximums)
 
 
-@convert_to_recipe
+@make_recipe
 def copy_distribution(
     a: Parameter(Tensor, "weight"),
     **kwargs,
@@ -511,7 +511,7 @@ def copy_distribution(
 
 # Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 # Special mode "TIES-GMEDIAN" has been implemented by setting `apply_median` > 0.0
-@convert_to_recipe
+@make_recipe
 def ties_sum_extended(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
     k: Parameter(float) = 0.2,
@@ -551,7 +551,7 @@ def ties_sum_extended(  # aka add_difference_ties
 # - `return`: $$ \lambda * \tau_m $$
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 # - `final_sign`: $$ \gamma_m^p = sgn(\Sigma_{t=1}^n \gamma_t^p) $$
-@convert_to_recipe
+@make_recipe
 def ties_sum(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
     k: Parameter(float) = 0.2,
@@ -610,7 +610,7 @@ def filter_top_k(a: Tensor, k: float):
     return a * top_k_filter
 
 
-@convert_to_recipe
+@make_recipe
 def dropout(  # aka n-supermario
     *deltas: Parameter(Tensor, "delta"),
     probability: Parameter(float) = 0.9,
@@ -686,7 +686,7 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
 # Hyperparameters defauled to values proposed to paper.
 # Special mode "DROP" has been implemented by setting `no_rescale` > 0.0
 # - `return`: $$ \hat{\delta}^t = \tilde{\delta}^t $$
-@convert_to_recipe
+@make_recipe
 def ties_sum_with_dropout(
     *deltas: Parameter(Tensor, "delta"),
     probability: Parameter(float) = 0.9,
@@ -750,7 +750,7 @@ def binomial_coefficient_np(n, k):
 
 
 # src: https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
-@convert_to_recipe
+@make_recipe
 def model_stock(
     *deltas: Parameter(Tensor, "delta"),
     cos_eps: Parameter(float) = 1e-6,
@@ -783,7 +783,7 @@ def get_model_stock_t(deltas: Sequence[Tensor], cos_eps: float):
 
 
 # src: https://github.com/krishnap25/geom_median/blob/main/src/geom_median/torch/weiszfeld_list_of_array.py
-@convert_to_recipe
+@make_recipe
 def geometric_median(
     *models: Parameter(Tensor, SameMergeSpace),
     eps: Parameter(float) = 1e-6,
@@ -820,7 +820,7 @@ def geometric_median_objective(median, points: Tuple, weights):
     return torch.mean(torch.stack([torch.dist(point, median) for point in points]) * weights)
 
 
-@convert_to_recipe
+@make_recipe
 def fallback(
     a: Parameter(StateDict[T], SameMergeSpace),
     default: Parameter(StateDict[T], SameMergeSpace),
@@ -833,7 +833,7 @@ def fallback(
         return default[key]
 
 
-@convert_to_recipe
+@make_recipe
 def cast(
     a: Parameter(Tensor, SameMergeSpace),
     device: Parameter(str) = None,

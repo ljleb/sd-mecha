@@ -82,7 +82,7 @@ class RecipeMerger:
         with open_input_dicts(recipe, self.__base_dirs, buffer_size_per_file):
             model_config = recipe.model_config
             if strict_weight_space and recipe.merge_space != "weight":
-                raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space}'")
+                raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
             recipe_keys = model_config.keys
             output = self.__normalize_output_to_dict(
@@ -186,7 +186,7 @@ class ThisThreadExecutor(nullcontext):
 
 
 @contextlib.contextmanager
-def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: List[pathlib.Path], buffer_size_per_dict: Optional[int] = None):
+def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: List[pathlib.Path], buffer_size_per_dict: int):
     recipe.accept(LoadInputDictsVisitor(base_dirs, buffer_size_per_dict))
     yield recipe
     recipe.accept(CloseInputDictsVisitor())

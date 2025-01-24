@@ -1,6 +1,6 @@
 import re
 from typing import TypeVar
-from sd_mecha.extensions.merge_method import Return, Parameter, StateDict, convert_to_recipe, validate_config_conversion
+from sd_mecha.extensions.merge_method import Return, Parameter, StateDict, make_recipe
 
 
 re_inp = re.compile(r"\.input_blocks\.(\d+)\.")  # 12
@@ -15,8 +15,7 @@ T = TypeVar("T")
 # - https://github.com/hako-mikan/sd-webui-supermerger/blob/f14b3e5d0be9c510d199cca502c4148160f901bb/scripts/mergers/mergers.py#L1376
 # - https://github.com/s1dlx/meh/blob/04af2c8d63744fb6c02d35d328a2c84380cca444/sd_meh/merge.py#L360
 # - https://github.com/vladmandic/automatic/blob/e22d0789bddd3894364b0d59a4c9b3e456e89079/modules/merging/merge_utils.py#L64
-@validate_config_conversion
-@convert_to_recipe
+@make_recipe(is_conversion=True)
 def convert_sdxl_blocks_to_sgm(
     blocks: Parameter(StateDict[T], "weight", "sdxl_blocks-supermerger"),
     **kwargs,
