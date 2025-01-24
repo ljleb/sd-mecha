@@ -9,8 +9,6 @@ import pathlib
 import sys
 import threading
 import typing
-import warnings
-
 import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
@@ -81,7 +79,6 @@ class RecipeMerger:
         if threads is None:
             threads = min(max(total_files_open, 2), os.cpu_count(), 8)
 
-        # todo: use fake tensors to detect keys to merge and output dtype, etc.
         with open_input_dicts(recipe, self.__base_dirs, buffer_size_per_file):
             model_config = recipe.model_config
             if strict_weight_space and recipe.merge_space != "weight":
@@ -151,7 +148,7 @@ class RecipeMerger:
         def track_output(*args, **kwargs):
             try:
                 res = f(*args, **kwargs)
-                if check_finite and not res.isfinite().all():
+                if check_finite and isinstance(res, torch.Tensor) and not res.isfinite().all():
                     logging.warning(f"there are non finite values in key '{key}'")
                 output[key] = res
             except StateDictKeyError as k:

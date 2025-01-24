@@ -14,7 +14,8 @@ from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 
 
-RecipeNodeOrValue = RecipeNode | pathlib.Path | str | int | float | bool | dict
+NonDictLiteralValue = str | int | float | bool
+RecipeNodeOrValue = RecipeNode | pathlib.Path | NonDictLiteralValue | dict
 
 
 T = TypeVar('T', torch.Tensor, str, int, float | bool)
@@ -470,18 +471,12 @@ def get_all() -> List[MergeMethod]:
     return list(_merge_methods_registry.values())
 
 
-def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = torch.Tensor) -> RecipeNode:
-    if not isinstance(node_or_value, RecipeNodeOrValue):
-        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}")
-
+def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) -> RecipeNode:
     if isinstance(node_or_value, RecipeNode):
         return node_or_value
 
-    try:
-        if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):
-            expected_type = next(iter(typing.get_args(expected_type) or (T,)))
-    except TypeError:
-        pass
+    if not isinstance(node_or_value, RecipeNodeOrValue):
+        raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}")
 
     numeric = int | float
 
@@ -490,22 +485,22 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = torch.
         actual_type = type(next(iter(node_or_value.values())))
         if isinstance(actual_type, numeric):
             actual_type = numeric
+        if not issubclass(actual_type, NonDictLiteralValue):
+            raise TypeError(f"unsupported type found in input dict: {actual_type} (supported types are {typing.get_args(NonDictLiteralValue)})")
         if not all(isinstance(v, actual_type) for v in node_or_value.values()):
             bad_type = next(iter(type(v) for v in node_or_value.values() if not isinstance(v, actual_type)))
             raise TypeError(f"inconsistent types found in input dict: {actual_type} and {bad_type}")
 
-    if (
-        (isinstance(expected_type, TypeVar) and isinstance(node_or_value, str | int | float | bool | dict)) or
-        isinstance(node_or_value, expected_type) or  # identity case
-        isinstance(node_or_value, Mapping) and all(isinstance(v, expected_type) for v in node_or_value.values()) or
-        issubclass(expected_type, numeric | torch.Tensor) and (
-            isinstance(node_or_value, numeric) or
-            isinstance(node_or_value, Mapping) and all(isinstance(v, numeric) for v in node_or_value.values())
-        )
-    ):
+    try:
+        if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):
+            expected_type = next(iter(typing.get_args(expected_type) or (T,)))
+    except TypeError:
+        pass
+
+    if isinstance(node_or_value, NonDictLiteralValue | Mapping):
         return LiteralRecipeNode(node_or_value)
 
-    if isinstance(expected_type, TypeVar) or issubclass(expected_type, torch.Tensor):
+    if isinstance(expected_type, TypeVar) and isinstance(node_or_value, pathlib.Path) or issubclass(expected_type, torch.Tensor):
         try:
             return ModelRecipeNode(node_or_value)
         except TypeError as e:

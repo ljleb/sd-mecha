@@ -14,7 +14,7 @@ A = TypeVar("A")
 B = TypeVar("B")
 
 
-def assert_equal_node(expected: A, actual_literal: B, t: type[A]):
+def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A]):
     return_t = next(iter(typing.get_args(t))) if typing.get_args(t) else t
 
     @convert_to_recipe(register=False)
@@ -56,43 +56,43 @@ def assert_equal_node(expected: A, actual_literal: B, t: type[A]):
 def test_value_to_node__float_to_tensor():
     actual = 1.0
     expected = torch.tensor(1.0)
-    assert_equal_node(expected, actual, torch.Tensor)
+    assert_equal_in_merge_method(expected, actual, torch.Tensor)
 
 
 def test_value_to_node__str():
     actual = "hello!"
     expected = "hello!"
-    assert_equal_node(expected, actual, str)
+    assert_equal_in_merge_method(expected, actual, str)
 
 
 def test_value_to_node__float_dict_to_tensor():
     actual = {"IN00": float(1.0), "IN01": float(2.0)}
     expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
-    assert_equal_node(expected, actual, torch.Tensor)
+    assert_equal_in_merge_method(expected, actual, torch.Tensor)
 
 
 def test_value_to_node__float_dict_to_tensor_dict():
     actual = {"IN00": float(1.0), "IN01": float(2.0)}
     expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
-    assert_equal_node(expected, actual, StateDict[torch.Tensor])
+    assert_equal_in_merge_method(expected, actual, StateDict[torch.Tensor])
 
 
 def test_value_to_node__int_dict_to_tensor_dict():
     actual = {"IN00": int(1), "IN01": int(2)}
     expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
-    assert_equal_node(expected, actual, StateDict[torch.Tensor])
+    assert_equal_in_merge_method(expected, actual, StateDict[torch.Tensor])
 
 
 def test_value_to_node__float_to_int():
     actual = float(1.5)
     expected = int(1)
-    assert_equal_node(expected, actual, int)
+    assert_equal_in_merge_method(expected, actual, int)
 
 
 def test_value_to_node__int_to_float():
     actual = int(1)
     expected = float(1.0)
-    assert_equal_node(expected, actual, float)
+    assert_equal_in_merge_method(expected, actual, float)
 
 
 def test_value_to_node__path_to_tensor():
@@ -101,7 +101,7 @@ def test_value_to_node__path_to_tensor():
     try:
         expected = {"IN00": torch.tensor(0.0)}
         safetensors.torch.save_file(expected, tmp)
-        assert_equal_node(expected, actual, torch.Tensor)
+        assert_equal_in_merge_method(expected, actual, torch.Tensor)
     finally:
         pathlib.Path(tmp).unlink(missing_ok=True)
 
@@ -109,13 +109,13 @@ def test_value_to_node__path_to_tensor():
 def test_value_to_node__str_dict_to_str():
     actual = {"IN00": "hello!", "IN01": "hello2!"}
     expected = {"IN00": "hello!", "IN01": "hello2!"}
-    assert_equal_node(expected, actual, str)
+    assert_equal_in_merge_method(expected, actual, str)
 
 
 def test_value_to_node__inconsistent_dict_type():
     value = {"IN00": torch.tensor(1.0), "IN01": 2.0}
     with pytest.raises(TypeError):
-        assert_equal_node(value, value, torch.Tensor)
+        assert_equal_in_merge_method(value, value, torch.Tensor)
 
 
 def test_value_to_node__path_to_str():
@@ -123,13 +123,13 @@ def test_value_to_node__path_to_str():
     actual = pathlib.Path(tmp)
     expected = tmp
     with pytest.raises(TypeError):
-        assert_equal_node(expected, actual, str)
+        assert_equal_in_merge_method(expected, actual, str)
 
 
 def test_value_to_node__str_dict_to_str_dict():
     actual = {"IN00": "hello!", "IN01": "hello2!"}
     expected = {"IN00": "hello!", "IN01": "hello2!"}
-    assert_equal_node(expected, actual, StateDict[str])
+    assert_equal_in_merge_method(expected, actual, StateDict[str])
 
 
 T = TypeVar("T")
@@ -138,26 +138,40 @@ T = TypeVar("T")
 def test_value_to_node__int_to_type_var():
     actual = {"IN00": 1, "IN01": 2}
     expected = {"IN00": 1, "IN01": 2}
-    assert_equal_node(expected, actual, T)
+    assert_equal_in_merge_method(expected, actual, T)
 
 
 def test_value_to_node__int_to_type_var_dict():
     actual = {"IN00": 1, "IN01": 2}
     expected = {"IN00": 1, "IN01": 2}
-    assert_equal_node(expected, actual, StateDict[T])
+    assert_equal_in_merge_method(expected, actual, StateDict[T])
+
+
+# tensor inputs are not yet supported for serialization reasons
+def test_value_to_node__tensor_to_tensor():
+    actual = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
+    expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
+    with pytest.raises(TypeError):
+        assert_equal_in_merge_method(expected, actual, torch.Tensor)
 
 
 def test_value_to_node__path_to_type_var():
     tmp = tempfile.mktemp(suffix=".safetensors")
     actual = pathlib.Path(tmp)
-    expected = tmp
-    with pytest.raises(TypeError):
-        assert_equal_node(expected, actual, T)
+    try:
+        expected = {"IN00": torch.tensor(0.0)}
+        safetensors.torch.save_file(expected, tmp)
+        assert_equal_in_merge_method(expected, actual, T)
+    finally:
+        pathlib.Path(tmp).unlink(missing_ok=True)
 
 
 def test_value_to_node__path_to_type_var_dict():
     tmp = tempfile.mktemp(suffix=".safetensors")
     actual = pathlib.Path(tmp)
-    expected = tmp
-    with pytest.raises(TypeError):
-        assert_equal_node(expected, actual, StateDict[T])
+    try:
+        expected = {"IN00": torch.tensor(0.0)}
+        safetensors.torch.save_file(expected, tmp)
+        assert_equal_in_merge_method(expected, actual, StateDict[T])
+    finally:
+        pathlib.Path(tmp).unlink(missing_ok=True)
