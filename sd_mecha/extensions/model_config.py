@@ -16,6 +16,7 @@ except ImportError:
 
 
 StateDictKey = str
+# todo: determine whether to split configs into components in v0.1.0
 
 
 @runtime_checkable

@@ -206,3 +206,4 @@ CONSTANTS = {
 REVERSE_CONSTANTS = {
     v: k for k, v in CONSTANTS.items()
 }
+# todo: test serialization and deserialization of new format
