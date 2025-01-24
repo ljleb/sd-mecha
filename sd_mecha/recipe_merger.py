@@ -15,8 +15,9 @@ from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT, Cache
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode
+from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
+from sd_mecha.conversion import convert
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
@@ -46,6 +47,9 @@ class RecipeMerger:
         self.__default_device = default_device
         self.__default_dtype = default_dtype
         self.__tqdm = tqdm
+
+    def convert(self, recipe: RecipeNode, config: str | ModelConfig):
+        return convert(recipe, config, self.__base_dirs)
 
     def merge_and_save(
         self,
@@ -186,7 +190,7 @@ class ThisThreadExecutor(nullcontext):
 
 
 @contextlib.contextmanager
-def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: List[pathlib.Path], buffer_size_per_dict: int):
+def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: Iterable[pathlib.Path], buffer_size_per_dict: int):
     recipe.accept(LoadInputDictsVisitor(base_dirs, buffer_size_per_dict))
     yield recipe
     recipe.accept(CloseInputDictsVisitor())
@@ -196,7 +200,7 @@ def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: List[pathlib.Pa
 
 @dataclasses.dataclass
 class LoadInputDictsVisitor(RecipeVisitor):
-    base_dirs: List[pathlib.Path]
+    base_dirs: Iterable[pathlib.Path]
     buffer_size_per_dict: int
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
@@ -246,7 +250,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
         return self.dicts_cache[cache_key], path
 
-    def __detect_model_config(self, state_dict: Iterable[str], path: pathlib.Path):
+    def __detect_model_config(self, state_dict: Iterable[str], path: Optional[pathlib.Path]):
         configs_affinity = {}
         for model_config in extensions.model_config.get_all():
             state_dict_set = set(state_dict)
