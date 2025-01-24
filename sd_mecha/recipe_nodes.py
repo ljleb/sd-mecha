@@ -25,6 +25,9 @@ class RecipeNode(abc.ABC):
     def __contains__(self, item):
         pass
 
+    def set_cache(self, _cache: dict = ...):
+        return self
+
     def __add__(self, other):
         other = extensions.merge_method.value_to_node(other)
         base, delta = self, other
@@ -127,6 +130,7 @@ class MergeRecipeNode(RecipeNode):
         self.merge_method = merge_method
         self.args = args
         self.kwargs = kwargs
+        self.cache = None
         self.__validate_args()
 
     def __validate_args(self):
@@ -159,6 +163,13 @@ class MergeRecipeNode(RecipeNode):
             for v in itertools.chain(self.args, self.kwargs.values())
             if isinstance(v, RecipeNode)
         )
+
+    def set_cache(self, cache: dict = ...):
+        if cache is Ellipsis:
+            cache = {}
+
+        self.cache = cache
+        return self
 
 
 class RecipeVisitor(abc.ABC):

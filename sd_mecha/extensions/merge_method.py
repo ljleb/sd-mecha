@@ -114,19 +114,6 @@ class FunctionArgs(Generic[P]):
 FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
-@dataclasses.dataclass
-class Cache:
-    cache_tree: dict = dataclasses.field(default_factory=dict)
-    cache_dict: dict = dataclasses.field(default_factory=dict)
-
-    def get_dict(self) -> dict:
-        return self.cache_dict
-
-    def get_cache(self, merge_method: "MergeMethod") -> "Cache":
-        self.cache_tree.setdefault(merge_method.identifier, Cache())
-        return self.cache_tree[merge_method.identifier]
-
-
 class MergeMethod:
     def __init__(self, f: Callable, identifier: str):
         self.__wrapped__ = f
@@ -172,7 +159,7 @@ class MergeMethod:
         input_args: Tuple[torch.Tensor | StateDict, ...],
         input_kwargs: Dict[str, torch.Tensor | StateDict],
         key: str,
-        cache: Optional[Cache],
+        cache: Optional[dict],
     ):
         args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, cache)
         return self.__wrapped__(*args, **kwargs)
@@ -182,12 +169,12 @@ class MergeMethod:
         input_args: Tuple[Any, ...],
         input_kwargs: Dict[str, float],
         key: str,
-        cache: Optional[Cache],
+        cache: Optional[dict],
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
         if self.has_varkwargs:
             input_kwargs |= {
                 "key": key,
-                "cache": cache.get_dict() if cache is not None else None,
+                "cache": cache,
             }
         return input_args, input_kwargs
 
@@ -381,12 +368,16 @@ class MergeMethod:
             hint = hint_args[0]
 
         if isinstance(getattr(hint, "data", None), ParameterData):
+            if hint.__name__ != Parameter.__name__:
+                raise RuntimeError("all parameters type should be sd_mecha.Parameter()")
             return hint.data
         return Parameter(hint).data
 
     @staticmethod
     def __get_return_data(hint: type):
         if isinstance(getattr(hint, "data", None), ParameterData):
+            if hint.__name__ != Return.__name__:
+                raise RuntimeError("the return type should be sd_mecha.Return()")
             return hint.data
         return Return(hint).data
 

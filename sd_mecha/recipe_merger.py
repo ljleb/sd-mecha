@@ -13,11 +13,10 @@ import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT, Cache
+from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
-from sd_mecha.conversion import convert
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
@@ -43,12 +42,12 @@ class RecipeMerger:
                 models_dir[i] = models_dir[i].absolute()
 
         self.__base_dirs = models_dir
-
         self.__default_device = default_device
         self.__default_dtype = default_dtype
         self.__tqdm = tqdm
 
     def convert(self, recipe: RecipeNode, config: str | ModelConfig):
+        from sd_mecha.conversion import convert
         return convert(recipe, config, self.__base_dirs)
 
     def merge_and_save(
@@ -61,7 +60,6 @@ class RecipeMerger:
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
         strict_weight_space: bool = True,
-        cache: Optional[Cache] = None,
         check_finite: bool = True,
     ):
         recipe = extensions.merge_method.value_to_node(recipe)
@@ -110,7 +108,7 @@ class RecipeMerger:
                     fn = self.__track_output(fn, output, key, check_finite)
                     fn = self.__track_progress(fn, key, recipe_keys[key].shape, progress)
                     fn = self.__wrap_thread_context(fn, thread_local_data)
-                    futures.append(executor.submit(fn, KeyMergeVisitor(key, cache)))
+                    futures.append(executor.submit(fn, KeyMergeVisitor(key)))
 
                 for future in as_completed(futures):
                     if future.exception() is not None:
@@ -190,7 +188,7 @@ class ThisThreadExecutor(nullcontext):
 
 
 @contextlib.contextmanager
-def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: Iterable[pathlib.Path], buffer_size_per_dict: int):
+def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: Iterable[pathlib.Path] = (), buffer_size_per_dict: int = 2**28):
     recipe.accept(LoadInputDictsVisitor(base_dirs, buffer_size_per_dict))
     yield recipe
     recipe.accept(CloseInputDictsVisitor())
@@ -285,7 +283,6 @@ class CloseInputDictsVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     key: str
-    cache: Optional[Cache]
 
     def visit_literal(self, node: LiteralRecipeNode):
         value = node.value
@@ -310,7 +307,7 @@ class KeyMergeVisitor(RecipeVisitor):
             merged_args,
             merged_kwargs,
             self.key,
-            self.cache,
+            node.cache,
         )
 
     def __visit_deeper_first(
@@ -327,18 +324,14 @@ class KeyMergeVisitor(RecipeVisitor):
         merged = {}
         input_types = merge_method.get_input_types().as_dict(len(node_args))
         indices = itertools.chain(range(len(node_args)), node_kwargs.keys())
-        if self.cache is not None:
-            nested_self = dataclasses.replace(self, cache=self.cache.get_cache(merge_method))
-        else:
-            nested_self = self
 
         for index in sorted(indices, key=depth_of_value, reverse=True):
             nodes = node_args if isinstance(index, int) else node_kwargs
             if is_subclass(input_types[index], StateDict):
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, nested_self)
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, self)
             else:
-                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, nested_self), input_types[index])
+                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, self), input_types[index])
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
