@@ -1,5 +1,5 @@
 import functools
-from typing import List, TypeVar, Dict, Set
+from typing import List, TypeVar, Dict, Set, Tuple
 import fuzzywuzzy.process
 
 
@@ -17,9 +17,7 @@ class MergeSpace:
 
 
 class MergeSpaceSymbol:
-    def __init__(self, *merge_spaces):
-        if isinstance(merge_spaces, (str, MergeSpace)):
-            merge_spaces = {merge_spaces}
+    def __init__(self, *merge_spaces: Tuple[str | MergeSpace, ...]):
         self.merge_spaces = {
             MergeSpace(merge_space) if isinstance(merge_space, str) else merge_space
             for merge_space in merge_spaces

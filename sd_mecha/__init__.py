@@ -7,7 +7,8 @@ from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 from sd_mecha.streaming import StateDictKeyError
 from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions.merge_method import make_recipe, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
+from sd_mecha.extensions.merge_method import make_recipe, value_to_node, RecipeNodeOrValue, Parameter, Return, \
+    StateDict, NonDictLiteralValue
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.conversion import convert
 from sd_mecha.merge_methods import (
@@ -384,6 +385,10 @@ def model(path: str | pathlib.Path, model_config: Optional[str] = None):
     if isinstance(path, str):
         path = pathlib.Path(path)
     return recipe_nodes.ModelRecipeNode(path, model_config)
+
+
+def literal(value: NonDictLiteralValue | dict, model_config: Optional[str] = None):
+    return recipe_nodes.LiteralRecipeNode(value, model_config)
 
 
 def set_log_level(level: str = "INFO"):

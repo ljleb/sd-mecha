@@ -1,14 +1,13 @@
 import functools
 import heapq
 import pathlib
-from typing import Dict, Tuple, Any, List, Iterable
+from typing import Dict, Tuple, Any, List, Iterable, Mapping
 from sd_mecha.extensions.merge_method import RecipeNodeOrValue, value_to_node
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.extensions import merge_method
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_dirs: Iterable[pathlib.Path] = ()):
-    recipe = value_to_node(recipe)
     all_converters = merge_method.get_all_converters()
     converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
     for converter in all_converters:
@@ -20,11 +19,26 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_di
         converter_paths.setdefault(tgt_config, [])
         converter_paths[src_config].append((tgt_config, converter))
 
+    tgt_config = config if isinstance(config, str) else config.identifier
+
+    if isinstance(recipe, Mapping):
+        from sd_mecha.recipe_merger import infer_model_configs
+        possible_configs = infer_model_configs(recipe, None)
+        for possible_config in possible_configs:
+            try:
+                return create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
+            except ValueError:
+                continue
+        raise ValueError(f"could not infer the intended config to convert from. explicitly specifying the input config might resolve the issue")
+
     from sd_mecha.recipe_merger import open_input_dicts
     with open_input_dicts(recipe, base_dirs, buffer_size_per_dict=0):
         src_config = recipe.model_config.identifier
-    tgt_config = config if isinstance(config, str) else config.identifier
-    shortest_path = dijkstra(converter_paths, src_config, tgt_config)
+    return create_conversion_recipe(recipe, converter_paths, src_config, tgt_config)
+
+
+def create_conversion_recipe(recipe, paths, src_config, tgt_config):
+    shortest_path = dijkstra(paths, src_config, tgt_config)
     if shortest_path is None:
         raise ValueError(f"no config conversion exists from {src_config} to {tgt_config}")
     return functools.reduce(lambda v, mm: mm.create_recipe(v), shortest_path, recipe)

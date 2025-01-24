@@ -204,13 +204,13 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
     def visit_literal(self, node: LiteralRecipeNode):
         if isinstance(node.value, Mapping) and node.model_config is None:
-            node.model_config = self.__detect_model_config(node.value, None)
+            node.model_config = infer_model_configs(node.value, None)[0]
         return node
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)
         if node.model_config is None:
-            node.model_config = self.__detect_model_config(node.state_dict, node_path)
+            node.model_config = infer_model_configs(node.state_dict, node_path)[0]
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         for model in itertools.chain(node.args, node.kwargs.values()):
@@ -248,21 +248,24 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
         return self.dicts_cache[cache_key], path
 
-    def __detect_model_config(self, state_dict: Iterable[str], path: Optional[pathlib.Path]):
-        configs_affinity = {}
-        for model_config in extensions.model_config.get_all():
-            state_dict_set = set(state_dict)
-            matched_keys = state_dict_set.intersection(model_config.keys)
-            configs_affinity[model_config.identifier] = len(matched_keys)
-            if len(matched_keys) == len(state_dict_set):
-                break
 
-        best_config = max(configs_affinity, key=configs_affinity.get)
-        best_config = extensions.model_config.resolve(best_config)
-        if configs_affinity[best_config.identifier] == 0:
-            raise ValueError(f"No configuration matches any key in state dict{' ' + str(path) or ''}")
+def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path]) -> List[ModelConfig]:
+    state_dict_set = set(state_dict)
+    configs_affinity = {}
+    for model_config in extensions.model_config.get_all():
+        matched_keys = state_dict_set.intersection(model_config.keys)
+        # heuristic: accept config only if we match more than 90% of the keys of the state dict
+        if len(matched_keys) > len(state_dict_set) * 0.9:
+            configs_affinity[model_config] = len(matched_keys)
+        # heuristic: break early if we match more than 90% of the keys of a config
+        if len(matched_keys) == len(state_dict_set) and len(matched_keys) > len(model_config.keys) * 0.9:
+            break
 
-        return best_config
+    best_configs = sorted(configs_affinity, key=configs_affinity.get, reverse=True)
+    if configs_affinity[best_configs[0]] == 0:
+        raise ValueError(f"No configuration was found for the given state dict{' ' + str(path) or ''}")
+
+    return best_configs
 
 
 @dataclasses.dataclass
