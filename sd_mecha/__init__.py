@@ -7,7 +7,7 @@ from sd_mecha.recipe_serializer import serialize, deserialize, deserialize_path
 from sd_mecha.streaming import StateDictKeyError
 from sd_mecha.extensions.merge_space import MergeSpace
 from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions.merge_method import make_recipe, value_to_node, RecipeNodeOrValue, Parameter, Return, \
+from sd_mecha.extensions.merge_method import recipe, value_to_node, RecipeNodeOrValue, Parameter, Return, \
     StateDict, NonDictLiteralValue
 from sd_mecha import recipe_nodes, merge_methods, extensions
 from sd_mecha.conversion import convert
@@ -381,13 +381,13 @@ def model_stock_n_models(
     return merge_methods.add_difference(base, res, alpha=1.0)
 
 
-def model(path: str | pathlib.Path, model_config: Optional[str] = None):
+def model(path: str | pathlib.Path, model_config: Optional[str] = None) -> recipe_nodes.ModelRecipeNode:
     if isinstance(path, str):
         path = pathlib.Path(path)
     return recipe_nodes.ModelRecipeNode(path, model_config)
 
 
-def literal(value: NonDictLiteralValue | dict, model_config: Optional[str] = None):
+def literal(value: NonDictLiteralValue | dict, model_config: Optional[str] = None) -> recipe_nodes.LiteralRecipeNode:
     return recipe_nodes.LiteralRecipeNode(value, model_config)
 
 

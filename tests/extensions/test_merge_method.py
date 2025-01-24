@@ -5,8 +5,7 @@ import pytest
 import safetensors.torch
 import torch
 from typing import TypeVar, Mapping
-from sd_mecha import RecipeMerger, make_recipe, Parameter, Return, StateDict
-from sd_mecha.merge_methods import SameMergeSpace
+from sd_mecha import RecipeMerger, recipe, Parameter, Return, StateDict
 from sd_mecha.streaming import StateDictKeyError
 
 
@@ -17,11 +16,11 @@ B = TypeVar("B")
 def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A]):
     return_t = next(iter(typing.get_args(t))) if typing.get_args(t) else t
 
-    @make_recipe(register=False)
+    @recipe(register=False)
     def compare_value(
-        actual: Parameter(t, SameMergeSpace, "sdxl_blocks-supermerger"),
+        actual: Parameter(t, model_config="sdxl_blocks-supermerger"),
         **kwargs,
-    ) -> Return(return_t, SameMergeSpace, "sdxl_blocks-supermerger"):
+    ) -> Return(return_t, model_config="sdxl_blocks-supermerger"):
         nonlocal expected
 
         try:

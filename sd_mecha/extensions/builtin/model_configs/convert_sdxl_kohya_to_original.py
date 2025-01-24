@@ -1,15 +1,14 @@
 import torch
 from torch import Tensor
-from sd_mecha.extensions.merge_method import make_recipe, StateDict, Return, Parameter
-from sd_mecha.merge_methods import SameMergeSpace
+from sd_mecha.extensions.merge_method import recipe, StateDict, Return, Parameter
 from .convert_vae_to_original import convert_vae
 
 
-@make_recipe(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
+@recipe(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
 def convert_sdxl_kohya_to_original(
-    kohya_sd: Parameter(StateDict, SameMergeSpace, "sdxl-kohya"),
+    kohya_sd: Parameter(StateDict, model_config="sdxl-kohya"),
     **kwargs,
-) -> Return(Tensor, SameMergeSpace, "sdxl-sgm"):
+) -> Return(Tensor, model_config="sdxl-sgm"):
     sgm_key = kwargs["key"]
 
     if sgm_key.startswith("model.diffusion_model."):

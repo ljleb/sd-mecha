@@ -119,6 +119,7 @@ class MergeMethod:
         self.__wrapped__ = f
         self.identifier = identifier
         self.has_varkwargs = True
+        self.default_merge_space = MergeSpaceSymbol(*extensions.merge_space.get_all())
         self.__validate_f()
 
     def __validate_f(self):
@@ -267,6 +268,8 @@ class MergeMethod:
         if isinstance(merge_space_param, MergeSpaceSymbol):
             return resolved_input_spaces[merge_space_param]
         if merge_space_param is None:
+            if self.default_merge_space in resolved_input_spaces:
+                return resolved_input_spaces[self.default_merge_space]
             raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
         return next(iter(merge_space_param))  # get the only value
 
@@ -280,7 +283,7 @@ class MergeMethod:
                 if has_default:
                     merge_space = {extensions.merge_space.resolve("param")}
                 else:
-                    merge_space = extensions.merge_space.get_all()
+                    merge_space = self.default_merge_space
             return merge_space
 
         merge_spaces = []
@@ -293,7 +296,7 @@ class MergeMethod:
         if params.has_varargs():
             varargs_merge_space = params.vararg.merge_space
             if varargs_merge_space is None:
-                varargs_merge_space = extensions.merge_space.get_all()
+                varargs_merge_space = self.default_merge_space
 
         kw_merge_spaces = {}
         for name in names.kwargs:
@@ -413,18 +416,18 @@ class InferModelConfigVisitor(RecipeVisitor):
 F = TypeVar("F", bound=Callable)
 
 
-def make_recipe(
+def recipe(
     f: Optional[F] = None, *,
     identifier: Optional[str] = None,
     register: bool = True,
     is_conversion: bool = False,
 ) -> F:
     if f is None:
-        return lambda f: __convert_to_recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
-    return __convert_to_recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
+        return lambda f: __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
+    return __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
 
 
-def __convert_to_recipe_impl(
+def __recipe_impl(
     fn: Callable, *,
     identifier: Optional[str] = None,
     register: bool,

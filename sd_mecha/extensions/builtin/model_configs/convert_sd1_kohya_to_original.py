@@ -1,6 +1,5 @@
 from torch import Tensor
-from sd_mecha.extensions.merge_method import make_recipe, StateDict, Parameter, Return
-from sd_mecha.merge_methods import SameMergeSpace
+from sd_mecha.extensions.merge_method import recipe, StateDict, Parameter, Return
 from .convert_vae_to_original import convert_vae
 
 
@@ -8,11 +7,11 @@ from .convert_vae_to_original import convert_vae
 # https://github.com/huggingface/diffusers/blob/main/scripts/convert_diffusers_to_original_stable_diffusion.py
 
 
-@make_recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'", is_conversion=True)
+@recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'", is_conversion=True)
 def convert_sd1_kohya_to_original(
-    kohya_sd: Parameter(StateDict, SameMergeSpace, "sd1-kohya"),
+    kohya_sd: Parameter(StateDict, model_config="sd1-kohya"),
     **kwargs,
-) -> Return(Tensor, SameMergeSpace, "sd1-ldm"):
+) -> Return(Tensor, model_config="sd1-ldm"):
     ldm_key = kwargs["key"]
     if ldm_key.startswith("model.diffusion_model."):
         return convert_unet(kohya_sd, ldm_key)

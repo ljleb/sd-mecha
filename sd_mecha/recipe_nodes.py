@@ -1,7 +1,7 @@
 import abc
 import itertools
 import pathlib
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, Union
 from . import extensions
 from .extensions.model_config import ModelConfig
 
@@ -46,6 +46,10 @@ class RecipeNode(abc.ABC):
     def __rsub__(self, other):
         other = extensions.merge_method.value_to_node(other)
         return other - self
+
+    def __or__(self, other: Union["RecipeNode", str | int | float | dict]) -> "RecipeNode":
+        other = extensions.merge_method.value_to_node(other)
+        return extensions.merge_method.resolve("fallback")(self, other)
 
 
 class LiteralRecipeNode(RecipeNode):
