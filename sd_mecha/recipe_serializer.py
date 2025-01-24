@@ -135,9 +135,9 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
 def serialize(recipe: RecipeNode) -> str:
     serializer = SerializerVisitor()
     recipe.accept(serializer)
-    body = "\n".join(serializer.instructions)
-    header = get_version_header(MECHA_FORMAT_VERSION)
-    return f"{header}\n{body}"
+    version_header = get_version_header(MECHA_FORMAT_VERSION)
+    body = "\n".join([version_header] + serializer.instructions)
+    return body
 
 
 def get_version_header(version: str):
