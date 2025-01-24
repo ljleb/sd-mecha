@@ -438,8 +438,7 @@ def rotate(
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
-    # todo: actually implement cache
-    cache = kwargs["cache"]
+    cache = kwargs.get("cache")
     if cache is not None:
         key = kwargs["key"]
         if key not in cache:

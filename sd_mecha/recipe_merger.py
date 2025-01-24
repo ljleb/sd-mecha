@@ -9,19 +9,17 @@ import pathlib
 import sys
 import threading
 import typing
-
 import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
+from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT, Cache
 from sd_mecha.extensions.model_config import ModelConfig
 from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode
 from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from sd_mecha import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
-
 from sd_mecha.typing_ import is_subclass
 
 
@@ -59,6 +57,7 @@ class RecipeMerger:
         threads: Optional[int] = None,
         total_buffer_size: int = 2**28,
         strict_weight_space: bool = True,
+        cache: Optional[Cache] = None,
     ):
         recipe = extensions.merge_method.value_to_node(recipe)
         if fallback_model is not None:
@@ -108,7 +107,7 @@ class RecipeMerger:
                     fn = self.__track_output(fn, output, key)
                     fn = self.__track_progress(fn, key, recipe_keys[key].shape, progress)
                     fn = self.__wrap_thread_context(fn, thread_local_data)
-                    futures.append(executor.submit(fn, KeyMergeVisitor(key)))
+                    futures.append(executor.submit(fn, KeyMergeVisitor(key, cache)))
 
                 for future in as_completed(futures):
                     if future.exception() is not None:
@@ -280,6 +279,7 @@ class CloseInputDictsVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     key: str
+    cache: Optional[Cache]
 
     def visit_literal(self, node: LiteralRecipeNode):
         value = node.value
@@ -304,6 +304,7 @@ class KeyMergeVisitor(RecipeVisitor):
             merged_args,
             merged_kwargs,
             self.key,
+            self.cache,
         )
 
     def __visit_deeper_first(
@@ -320,13 +321,18 @@ class KeyMergeVisitor(RecipeVisitor):
         merged = {}
         input_types = merge_method.get_input_types().as_dict(len(node_args))
         indices = itertools.chain(range(len(node_args)), node_kwargs.keys())
+        if self.cache is not None:
+            nested_self = dataclasses.replace(self, cache=self.cache.get_cache(merge_method))
+        else:
+            nested_self = self
+
         for index in sorted(indices, key=depth_of_value, reverse=True):
             nodes = node_args if isinstance(index, int) else node_kwargs
             if is_subclass(input_types[index], StateDict):
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, self)
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, nested_self)
             else:
-                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, self), input_types[index])
+                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, nested_self), input_types[index])
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}

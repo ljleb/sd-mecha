@@ -18,18 +18,18 @@ T = TypeVar("T")
 @validate_config_conversion
 @convert_to_recipe
 def convert_sdxl_blocks_to_sgm(
-    blocks: Parameter(StateDict[T], "param", "sdxl_blocks-supermerger"),
+    blocks: Parameter(StateDict[T], "weight", "sdxl_blocks-supermerger"),
     **kwargs,
 ) -> Return(T, "param", "sdxl-sgm"):
     sgm_key = kwargs["key"]
 
     block_key = "BASE"
     if sgm_key.startswith("model.diffusion_model."):
-        block_key = "OUT11"
+        block_key = "OUT08"
         if ".time_embed" in sgm_key or ".label_emb" in sgm_key:
             block_key = "BASE"  # before input blocks
         elif ".out." in sgm_key:
-            block_key = "OUT11"  # after output blocks
+            block_key = "OUT08"  # after output blocks
         elif m := re_inp.search(sgm_key):
             block_key = f"IN{int(m.groups(1)[0]):02}"
         elif re_mid.search(sgm_key):

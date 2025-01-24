@@ -113,6 +113,19 @@ class FunctionArgs(Generic[P]):
 FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
+@dataclasses.dataclass
+class Cache:
+    cache_tree: dict = dataclasses.field(default_factory=dict)
+    cache_dict: dict = dataclasses.field(default_factory=dict)
+
+    def get_dict(self) -> dict:
+        return self.cache_dict
+
+    def get_cache(self, merge_method: "MergeMethod") -> "Cache":
+        self.cache_tree.setdefault(merge_method.identifier, Cache())
+        return self.cache_tree[merge_method.identifier]
+
+
 class MergeMethod:
     def __init__(self, f: Callable, identifier: str):
         self.__wrapped__ = f
@@ -158,8 +171,9 @@ class MergeMethod:
         input_args: Tuple[torch.Tensor | StateDict, ...],
         input_kwargs: Dict[str, torch.Tensor | StateDict],
         key: str,
+        cache: Optional[Cache],
     ):
-        args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key)
+        args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, cache)
         return self.__wrapped__(*args, **kwargs)
 
     def __get_args_kwargs(
@@ -167,11 +181,12 @@ class MergeMethod:
         input_args: Tuple[Any, ...],
         input_kwargs: Dict[str, float],
         key: str,
+        cache: Optional[Cache],
     ) -> Tuple[Tuple[torch.Tensor, ...], Dict]:
         if self.has_varkwargs:
             input_kwargs |= {
                 "key": key,
-                "cache": None,
+                "cache": cache.get_dict() if cache is not None else None,
             }
         return input_args, input_kwargs
 

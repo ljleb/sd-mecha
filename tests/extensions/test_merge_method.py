@@ -1,7 +1,6 @@
 import pathlib
 import tempfile
 import typing
-
 import pytest
 import safetensors.torch
 import torch
@@ -9,6 +8,7 @@ from typing import TypeVar, Mapping
 from sd_mecha import RecipeMerger, convert_to_recipe, Parameter, Return, StateDict
 from sd_mecha.merge_methods import SameMergeSpace
 from sd_mecha.streaming import StateDictKeyError
+
 
 A = TypeVar("A")
 B = TypeVar("B")
