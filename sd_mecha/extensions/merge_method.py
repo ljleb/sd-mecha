@@ -439,6 +439,9 @@ def __recipe_impl(
         _merge_methods_registry[identifier] = merge_method
         if is_conversion:
             _conversion_registry[identifier] = validate_config_conversion(merge_method)
+    elif is_conversion:
+        raise ValueError("A conversion recipe must be registered")
+
     return merge_method
 
 
