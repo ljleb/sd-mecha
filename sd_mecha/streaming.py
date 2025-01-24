@@ -239,8 +239,11 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
         return len(self.header)
 
     def _init_buffer(self, header: Mapping[str, TensorMetadata]) -> int:
+        trimmed_header = {
+            k: v for k, v in header.items() if v.shape is not None and v.dtype is not None
+        }
         worst_case_header = OrderedDict(sorted(
-            header.items(),
+            trimmed_header.items(),
             key=lambda item: item[1].get_byte_size(),
             reverse=True,  # simulate worst case: maximize space taken by order
         ))
