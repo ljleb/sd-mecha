@@ -254,10 +254,10 @@ def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path])
     for model_config in extensions.model_config.get_all():
         matched_keys = state_dict_set.intersection(model_config.keys)
         # heuristic: accept config only if we match more than 90% of the keys of the state dict
-        if len(matched_keys) > len(state_dict_set) * 0.9:
+        if len(matched_keys) >= len(state_dict_set) * 0.9:
             configs_affinity[model_config] = len(matched_keys)
         # heuristic: break early if we match more than 90% of the keys of a config
-        if len(matched_keys) == len(state_dict_set) and len(matched_keys) > len(model_config.keys) * 0.9:
+        if len(matched_keys) == len(state_dict_set) and len(matched_keys) >= len(model_config.keys) * 0.9:
             break
 
     best_configs = sorted(configs_affinity, key=configs_affinity.get, reverse=True)
