@@ -1,5 +1,5 @@
 import pathlib
-from typing import List, Optional
+from typing import List, Optional, Iterable, Hashable
 from sd_mecha import extensions, recipe_nodes
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode
 
@@ -26,7 +26,7 @@ def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | path
         raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
 
 
-def deserialize(recipe: List[str] | str) -> RecipeNode:
+def deserialize(recipe: List[str] | str, models_dir: Iterable[str | pathlib.Path] = ()) -> RecipeNode:
     if not isinstance(recipe, list):
         recipe = recipe.split("\n")
 
@@ -52,7 +52,17 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
         elif command == "literal":
             results.append(LiteralRecipeNode(*positional_args, **named_args))
         elif command == "model":
-            results.append(ModelRecipeNode(*positional_args, **named_args))
+            path = pathlib.Path(positional_args[0])
+            if not path.suffix:
+                path = path.with_suffix(".safetensors")
+            if not path.is_absolute():
+                for model_dir in models_dir:
+                    path_attempt = model_dir / path
+                    if path_attempt.exists():
+                        path = path_attempt
+                        break
+
+            results.append(ModelRecipeNode(path, *positional_args[1:], **named_args))
         elif command == "merge":
             method, *positional_args = positional_args
             method = extensions.merge_method.resolve(method)
@@ -149,11 +159,12 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_literal(self, node: LiteralRecipeNode):
+        value = self.__serialize_value(node.value)
         if node.model_config is None:
-            return self.__serialize_value(node.value)
+            return value
         else:
             config = self.__serialize_value(node.model_config.identifier)
-            line = f"literal {node.value} {config}"
+            line = f"literal {value} {config}"
             return self.__add_instruction(line)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> str:
@@ -164,30 +175,30 @@ class SerializerVisitor(RecipeVisitor):
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> str:
         identifier = self.__serialize_value(node.merge_method.get_identifier())
-        args = [
+        parts = ["merge", identifier] + [
             self.__serialize_value(v)
             for v in node.args
-        ]
-        kwargs = [
+        ] + [
             f"{k}={self.__serialize_value(v)}"
             for k, v in node.kwargs.items()
         ]
-        line = f'merge {identifier} {" ".join(args)} {" ".join(kwargs)}'
+        line = " ".join(parts)
         return self.__add_instruction(line)
 
     def __serialize_value(self, value) -> str:
-        if value in REVERSE_CONSTANTS:
-            return REVERSE_CONSTANTS[value]
         if isinstance(value, str):
             value = value.replace("\\", "\\\\").replace('"', "\\\"")
             return f'"{value}"'
         if isinstance(value, dict):
             dict_line = "dict " + " ".join(f"{k}={self.__serialize_value(v)}" for k, v in value.items())
             return self.__add_instruction(dict_line)
-        if isinstance(value, recipe_nodes.RecipeNode):
-            return value.accept(self)
         if isinstance(value, (int, float)):
             return str(value)
+        # int or float needs to be handled before this (1.0 == True)
+        if isinstance(value, Hashable) and value in REVERSE_CONSTANTS:
+            return REVERSE_CONSTANTS[value]
+        if isinstance(value, recipe_nodes.RecipeNode):
+            return value.accept(self)
         raise TypeError(f"type {type(value)} cannot be serialized: {value}")
 
     def __add_instruction(self, instruction: str) -> str:

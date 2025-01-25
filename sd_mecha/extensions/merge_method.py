@@ -341,7 +341,7 @@ class MergeMethod:
         return FunctionArgs(
             spec.args or [],
             spec.varargs or FunctionArgs.EMPTY_VARARGS,
-            spec.kwonlyargs or {},
+            {k: k for k in spec.kwonlyargs} or {},
         )
 
     def get_default_args(self) -> FunctionArgs[Any]:

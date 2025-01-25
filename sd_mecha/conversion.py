@@ -31,6 +31,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_di
                 continue
         raise ValueError(f"could not infer the intended config to convert from. explicitly specifying the input config might resolve the issue")
 
+    recipe = value_to_node(recipe)
     from sd_mecha.recipe_merger import open_input_dicts
     with open_input_dicts(recipe, base_dirs, buffer_size_per_dict=0):
         src_config = recipe.model_config.identifier
