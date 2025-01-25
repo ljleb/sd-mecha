@@ -194,18 +194,19 @@ class MergeMethod:
                 raise TypeError(f"Unexpected keyword-argument '{k}'")
 
         for k in params.kwargs:
-            if k not in itertools.chain(kwargs.keys() | defaults.kwargs.keys()):
+            if k not in itertools.chain(kwargs.keys(), defaults.kwargs.keys()):
                 raise TypeError(f"Missing keyword-argument '{k}'")
 
-        varargs_count = len(args) - len(params.args)
+        varargs_len = max(0, len(args) - len(params.args))
+        default_args = defaults.args[len(args) - min_args:]
         input_configs = self.get_input_configs()
-        default_config = self.get_return_config(input_configs.args_varags(varargs_count), input_configs.kwargs)
+        default_config = self.get_return_config(input_configs.args_varags(varargs_len), input_configs.kwargs)
         merge_spaces = self.get_input_merge_spaces()
 
         def arg_to_node(k: int | str, arg: Any, expected_type: type):
             nonlocal default_config
-            merge_space = merge_spaces.as_dict(varargs_count)[k]
-            config = input_configs.as_dict(varargs_count)[k]
+            merge_space = merge_spaces.as_dict(varargs_len)[k]
+            config = input_configs.as_dict(varargs_len)[k]
             if config is None:
                 config = default_config
             return value_to_node(arg, expected_type).accept(InferModelConfigVisitor(config, merge_space))
@@ -213,11 +214,11 @@ class MergeMethod:
         input_types = self.get_input_types()
         args = tuple(
             arg_to_node(i, arg, input_types.args[i])
-            for i, (arg, k) in enumerate(zip(args, params.args_varags(varargs_count)))
+            for i, (arg, k) in enumerate(zip(itertools.chain(args, default_args), params.args_varags(varargs_len)))
         )
         kwargs = {
             k: arg_to_node(k, arg, input_types.kwargs[k])
-            for k, arg in kwargs.items()
+            for k, arg in (defaults.kwargs | kwargs).items()
         }
 
         return MergeRecipeNode(self, args, kwargs)

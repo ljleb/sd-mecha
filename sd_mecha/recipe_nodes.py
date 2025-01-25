@@ -65,7 +65,7 @@ class RecipeNode(abc.ABC):
         return extensions.merge_method.resolve("cast").create_recipe(self, device=device, dtype=dtype)
 
 
-NonDictLiteralValue = str | int | float | bool
+NonDictLiteralValue = str | int | float | bool | type(None)
 LiteralValue = NonDictLiteralValue | dict
 RecipeNodeOrValue = RecipeNode | LiteralValue | pathlib.Path
 

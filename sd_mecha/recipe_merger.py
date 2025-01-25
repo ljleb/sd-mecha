@@ -296,7 +296,7 @@ class KeyMergeVisitor(RecipeVisitor):
                 value = value[self.key]
             except KeyError as e:
                 raise StateDictKeyError(str(e)) from e
-        if isinstance(value, torch.Tensor | str | int | float | bool):
+        if isinstance(value, str | int | float | bool | type(None)):
             return value
         raise RuntimeError(f"Unexpected literal node value of type {type(value)}")
 
