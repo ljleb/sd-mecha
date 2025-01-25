@@ -16,7 +16,24 @@ except ImportError:
 
 
 StateDictKey = str
-# todo: determine whether to split configs into components in v0.1.0
+
+
+@dataclasses.dataclass
+class ModelComponent:
+    __keys: Mapping[StateDictKey, TensorMetadata]
+
+    def __post_init__(self):
+        keys = OrderedDict()
+        for k, v in self.__keys.items():
+            if isinstance(v, Mapping):
+                keys[k] = TensorMetadata(**v)
+            else:
+                keys[k] = v
+        self.__keys = keys
+
+    @property
+    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return self.__keys
 
 
 @runtime_checkable
@@ -39,6 +56,11 @@ class ModelConfig(Protocol):
 
     @property
     @abc.abstractmethod
+    def components(self) -> Mapping[str, ModelComponent]:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
     def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
         raise NotImplementedError
 
@@ -46,7 +68,7 @@ class ModelConfig(Protocol):
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
     __identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
-    __keys: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(metadata={"serial_name": "keys"})
+    __components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
@@ -57,12 +79,13 @@ class ModelConfigImpl(ModelConfig):
                 "An example of valid identifier is 'flux_dev-flux'"
             )
 
-        keys = OrderedDict(self.__keys)
-        for k, v in self.__keys.items():
-            keys[k] = v
-            if isinstance(v, dict):
-                keys[k] = TensorMetadata(**v)
-        self.__keys = keys
+        components = OrderedDict()
+        for k, v in self.__components.items():
+            if isinstance(v, Mapping):
+                components[k] = ModelComponent(v)
+            else:
+                components[k] = v
+        self.__components = components
 
     @property
     def identifier(self) -> str:
@@ -75,8 +98,16 @@ class ModelConfigImpl(ModelConfig):
         return self.identifier.split("-")[1]
 
     @property
+    def components(self) -> Mapping[str, ModelComponent]:
+        return self.__components
+
+    @property
     def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
-        return self.__keys
+        return OrderedDict(
+            (k, v)
+            for component in self.components.values()
+            for k, v in component.keys.items()
+        )
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):

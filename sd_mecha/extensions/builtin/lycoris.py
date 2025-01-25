@@ -72,8 +72,11 @@ class LycorisModelConfig(LazyModelConfigBase):
             raise ValueError(f"unknown lycoris algorithms {self.algorithms}")
 
         identifier = f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
-        keys = _to_lycoris_keys(self.base_config.keys, self.algorithms, self.prefix)
-        return ModelConfigImpl(identifier, keys)
+        components = {
+            k: _to_lycoris_keys(component.keys, self.algorithms, self.prefix)
+            for k, component in self.base_config.components.items()
+        }
+        return ModelConfigImpl(identifier, components)
 
     def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
         return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.prefix)
