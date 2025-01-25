@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from .extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
 from .extensions.model_config import ModelConfig
-from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode
+from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
@@ -27,7 +27,7 @@ class RecipeMerger:
     def __init__(
         self, *,
         models_dir: Optional[pathlib.Path | str | List[pathlib.Path | str]] = None,
-        default_device: str = "cpu",
+        default_device: Optional[str] = "cpu",
         default_dtype: Optional[torch.dtype] = torch.float64,
         tqdm: type = tqdm,
     ):
@@ -65,6 +65,9 @@ class RecipeMerger:
         recipe = extensions.merge_method.value_to_node(recipe)
         if fallback_model is not None:
             recipe = recipe | fallback_model
+
+        if self.__default_device is not None or self.__default_dtype is not None:
+            recipe = recipe.accept(CastInputDicts(self.__default_device, self.__default_dtype))
 
         if save_device is not None or save_dtype is not None:
             recipe = recipe.to(device=save_device, dtype=save_dtype)
@@ -416,3 +419,27 @@ def cast_node_value(value, expected_type):
     if issubclass(expected_type, torch.Tensor):
         return torch.tensor(value, dtype=torch.float32)
     return value
+
+
+@dataclasses.dataclass
+class CastInputDicts(RecipeVisitor):
+    device: str | torch.device
+    dtype: torch.dtype
+
+    def visit_literal(self, node: LiteralRecipeNode):
+        if (
+            isinstance(node.value, torch.Tensor) or
+            isinstance(node.value, Mapping) and isinstance(next(iter(node.value.values())), torch.Tensor)
+        ):
+            return node.to(device=self.device, dtype=self.dtype)
+        return node
+
+    def visit_model(self, node: ModelRecipeNode):
+        return node.to(device=self.device, dtype=self.dtype)
+
+    def visit_merge(self, node: MergeRecipeNode):
+        return MergeRecipeNode(
+            node.merge_method,
+            tuple(v.accept(self) for v in node.args),
+            {k: v.accept(self) for k, v in node.kwargs.items()},
+        )

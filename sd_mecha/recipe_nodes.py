@@ -148,11 +148,12 @@ class MergeRecipeNode(RecipeNode):
         merge_method,
         args: Tuple[RecipeNode, ...],
         kwargs: Dict[str, RecipeNode],
+        cache: dict = None,
     ):
         self.merge_method = merge_method
         self.args = args
         self.kwargs = kwargs
-        self.cache = None
+        self.cache = cache
         self.__validate_args()
 
     def __validate_args(self):

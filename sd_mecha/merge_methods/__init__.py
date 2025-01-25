@@ -23,9 +23,9 @@ def weighted_sum(
 ) -> Return(Tensor):
     key = kwargs["key"]
 
-    if math.isclose(alpha, 0.0):
+    if torch.allclose(alpha, torch.zeros_like(alpha)):
         return a[key]
-    elif math.isclose(alpha, 1.0):
+    elif torch.allclose(alpha, torch.ones_like(alpha)):
         return b[key]
 
     return (1 - alpha) * a[key] + alpha * b[key]
