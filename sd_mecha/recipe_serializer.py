@@ -18,7 +18,7 @@ def deserialize_path(recipe: pathlib.Path) -> RecipeNode:
         raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
 
 
-def deserialize(recipe: List[str] | str, model_dirs: Iterable[str | pathlib.Path] = ()) -> RecipeNode:
+def deserialize(recipe: List[str] | str) -> RecipeNode:
     if not isinstance(recipe, list):
         recipe = recipe.split("\n")
 
@@ -45,15 +45,6 @@ def deserialize(recipe: List[str] | str, model_dirs: Iterable[str | pathlib.Path
             results.append(LiteralRecipeNode(*positional_args, **named_args))
         elif command == "model":
             path = pathlib.Path(positional_args[0])
-            if not path.suffix:
-                path = path.with_suffix(".safetensors")
-            if not path.is_absolute():
-                for model_dir in model_dirs:
-                    path_attempt = model_dir / path
-                    if path_attempt.exists():
-                        path = path_attempt
-                        break
-
             results.append(ModelRecipeNode(path, *positional_args[1:], **named_args))
         elif command == "merge":
             method, *positional_args = positional_args

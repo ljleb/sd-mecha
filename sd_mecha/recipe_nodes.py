@@ -62,7 +62,7 @@ class RecipeNode(abc.ABC):
         if dtype is not None:
             from sd_mecha.merge_methods import cast_dtype_map_reversed
             dtype = cast_dtype_map_reversed[dtype]
-        return extensions.merge_method.resolve("cast").create_recipe(self, device, dtype)
+        return extensions.merge_method.resolve("cast").create_recipe(self, device=device, dtype=dtype)
 
 
 NonDictLiteralValue = str | int | float | bool

@@ -833,6 +833,7 @@ def fallback(
 @recipe
 def cast(
     a: Parameter(Tensor),
+    *,
     device: Parameter(str) = None,
     dtype: Parameter(str) = None,
 ) -> Return(Tensor):
