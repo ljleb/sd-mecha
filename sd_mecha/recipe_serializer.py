@@ -7,15 +7,7 @@ from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, Li
 MECHA_FORMAT_VERSION = "0.1.0"
 
 
-def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
-    if isinstance(recipe, str):
-        recipe = pathlib.Path(recipe)
-    if isinstance(models_dir, str):
-        models_dir = pathlib.Path(models_dir)
-
-    if models_dir is not None and not recipe.exists() and not recipe.is_absolute():
-        recipe = models_dir / recipe
-
+def deserialize_path(recipe: pathlib.Path) -> RecipeNode:
     if not recipe.exists():
         raise ValueError(f"unable to deserialize '{recipe}': no such file")
 
@@ -26,7 +18,7 @@ def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | path
         raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
 
 
-def deserialize(recipe: List[str] | str, models_dir: Iterable[str | pathlib.Path] = ()) -> RecipeNode:
+def deserialize(recipe: List[str] | str, model_dirs: Iterable[str | pathlib.Path] = ()) -> RecipeNode:
     if not isinstance(recipe, list):
         recipe = recipe.split("\n")
 
@@ -56,7 +48,7 @@ def deserialize(recipe: List[str] | str, models_dir: Iterable[str | pathlib.Path
             if not path.suffix:
                 path = path.with_suffix(".safetensors")
             if not path.is_absolute():
-                for model_dir in models_dir:
+                for model_dir in model_dirs:
                     path_attempt = model_dir / path
                     if path_attempt.exists():
                         path = path_attempt
