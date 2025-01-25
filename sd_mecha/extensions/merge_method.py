@@ -8,8 +8,8 @@ import torch
 import typing
 from sd_mecha import extensions
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor, NonDictLiteralValue, RecipeNodeOrValue
-from sd_mecha.extensions.merge_space import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
-from sd_mecha.extensions.model_config import ModelConfig
+from .merge_space import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
+from .model_config import ModelConfig
 from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 

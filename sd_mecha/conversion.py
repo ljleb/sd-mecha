@@ -2,9 +2,9 @@ import functools
 import heapq
 import pathlib
 from typing import Dict, Tuple, Any, List, Iterable, Mapping
-from sd_mecha.extensions.merge_method import RecipeNodeOrValue, value_to_node
-from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.extensions import merge_method
+from .extensions.merge_method import RecipeNodeOrValue, value_to_node
+from .extensions.model_config import ModelConfig
+from .extensions import merge_method
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_dirs: Iterable[pathlib.Path] = ()):

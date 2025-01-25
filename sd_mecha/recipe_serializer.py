@@ -1,7 +1,7 @@
 import pathlib
 from typing import List, Optional, Iterable, Hashable
-from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode
+from . import extensions, recipe_nodes
+from .recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode
 
 
 MECHA_FORMAT_VERSION = "0.1.0"

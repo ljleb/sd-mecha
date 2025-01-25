@@ -13,14 +13,14 @@ import torch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from sd_mecha.extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
-from sd_mecha.extensions.model_config import ModelConfig
-from sd_mecha.recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode
-from sd_mecha.streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
-from sd_mecha import extensions, recipe_nodes, recipe_serializer
+from .extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
+from .extensions.model_config import ModelConfig
+from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode
+from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
+from . import extensions, recipe_nodes, recipe_serializer
 from tqdm import tqdm
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
-from sd_mecha.typing_ import is_subclass
+from .typing_ import is_subclass
 
 
 class RecipeMerger:
