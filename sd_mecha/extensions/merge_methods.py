@@ -6,10 +6,10 @@ import inspect
 import pathlib
 import torch
 import typing
-from sd_mecha import extensions
 from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor, NonDictLiteralValue, RecipeNodeOrValue
-from .merge_space import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
-from .model_config import ModelConfig
+from . import merge_spaces, model_configs
+from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
+from .model_configs import ModelConfig
 from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
 
@@ -30,7 +30,7 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
 
 @dataclasses.dataclass
 class ParameterData:
-    interface: type
+    interface: type | TypeVar
     merge_space: Optional[AnyMergeSpace]
     model_config: Optional[ModelConfig]
 
@@ -47,12 +47,12 @@ def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpa
         merge_space = (merge_space,)
     if isinstance(merge_space, Iterable):
         merge_space = {
-            extensions.merge_space.resolve(m) if isinstance(m, str) else m
+            merge_spaces.resolve(m) if isinstance(m, str) else m
             for m in merge_space
         }
 
     if isinstance(model_config, str):
-        model_config = extensions.model_config.resolve(model_config)
+        model_config = model_configs.resolve(model_config)
 
     return type(Parameter.__name__, (), {
         "data": ParameterData(interface, merge_space, model_config)
@@ -69,12 +69,12 @@ def Return(interface, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol]
         merge_space = (merge_space,)
     if isinstance(merge_space, Iterable):
         merge_space = {
-            extensions.merge_space.resolve(m) if isinstance(m, str) else m
+            merge_spaces.resolve(m) if isinstance(m, str) else m
             for m in merge_space
         }
 
     if isinstance(model_config, str):
-        model_config = extensions.model_config.resolve(model_config)
+        model_config = model_configs.resolve(model_config)
 
     return type(Return.__name__, (), {
         "data": ParameterData(interface, merge_space, model_config)
@@ -117,7 +117,7 @@ class MergeMethod:
         self.__wrapped__ = f
         self.identifier = identifier
         self.has_varkwargs = True
-        self.default_merge_space = MergeSpaceSymbol(*extensions.merge_space.get_all())
+        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
         self.__validate_f()
 
     def __validate_f(self):
@@ -126,7 +126,7 @@ class MergeMethod:
         names = self.get_param_names()
         params = self.get_params()
         defaults = self.get_default_args()
-        merge_spaces = self.get_input_merge_spaces()
+        input_merge_spaces = self.get_input_merge_spaces()
         input_configs = self.get_input_configs()
 
         if spec.varkw is None:
@@ -139,8 +139,8 @@ class MergeMethod:
             )
             is_default_kwarg = isinstance(param_idx, str) and param_idx in (spec.kwonlydefaults or {})
             if is_default_arg or is_default_kwarg:
-                param_merge_space = merge_spaces.as_dict(1)[param_idx]
-                if param_merge_space != {extensions.merge_space.resolve("param")}:
+                param_merge_space = input_merge_spaces.as_dict(1)[param_idx]
+                if param_merge_space != {merge_spaces.resolve("param")}:
                     param_name = names.args_varags()[param_idx] if isinstance(param_idx, int) else param_idx
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
@@ -183,9 +183,24 @@ class MergeMethod:
     def create_recipe(self, *args, **kwargs):
         params = self.get_param_names()
         defaults = self.get_default_args()
-        max_args = len(params.args) if not params.has_varargs() else float("inf")
-        min_args = max_args - len(defaults.args)
 
+        kwargs_args_idx = float("inf")
+        for k, v in kwargs.items():
+            try:
+                i = params.args.index(k)
+                kwargs_args_idx = min(kwargs_args_idx, i) if kwargs_args_idx != float("inf") else i
+            except ValueError:
+                continue
+
+        args = [
+            args[i] if i < kwargs_args_idx
+            else kwargs.pop(params.args[i]) if params.args[i] in kwargs
+            else defaults.args[i]
+            for i in range(len(params.args))
+        ]
+
+        max_args = len(params.args) if not params.has_varargs() else float("inf")
+        min_args = len(params.args) - len(defaults.args)
         if not (min_args <= len(args) <= max_args):
             raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {len(args)} arguments")
 
@@ -201,11 +216,11 @@ class MergeMethod:
         default_args = defaults.args[len(args) - min_args:]
         input_configs = self.get_input_configs()
         default_config = self.get_return_config(input_configs.args_varags(varargs_len), input_configs.kwargs)
-        merge_spaces = self.get_input_merge_spaces()
+        input_merge_spaces = self.get_input_merge_spaces()
 
         def arg_to_node(k: int | str, arg: Any, expected_type: type):
             nonlocal default_config
-            merge_space = merge_spaces.as_dict(varargs_len)[k]
+            merge_space = input_merge_spaces.as_dict(varargs_len)[k]
             config = input_configs.as_dict(varargs_len)[k]
             if config is None:
                 config = default_config
@@ -213,7 +228,7 @@ class MergeMethod:
 
         input_types = self.get_input_types()
         args = tuple(
-            arg_to_node(i, arg, input_types.args[i])
+            arg_to_node(i, arg, input_types.args[i] if i < len(input_types.args) else input_types.vararg)
             for i, (arg, k) in enumerate(zip(itertools.chain(args, default_args), params.args_varags(varargs_len)))
         )
         kwargs = {
@@ -280,16 +295,16 @@ class MergeMethod:
         def get_merge_space_or_default(merge_space, has_default):
             if merge_space is None:
                 if has_default:
-                    merge_space = {extensions.merge_space.resolve("param")}
+                    merge_space = {merge_spaces.resolve("param")}
                 else:
                     merge_space = self.default_merge_space
             return merge_space
 
-        merge_spaces = []
+        args_merge_spaces = []
         for i in range(len(names.args)):
             merge_space = params.args[i].merge_space
             merge_space = get_merge_space_or_default(merge_space, i >= len(names.args) - len(defaults.args))
-            merge_spaces.append(merge_space)
+            args_merge_spaces.append(merge_space)
 
         varargs_merge_space = FunctionArgs.EMPTY_VARARGS
         if params.has_varargs():
@@ -297,13 +312,13 @@ class MergeMethod:
             if varargs_merge_space is None:
                 varargs_merge_space = self.default_merge_space
 
-        kw_merge_spaces = {}
+        kwargs_merge_spaces = {}
         for name in names.kwargs:
             merge_space = params.kwargs[name].merge_space
             merge_space = get_merge_space_or_default(merge_space, name in defaults.kwargs)
-            kw_merge_spaces[name] = merge_space
+            kwargs_merge_spaces[name] = merge_space
 
-        return FunctionArgs(merge_spaces, varargs_merge_space, kw_merge_spaces)
+        return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
 
     def get_return_config(self, arg_configs: List[Optional[ModelConfig]], kwarg_configs: Dict[str, Optional[ModelConfig]]) -> ModelConfig:
         type_hints = typing.get_type_hints(self.__wrapped__)
@@ -398,7 +413,7 @@ class InferModelConfigVisitor(RecipeVisitor):
 
     def visit_model(self, node: ModelRecipeNode):
         node_merge_space = node.merge_space
-        default_merge_spaces = extensions.merge_space.get_identifiers(self.default_merge_space)
+        default_merge_spaces = merge_spaces.get_identifiers(self.default_merge_space)
         # allow to infer merge space 'param' for i.e. approximated fisher diagonal
         if len(default_merge_spaces) == 1 and default_merge_spaces[0] == "param":
             node_merge_space = default_merge_spaces[0]
@@ -415,7 +430,7 @@ class InferModelConfigVisitor(RecipeVisitor):
 F = TypeVar("F", bound=Callable)
 
 
-def recipe(
+def merge_method(
     f: Optional[F] = None, *,
     identifier: Optional[str] = None,
     register: bool = True,
@@ -434,16 +449,16 @@ def __recipe_impl(
 ):
     if identifier is None:
         identifier = fn.__name__
-    merge_method = MergeMethod(fn, identifier)
+    fn_object = MergeMethod(fn, identifier)
 
     if register:
-        _merge_methods_registry[identifier] = merge_method
+        _merge_methods_registry[identifier] = fn_object
         if is_conversion:
-            _conversion_registry[identifier] = validate_config_conversion(merge_method)
+            _conversion_registry[identifier] = validate_config_conversion(fn_object)
     elif is_conversion:
         raise ValueError("A conversion recipe must be registered")
 
-    return merge_method
+    return fn_object
 
 
 def validate_config_conversion(merge_method: MergeMethod):

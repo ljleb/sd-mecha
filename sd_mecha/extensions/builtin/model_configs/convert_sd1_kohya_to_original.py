@@ -1,5 +1,5 @@
 import torch
-from sd_mecha.extensions.merge_method import recipe, StateDict, Parameter, Return
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from .convert_vae_to_original import convert_vae
 
 
@@ -7,7 +7,7 @@ from .convert_vae_to_original import convert_vae
 # https://github.com/huggingface/diffusers/blob/main/scripts/convert_diffusers_to_original_stable_diffusion.py
 
 
-@recipe(identifier="convert_'sd1-kohya'_to_'sd1-ldm'", is_conversion=True)
+@merge_method(identifier="convert_'sd1-kohya'_to_'sd1-ldm'", is_conversion=True)
 def convert_sd1_kohya_to_original(
     kohya_sd: Parameter(StateDict[torch.Tensor], model_config="sd1-kohya"),
     **kwargs,

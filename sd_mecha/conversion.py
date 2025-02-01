@@ -2,13 +2,13 @@ import functools
 import heapq
 import pathlib
 from typing import Dict, Tuple, Any, List, Iterable, Mapping
-from .extensions.merge_method import RecipeNodeOrValue, value_to_node
-from .extensions.model_config import ModelConfig
-from .extensions import merge_method
+from .extensions.merge_methods import RecipeNodeOrValue, value_to_node
+from .extensions.model_configs import ModelConfig
+from .extensions import merge_methods
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_dirs: Iterable[pathlib.Path] = ()):
-    all_converters = merge_method.get_all_converters()
+    all_converters = merge_methods.get_all_converters()
     converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
     for converter in all_converters:
         input_configs = converter.get_input_configs()
@@ -42,7 +42,7 @@ def create_conversion_recipe(recipe, paths, src_config, tgt_config):
     shortest_path = dijkstra(paths, src_config, tgt_config)
     if shortest_path is None:
         raise ValueError(f"no config conversion exists from {src_config} to {tgt_config}")
-    return functools.reduce(lambda v, mm: mm.create_recipe(v), shortest_path, recipe)
+    return functools.reduce(lambda v, mm: mm(v), shortest_path, recipe)
 
 
 def dijkstra(graph, start, goal):

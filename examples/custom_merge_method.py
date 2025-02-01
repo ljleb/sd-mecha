@@ -1,7 +1,7 @@
 import sd_mecha
 import torch
-from sd_mecha.extensions.merge_method import recipe
-from sd_mecha.extensions.merge_space import MergeSpace, weight
+from sd_mecha.extensions.merge_methods import merge_method
+from sd_mecha.extensions.merge_spaces import MergeSpace, weight
 
 
 sd_mecha.set_log_level()
@@ -9,7 +9,7 @@ sd_mecha.set_log_level()
 
 # define a custom merge method
 # `@convert_to_recipe` converts the annotated function to work with the merge recipe API
-@recipe
+@merge_method
 def custom_sum(
     # Each positional argument is a single tensor from one of the input models.
     # Merge methods are called once for each key that all input models have in common.

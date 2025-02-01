@@ -1,10 +1,9 @@
 import abc
 import itertools
 import pathlib
-from typing import Optional, Dict, Tuple
 import torch
-from . import extensions
-from .extensions.model_config import ModelConfig
+from .extensions import model_configs, merge_methods, merge_spaces
+from typing import Optional, Dict, Tuple
 
 
 class RecipeNode(abc.ABC):
@@ -14,12 +13,12 @@ class RecipeNode(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def merge_space(self) -> extensions.merge_space.MergeSpace:
+    def merge_space(self) -> merge_spaces.MergeSpace:
         pass
 
     @property
     @abc.abstractmethod
-    def model_config(self) -> Optional[ModelConfig]:
+    def model_config(self) -> Optional[model_configs.ModelConfig]:
         pass
 
     @abc.abstractmethod
@@ -30,30 +29,30 @@ class RecipeNode(abc.ABC):
         return self
 
     def __add__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
-        other = extensions.merge_method.value_to_node(other)
+        other = merge_methods.value_to_node(other)
         base, delta = self, other
         if other.merge_space == "weight":
             base, delta = other, self
-        return extensions.merge_method.resolve("add_difference")(base, delta)
+        return merge_methods.resolve("add_difference")(base, delta)
 
     def __radd__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
-        other = extensions.merge_method.value_to_node(other)
+        other = merge_methods.value_to_node(other)
         return other + self
 
     def __sub__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
-        other = extensions.merge_method.value_to_node(other)
-        return extensions.merge_method.resolve("subtract")(self, other)
+        other = merge_methods.value_to_node(other)
+        return merge_methods.resolve("subtract")(self, other)
 
     def __rsub__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
-        other = extensions.merge_method.value_to_node(other)
+        other = merge_methods.value_to_node(other)
         return other - self
 
     def __or__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
-        other = extensions.merge_method.value_to_node(other)
-        return extensions.merge_method.resolve("fallback")(self, other)
+        other = merge_methods.value_to_node(other)
+        return merge_methods.resolve("fallback")(self, other)
 
     def __ror__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
-        other = extensions.merge_method.value_to_node(other)
+        other = merge_methods.value_to_node(other)
         return other | self
 
     def to(self, *, device: Optional[str | torch.device] = None, dtype: Optional[torch.dtype] = None):
@@ -62,7 +61,7 @@ class RecipeNode(abc.ABC):
         if dtype is not None:
             from sd_mecha.merge_methods import cast_dtype_map_reversed
             dtype = cast_dtype_map_reversed[dtype]
-        return extensions.merge_method.resolve("cast").create_recipe(self, device=device, dtype=dtype)
+        return merge_methods.resolve("cast")(self, device=device, dtype=dtype)
 
 
 NonDictLiteralValue = str | int | float | bool | type(None)
@@ -74,7 +73,7 @@ class LiteralRecipeNode(RecipeNode):
     def __init__(
         self,
         value: LiteralValue,
-        model_config: Optional[str | ModelConfig] = None,
+        model_config: Optional[str | model_configs.ModelConfig] = None,
     ):
         self.value = value
         self.__model_config = model_config
@@ -83,17 +82,17 @@ class LiteralRecipeNode(RecipeNode):
         return visitor.visit_literal(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> extensions.merge_space.MergeSpace:
-        return extensions.merge_space.resolve("param")
+    def merge_space(self) -> merge_spaces.MergeSpace:
+        return merge_spaces.resolve("param")
 
     @property
-    def model_config(self) -> Optional[ModelConfig]:
+    def model_config(self) -> Optional[model_configs.ModelConfig]:
         if isinstance(self.__model_config, str):
-            return extensions.model_config.resolve(self.__model_config)
+            return model_configs.resolve(self.__model_config)
         return self.__model_config
 
     @model_config.setter
-    def model_config(self, model_config: Optional[ModelConfig]):
+    def model_config(self, model_config: Optional[model_configs.ModelConfig]):
         self.__model_config = model_config
 
     def __contains__(self, item):
@@ -107,7 +106,7 @@ class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
         path: pathlib.Path,
-        model_config: Optional[str | ModelConfig] = None,
+        model_config: Optional[str | model_configs.ModelConfig] = None,
         merge_space: str = "weight",
     ):
         if not isinstance(path, pathlib.Path):
@@ -122,17 +121,17 @@ class ModelRecipeNode(RecipeNode):
         return visitor.visit_model(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> extensions.merge_space.MergeSpace:
-        return extensions.merge_space.resolve(self.__merge_space)
+    def merge_space(self) -> merge_spaces.MergeSpace:
+        return merge_spaces.resolve(self.__merge_space)
 
     @property
-    def model_config(self) -> Optional[ModelConfig]:
+    def model_config(self) -> Optional[model_configs.ModelConfig]:
         if isinstance(self.__model_config, str):
-            return extensions.model_config.resolve(self.__model_config)
+            return model_configs.resolve(self.__model_config)
         return self.__model_config
 
     @model_config.setter
-    def model_config(self, value: Optional[ModelConfig]):
+    def model_config(self, value: Optional[model_configs.ModelConfig]):
         self.__model_config = value
 
     def __contains__(self, item):
@@ -167,14 +166,14 @@ class MergeRecipeNode(RecipeNode):
         return visitor.visit_merge(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> extensions.merge_space.MergeSpace:
+    def merge_space(self) -> merge_spaces.MergeSpace:
         return self.merge_method.get_return_merge_space(
             [v.merge_space for v in self.args],
             {k: v.merge_space for k, v in self.kwargs.items()},
         )
 
     @property
-    def model_config(self) -> Optional[ModelConfig]:
+    def model_config(self) -> Optional[model_configs.ModelConfig]:
         return self.merge_method.get_return_config(
             [v.model_config for v in self.args],
             {k: v.model_config for k, v in self.kwargs.items()},

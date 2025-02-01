@@ -1,9 +1,9 @@
 import torch
-from sd_mecha.extensions.merge_method import recipe, StateDict, Return, Parameter
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Return, Parameter
 from .convert_vae_to_original import convert_vae
 
 
-@recipe(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
+@merge_method(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
 def convert_sdxl_kohya_to_original(
     kohya_sd: Parameter(StateDict[torch.Tensor], model_config="sdxl-kohya"),
     **kwargs,

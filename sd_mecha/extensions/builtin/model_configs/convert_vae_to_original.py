@@ -1,5 +1,5 @@
 import torch
-from sd_mecha.extensions.merge_method import StateDict
+from sd_mecha.extensions.merge_methods import StateDict
 
 
 def convert_vae(diffusers_sd: StateDict[torch.Tensor], ldm_key: str) -> torch.Tensor:

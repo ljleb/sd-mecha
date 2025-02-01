@@ -1,24 +1,24 @@
 import dataclasses
 import torch
 from typing import Iterable, Mapping, Dict
-from sd_mecha import extensions
-from sd_mecha.extensions.merge_method import recipe, StateDict, Parameter, Return
-from sd_mecha.extensions.model_config import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
+from sd_mecha.extensions import model_configs
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from sd_mecha.extensions.model_configs import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
 from sd_mecha.streaming import TensorMetadata, StateDictKeyError
 
 
 def _register_all_lycoris_configs():
-    base_configs = extensions.model_config.get_all_base()
+    base_configs = model_configs.get_all_base()
     for base_config in base_configs:
         for lyco_config in (
                 LycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)),
                 LycorisModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
         ):
-            extensions.model_config.register_aux(lyco_config)
+            model_configs.register_aux(lyco_config)
             lora_config_id = lyco_config.identifier
             base_config_id = lyco_config.base_config.identifier
 
-            @recipe(identifier=f"convert_'{lora_config_id}'_to_base", is_conversion=True)
+            @merge_method(identifier=f"convert_'{lora_config_id}'_to_base", is_conversion=True)
             def diffusers_lora_to_base(
                 lora: Parameter(StateDict[torch.Tensor], "weight", lora_config_id),
                 **kwargs,

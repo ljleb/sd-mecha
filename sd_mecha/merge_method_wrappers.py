@@ -1,6 +1,6 @@
 import torch
 from typing import Optional, Dict
-from .extensions.merge_method import value_to_node, RecipeNodeOrValue
+from .extensions.merge_methods import value_to_node, RecipeNodeOrValue
 from . import recipe_nodes, merge_methods
 from .merge_methods import (
     subtract,

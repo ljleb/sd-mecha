@@ -1,13 +1,13 @@
 import logging
 import pathlib
-from typing import Optional
 from .recipe_serializer import serialize
-from .extensions.merge_method import recipe, NonDictLiteralValue
-from . import recipe_nodes
+from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode
+from .extensions.merge_methods import NonDictLiteralValue
+from typing import Optional
 
 
 def serialize_and_save(
-    recipe: recipe_nodes.RecipeNode,
+    recipe: RecipeNode,
     output_path: pathlib.Path | str,
 ):
     serialized = serialize(recipe)
@@ -23,14 +23,14 @@ def serialize_and_save(
         f.write(serialized)
 
 
-def model(path: str | pathlib.Path, model_config: Optional[str] = None) -> recipe_nodes.ModelRecipeNode:
+def model(path: str | pathlib.Path, model_config: Optional[str] = None) -> ModelRecipeNode:
     if isinstance(path, str):
         path = pathlib.Path(path)
-    return recipe_nodes.ModelRecipeNode(path, model_config)
+    return ModelRecipeNode(path, model_config)
 
 
-def literal(value: NonDictLiteralValue | dict, model_config: Optional[str] = None) -> recipe_nodes.LiteralRecipeNode:
-    return recipe_nodes.LiteralRecipeNode(value, model_config)
+def literal(value: NonDictLiteralValue | dict, model_config: Optional[str] = None) -> LiteralRecipeNode:
+    return LiteralRecipeNode(value, model_config)
 
 
 def set_log_level(level: str = "INFO"):

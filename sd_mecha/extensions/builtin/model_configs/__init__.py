@@ -1,6 +1,5 @@
 import pathlib
-from sd_mecha import extensions
-from sd_mecha.extensions.model_config import YamlModelConfig
+from sd_mecha.extensions import model_configs
 
 
 yaml_directory = pathlib.Path(__file__).parent
@@ -8,8 +7,8 @@ yaml_directory = pathlib.Path(__file__).parent
 
 def _register_configs():
     for yaml in yaml_directory.glob("*.yaml"):
-        config = YamlModelConfig(yaml)
-        extensions.model_config.register(config)
+        config = model_configs.YamlModelConfig(yaml)
+        model_configs.register(config)
 
 
 _register_configs()

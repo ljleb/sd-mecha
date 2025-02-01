@@ -7,7 +7,7 @@
 import sd_mecha
 
 # create the merge plan
-recipe = sd_mecha.weighted_sum("/path/to/model_a", "/path/to/model_b", alpha=0.5)
+recipe = sd_mecha.weighted_sum("/path/to/model_a.safetensors", "/path/to/model_b.safetensors", alpha=0.5)
 
 # initialize merge engine
 merger = sd_mecha.RecipeMerger()
@@ -63,11 +63,11 @@ import sd_mecha
 # all builtin merge methods are direct properties of the `sd_mecha` package for convenience
 recipe = sd_mecha.weighted_sum(
     sd_mecha.weighted_sum(
-        "ghostmix_v20Bakedvae",
-        "deliberate_v2",
+        "ghostmix_v20Bakedvae.safetensors",
+        "deliberate_v2.safetensors",
         alpha=0.5,
     ),
-    "dreamshaper_332BakedVaeClipFix",
+    "dreamshaper_332BakedVaeClipFix.safetensors",
     alpha=0.33,
 )
 
@@ -77,7 +77,7 @@ merger = sd_mecha.RecipeMerger(
 )
 
 # perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output="basic_merge")
+merger.merge_and_save(recipe, output="basic_merge.safetensors")
 ```
 
 See the [examples](/examples) directory for more examples.
@@ -86,48 +86,33 @@ See the [examples](/examples) directory for more examples.
 
 To specify block weights, we need to know the name of the blocks.
 
-This information can be discovered using the `extensions.model_config` submodule.
+This information can be discovered using the `extensions.model_configs` submodule.
 
 Mecha has builtin support for Stable Diffusion 1.X, Stable Diffusion XL and Stable Diffusion 3:
 
 ```python
-from sd_mecha.extensions.model_config import get_all
+from sd_mecha.extensions.model_configs import get_all
 
 all_configs = get_all()
 
 print([config.identifier for config in all_configs])
-# ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base"]
+# ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
 ```
 
-To view the available blocks of a model:
+To view the available components of a model:
 
 ```python
-from sd_mecha.extensions.model_config import resolve
+from sd_mecha.extensions import model_configs
 
-config = resolve("sd1-ldm-base")
+config = model_configs.resolve("sd1-ldm")
 for component_id, component in config.components.items():
-    for block_id, block_keys in component.blocks.items():
-        # block_keys contains the state dict keys that the block controls
-        print(f"{component_id}, {block_id}")
+      # block_keys contains the state dict keys that the block controls
+      print(f"{component_id}")
 
-# txt, in0
-# txt, in1
-# txt, in2
-# ...
-```
-
-Knowing this, we can for example set the value of the block `in2` from the `txt` component specifically:
-
-```python
-import sd_mecha
-recipe = sd_mecha.weighted_sum(
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-    alpha=(
-      sd_mecha.default("sd1-ldm-base", "txt", 0.33) |
-      sd_mecha.blocks("sd1-ldm-base", "txt", in2=0.75)
-    ),
-)
+# this prints:
+#   clip_l
+#   vae
+#   diffusers
 ```
 
 ## Motivation

@@ -10,15 +10,16 @@ import sys
 import threading
 import typing
 import torch
-from contextlib import nullcontext
-from types import SimpleNamespace
-from concurrent.futures import ThreadPoolExecutor, as_completed, Future
-from .extensions.merge_method import MergeMethod, StateDict, T as MergeMethodT
-from .extensions.model_config import ModelConfig
+from .extensions import merge_methods, model_configs, model_formats
+from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT
+from .extensions.model_configs import ModelConfig
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
-from . import extensions, recipe_nodes, recipe_serializer
+from . import recipe_nodes, recipe_serializer
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
+from contextlib import nullcontext
 from tqdm import tqdm
+from types import SimpleNamespace
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
 from .typing_ import is_subclass
 
@@ -52,9 +53,9 @@ class RecipeMerger:
 
     def merge_and_save(
         self,
-        recipe: extensions.merge_method.RecipeNodeOrValue,
+        recipe: merge_methods.RecipeNodeOrValue,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge.safetensors",
-        fallback_model: Optional[extensions.merge_method.RecipeNodeOrValue] = None,
+        fallback_model: Optional[merge_methods.RecipeNodeOrValue] = None,
         save_device: Optional[str | torch.device] = "cpu",
         save_dtype: Optional[torch.dtype] = torch.float16,
         threads: Optional[int] = None,
@@ -62,7 +63,7 @@ class RecipeMerger:
         strict_weight_space: bool = True,
         check_finite: bool = True,
     ):
-        recipe = extensions.merge_method.value_to_node(recipe)
+        recipe = merge_methods.value_to_node(recipe)
         if fallback_model is not None:
             recipe = recipe | fallback_model
 
@@ -237,7 +238,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         cache_key = str(path.resolve())
         if cache_key not in self.dicts_cache:
             matching_formats = []
-            for model_format in extensions.model_format.get_all():
+            for model_format in model_formats.get_all():
                 if model_format.matches(path):
                     matching_formats.append(model_format)
 
@@ -254,7 +255,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path]) -> List[ModelConfig]:
     state_dict_set = set(state_dict)
     configs_affinity = {}
-    for model_config in extensions.model_config.get_all():
+    for model_config in model_configs.get_all():
         matched_keys = state_dict_set.intersection(model_config.keys)
         # heuristic: accept config only if we match more than 90% of the keys of the state dict
         if len(matched_keys) >= len(state_dict_set) * 0.9:
@@ -442,4 +443,5 @@ class CastInputDicts(RecipeVisitor):
             node.merge_method,
             tuple(v.accept(self) for v in node.args),
             {k: v.accept(self) for k, v in node.kwargs.items()},
+            node.cache,
         )
