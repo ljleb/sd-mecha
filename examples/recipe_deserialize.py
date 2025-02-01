@@ -9,4 +9,4 @@ with open(recipe_path) as f:
 
 
 merger = sd_mecha.RecipeMerger(models_dir=r"E:\sd\models\Stable-diffusion")
-merger.merge_and_save(recipe, output="basic_merge")
+merger.merge_and_save(recipe)

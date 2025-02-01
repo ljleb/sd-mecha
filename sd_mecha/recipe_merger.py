@@ -135,9 +135,11 @@ class RecipeMerger:
             if not isinstance(output, pathlib.Path):
                 output = pathlib.Path(output)
             if not output.is_absolute():
-                output = self.__base_dirs[0] / output
-            if not output.suffix:
-                output = output.with_suffix(".safetensors")
+                for base_dir in self.__base_dirs:
+                    path_attempt = base_dir / output
+                    if path_attempt.exists():
+                        output = path_attempt
+                        break
             logging.info(f"Saving to {output}")
 
             output = OutSafetensorsDict(
@@ -229,8 +231,6 @@ class LoadInputDictsVisitor(RecipeVisitor):
         if not path.is_absolute():
             for base_dir in self.base_dirs:
                 path_attempt = base_dir / path
-                if not path_attempt.suffix:
-                    path_attempt = path_attempt.with_suffix(".safetensors")
                 if path_attempt.exists():
                     path = path_attempt
                     break

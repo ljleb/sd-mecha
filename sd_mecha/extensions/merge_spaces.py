@@ -1,5 +1,4 @@
-import functools
-from typing import List, TypeVar, Dict, Set, Tuple
+from typing import List, Dict, Set, Tuple
 import fuzzywuzzy.process
 
 
@@ -30,7 +29,10 @@ AnyMergeSpace = Set[MergeSpace] | MergeSpaceSymbol
 def register_merge_space(identifier: str):
     if identifier in _merge_space_registry:
         raise ValueError(f"merge space {identifier} already exists")
-    _merge_space_registry[identifier] = MergeSpace(identifier)
+
+    merge_space = MergeSpace(identifier)
+    _merge_space_registry[identifier] = merge_space
+    return merge_space
 
 
 def resolve(identifier: str) -> MergeSpace:
@@ -54,23 +56,7 @@ def get_all() -> Set[MergeSpace]:
     return set(_merge_space_registry.values())
 
 
-@functools.cache
-def _register_builtin_merge_spaces():
-    global _builtin_merge_spaces
-    for builtin_merge_space in _builtin_merge_spaces:
-        register_merge_space(builtin_merge_space)
-
-
-_merge_space_registry: Dict[str, MergeSpace] = {}
-
-weight = TypeVar("weight")
-delta = TypeVar("delta")
-param = TypeVar("param")
-_builtin_merge_spaces = [
-    weight.__name__,
-    delta.__name__,
-    param.__name__,
-]
-
-
-_register_builtin_merge_spaces()
+_merge_space_registry: Dict[str, MergeSpace] = {
+    merge_space: register_merge_space(merge_space)
+    for merge_space in ("weight", "delta", "param")
+}
