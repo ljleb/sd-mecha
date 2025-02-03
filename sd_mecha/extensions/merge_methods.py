@@ -35,7 +35,12 @@ class ParameterData:
     model_config: Optional[ModelConfig]
 
 
-def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+@dataclasses.dataclass
+class ParameterType:
+    data: ParameterData
+
+
+def Parameter(interface: type | TypeVar, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
     supported_types = [StateDict] + list(T.__constraints__)
     if type(None) in (typing.get_args(interface) or ()):
         interface = typing.get_args(interface)[0]
@@ -54,12 +59,17 @@ def Parameter(interface, merge_space: Optional[str | Iterable[str] | AnyMergeSpa
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
 
-    return type(Parameter.__name__, (), {
+    return type(Parameter.__name__, (ParameterType,), {
         "data": ParameterData(interface, merge_space, model_config)
     })
 
 
-def Return(interface, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+@dataclasses.dataclass
+class ReturnType:
+    data: ParameterData
+
+
+def Return(interface: type | TypeVar, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
     if not isinstance(interface, TypeVar):
         supported_types = list(T.__constraints__)
         if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
@@ -76,7 +86,7 @@ def Return(interface, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol]
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
 
-    return type(Return.__name__, (), {
+    return type(Return.__name__, (ReturnType,), {
         "data": ParameterData(interface, merge_space, model_config)
     })
 
@@ -124,7 +134,7 @@ class MergeMethod:
 
     def __validate_f(self):
         names = self.get_param_names()
-        params = self.get_params()
+        params = self.get_params()  # validates param type annotations
         defaults = self.get_default_args()
         input_merge_spaces = self.get_input_merge_spaces()
         input_configs = self.get_input_configs()
@@ -144,17 +154,11 @@ class MergeMethod:
                 if param_merge_space != {merge_spaces.resolve("param")}:
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
-            param = params.as_dict(1)[param_idx]
-            if param.__name__ != Parameter.__name__:
-                raise TypeError(f"Parameter '{param_name}' should be annotated with sd_mecha.Parameter, not {param.__name__}")
-
         input_configs_are_explicit = all(config is not None for config in input_configs.as_dict(1).values())
         if input_configs_are_explicit and self.get_return_config(input_configs.args_varags(), input_configs.kwargs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
 
-        return_data = self.__get_return_data(self.__f_hints.get("return"))
-        if return_data.__name__ != Return.__name__:
-            raise TypeError(f"The return type of a merge method should be sd_mecha.Return, not {return_data.__name__}")
+        return_data = self.__get_return_data(self.__f_hints.get("return"))  # validates return type annotation
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
             if not any(k.merge_space for k in params.as_dict(1).values()):
                 raise RuntimeError("when using a merge space symbol as output, it must also be used by at least one input parameter")
@@ -374,30 +378,32 @@ class MergeMethod:
         names = self.get_param_names()
 
         return FunctionArgs(
-            [self.__get_parameter_data(self.__f_hints[k]) for k in names.args],
-            self.__get_parameter_data(self.__f_hints[names.vararg]) if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
-            {k: self.__get_parameter_data(self.__f_hints[k]) for k in names.kwargs},
+            [self.__get_parameter_data(self.__f_hints.get(k), k) for k in names.args],
+            self.__get_parameter_data(self.__f_hints.get(names.vararg), names.vararg) if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
+            {k: self.__get_parameter_data(self.__f_hints.get(k), k) for k in names.kwargs},
         )
 
     @staticmethod
-    def __get_parameter_data(hint: type):
+    def __get_parameter_data(hint: type, param_name: str):
         hint_args = [arg for arg in (typing.get_args(hint) or ()) if arg is not type(None)]
         if hint_args:
             hint = hint_args[0]
 
-        if isinstance(getattr(hint, "data", None), ParameterData):
-            if hint.__name__ != Parameter.__name__:
-                raise TypeError("all parameters type should be sd_mecha.Parameter()")
-            return hint.data
-        return Parameter(hint).data
+        if hint is Parameter:
+            raise TypeError(f"the type of parameter '{param_name}' should be `sd_mecha.Parameter(...)`, not `sd_mecha.Parameter` (note the lack of parentheses)")
+
+        if not inspect.isclass(hint) or not issubclass(hint, ParameterType):
+            raise TypeError(f"the type of parameter '{param_name}' should be 'sd_mecha.Parameter(...)', not '{getattr(hint, '__name__', hint)}'")
+        return hint.data
 
     @staticmethod
     def __get_return_data(hint: type):
-        if isinstance(getattr(hint, "data", None), ParameterData):
-            if hint.__name__ != Return.__name__:
-                raise TypeError("the return type should be sd_mecha.Return()")
-            return hint.data
-        return Return(hint).data
+        if hint is Return:
+            raise TypeError(f"the return type should be 'sd_mecha.Return(...)', not 'sd_mecha.Return' (note the lack of parentheses)")
+
+        if not inspect.isclass(hint) or not issubclass(hint, ReturnType):
+            raise TypeError(f"the return type should be 'sd_mecha.Return(...)', not '{getattr(hint, '__name__', hint)}'")
+        return hint.data
 
     def get_identifier(self) -> str:
         return self.identifier
