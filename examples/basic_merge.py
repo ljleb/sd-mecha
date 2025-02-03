@@ -3,7 +3,9 @@ sd_mecha.set_log_level()
 
 
 # plan a simple weighted sum
-recipe = sd_mecha.weighted_sum(sd_mecha.model("ghostmix_v20Bakedvae.safetensors"), sd_mecha.model("dreamshaper_332BakedVaeClipFix"))
+a = sd_mecha.model("ghostmix_v20Bakedvae.safetensors")
+b = sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors")
+recipe = sd_mecha.weighted_sum(a, b)
 
 # merger provides global defaults for methods
 merger = sd_mecha.RecipeMerger(models_dir=r"E:\sd\models\Stable-diffusion")

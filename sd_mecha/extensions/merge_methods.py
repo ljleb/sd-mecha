@@ -115,21 +115,21 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 class MergeMethod:
     def __init__(self, f: Callable, identifier: str):
         self.__wrapped__ = f
+        self.__f_spec = inspect.getfullargspec(self.__wrapped__)
+        self.__f_hints = typing.get_type_hints(self.__wrapped__)
         self.identifier = identifier
         self.has_varkwargs = True
         self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
         self.__validate_f()
 
     def __validate_f(self):
-        spec = inspect.getfullargspec(self.__wrapped__)
-        hints = typing.get_type_hints(self.__wrapped__)
         names = self.get_param_names()
         params = self.get_params()
         defaults = self.get_default_args()
         input_merge_spaces = self.get_input_merge_spaces()
         input_configs = self.get_input_configs()
 
-        if spec.varkw is None:
+        if self.__f_spec.varkw is None:
             self.has_varkwargs = False
 
         for param_idx in params.as_dict(1):
@@ -137,18 +137,24 @@ class MergeMethod:
                 isinstance(param_idx, int) and
                 len(params.args) - len(defaults.args) <= param_idx < len(params.args)
             )
-            is_default_kwarg = isinstance(param_idx, str) and param_idx in (spec.kwonlydefaults or {})
+            is_default_kwarg = isinstance(param_idx, str) and param_idx in (self.__f_spec.kwonlydefaults or {})
+            param_name = names.as_dict(1)[param_idx]
             if is_default_arg or is_default_kwarg:
                 param_merge_space = input_merge_spaces.as_dict(1)[param_idx]
                 if param_merge_space != {merge_spaces.resolve("param")}:
-                    param_name = names.args_varags()[param_idx] if isinstance(param_idx, int) else param_idx
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
+
+            param = params.as_dict(1)[param_idx]
+            if param.__name__ != Parameter.__name__:
+                raise TypeError(f"Parameter '{param_name}' should be annotated with sd_mecha.Parameter, not {param.__name__}")
 
         input_configs_are_explicit = all(config is not None for config in input_configs.as_dict(1).values())
         if input_configs_are_explicit and self.get_return_config(input_configs.args_varags(), input_configs.kwargs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
 
-        return_data = self.__get_return_data(hints.get("return"))
+        return_data = self.__get_return_data(self.__f_hints.get("return"))
+        if return_data.__name__ != Return.__name__:
+            raise TypeError(f"The return type of a merge method should be sd_mecha.Return, not {return_data.__name__}")
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
             if not any(k.merge_space for k in params.as_dict(1).values()):
                 raise RuntimeError("when using a merge space symbol as output, it must also be used by at least one input parameter")
@@ -277,8 +283,7 @@ class MergeMethod:
             else:
                 resolved_input_spaces[merge_space_param] = merge_space_arg
 
-        type_hints = typing.get_type_hints(self.__wrapped__)
-        merge_space_param = self.__get_return_data(type_hints.get("return")).merge_space
+        merge_space_param = self.__get_return_data(self.__f_hints.get("return")).merge_space
         if isinstance(merge_space_param, MergeSpaceSymbol):
             return resolved_input_spaces[merge_space_param]
         if merge_space_param is None:
@@ -321,11 +326,10 @@ class MergeMethod:
         return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
 
     def get_return_config(self, arg_configs: List[Optional[ModelConfig]], kwarg_configs: Dict[str, Optional[ModelConfig]]) -> ModelConfig:
-        type_hints = typing.get_type_hints(self.__wrapped__)
         names = self.get_param_names()
         num_varargs = max(0, len(arg_configs) - len(names.args))
         input_configs = self.get_input_configs().as_dict(num_varargs)
-        default_config = self.__get_return_data(type_hints.get("return")).model_config
+        default_config = self.__get_return_data(self.__f_hints.get("return")).model_config
 
         arg_tuples = enumerate(arg_configs)
         kwarg_tuples = ((k, kwarg_configs.get(k)) for k in kwarg_configs)
@@ -353,29 +357,26 @@ class MergeMethod:
         )
 
     def get_param_names(self) -> FunctionArgs[str]:
-        spec = inspect.getfullargspec(self.__wrapped__)
         return FunctionArgs(
-            spec.args or [],
-            spec.varargs or FunctionArgs.EMPTY_VARARGS,
-            {k: k for k in spec.kwonlyargs} or {},
+            self.__f_spec.args or [],
+            self.__f_spec.varargs or FunctionArgs.EMPTY_VARARGS,
+            {k: k for k in self.__f_spec.kwonlyargs} or {},
         )
 
     def get_default_args(self) -> FunctionArgs[Any]:
-        spec = inspect.getfullargspec(self.__wrapped__)
         return FunctionArgs(
-            spec.defaults or [],
+            self.__f_spec.defaults or [],
             FunctionArgs.EMPTY_VARARGS,
-            spec.kwonlydefaults or {},
+            self.__f_spec.kwonlydefaults or {},
         )
 
     def get_params(self) -> FunctionArgs[ParameterData]:
         names = self.get_param_names()
-        annotations = typing.get_type_hints(self.__wrapped__)
 
         return FunctionArgs(
-            [self.__get_parameter_data(annotations[k]) for k in names.args],
-            self.__get_parameter_data(annotations[names.vararg]) if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
-            {k: self.__get_parameter_data(annotations[k]) for k in names.kwargs},
+            [self.__get_parameter_data(self.__f_hints[k]) for k in names.args],
+            self.__get_parameter_data(self.__f_hints[names.vararg]) if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
+            {k: self.__get_parameter_data(self.__f_hints[k]) for k in names.kwargs},
         )
 
     @staticmethod
@@ -386,7 +387,7 @@ class MergeMethod:
 
         if isinstance(getattr(hint, "data", None), ParameterData):
             if hint.__name__ != Parameter.__name__:
-                raise RuntimeError("all parameters type should be sd_mecha.Parameter()")
+                raise TypeError("all parameters type should be sd_mecha.Parameter()")
             return hint.data
         return Parameter(hint).data
 
@@ -394,7 +395,7 @@ class MergeMethod:
     def __get_return_data(hint: type):
         if isinstance(getattr(hint, "data", None), ParameterData):
             if hint.__name__ != Return.__name__:
-                raise RuntimeError("the return type should be sd_mecha.Return()")
+                raise TypeError("the return type should be sd_mecha.Return()")
             return hint.data
         return Return(hint).data
 
