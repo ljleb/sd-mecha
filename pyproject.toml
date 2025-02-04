@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sd-mecha"
-version = "0.0.29"
+version = "0.1.0rc1"
 description = "State dict recipe merger"
 readme = "README.md"
 authors = [{ name = "ljleb" }]
@@ -14,28 +14,30 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "click",
-    "numpy",
-    "safetensors",
-    "tqdm",
-    "scipy",
-    "fuzzywuzzy",
+    "click>=8.1.7",
+    "numpy>=1.26.0",
+    "torch>=2.1.0",
+    "scipy>=1.14.0",
+    "safetensors>=0.4.2",
+    "tqdm>=4.66.2",
+    "fuzzywuzzy>=0.18.0",
     "python-Levenshtein",
-    "PyYAML",
+    "PyYAML>=6.0.1",
 ]
 
-[tool.setuptools]
-packages = [
-    "sd_mecha",
-    "sd_mecha.merge_methods",
-    "sd_mecha.extensions",
-    "sd_mecha.lora",
-    "sd_mecha.models",
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+pythonpath = "."
+testpaths = [
+    "tests",
 ]
+
+[tool.setuptools.package-dir]
+sd_mecha = "sd_mecha"
 
 [tool.setuptools.package-data]
-"sd_mecha.lora" = ["*.json"]
-"sd_mecha.models" = ["*.yaml", "*.txt"]
+"*" = ["*.yaml"]
 
 [project.urls]
 Homepage = "https://github.com/ljleb/sd-mecha"

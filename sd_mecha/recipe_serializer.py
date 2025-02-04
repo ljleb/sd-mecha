@@ -1,51 +1,55 @@
 import pathlib
-import fuzzywuzzy.process
-from typing import List, Optional
-from sd_mecha import extensions, recipe_nodes
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeSpace, ParameterRecipeNode, RecipeVisitor
+from typing import List, Optional, Hashable
+from .extensions import merge_methods
+from .recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode, MergeRecipeNode
 
 
-def deserialize_path(recipe: str | pathlib.Path, models_dir: Optional[str | pathlib.Path] = None) -> RecipeNode:
-    if not isinstance(recipe, pathlib.Path):
-        recipe = pathlib.Path(recipe)
-    if recipe.exists():
-        if recipe.suffix == ".safetensors":
-            return recipe_nodes.ModelRecipeNode(recipe)
-        elif recipe.suffix == ".mecha":
-            return deserialize(recipe)
-        else:
-            raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
-
-    if models_dir is not None and not recipe.is_absolute():
-        recipe = models_dir / recipe
-    if not recipe.suffix:
-        recipe = recipe.with_suffix(".safetensors")
-    elif recipe.suffix != ".safetensors":
-        raise ValueError(f"invalid path to safetensors or recipe: {recipe}")
-    return recipe_nodes.ModelRecipeNode(recipe)
+MECHA_FORMAT_VERSION = "0.1.0"
 
 
-def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
+def deserialize_path(recipe: pathlib.Path) -> RecipeNode:
+    if not recipe.exists():
+        raise ValueError(f"unable to deserialize '{recipe}': no such file")
+
+    if recipe.suffix == ".mecha":
+        with open(recipe, "r") as recipe_file:
+            return deserialize(recipe_file.read())
+    else:
+        raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
+
+
+def deserialize(recipe: List[str] | str) -> RecipeNode:
     if not isinstance(recipe, list):
-        with open(recipe, "r") as recipe:
-            recipe = recipe.readlines()
+        recipe = recipe.split("\n")
+
+    if not recipe[0].startswith("version"):
+        raise RuntimeError("bad format: expected version at line 1")
+
+    actual_version, recipe = recipe[0], recipe[1:]
+    expected_version = get_version_header(MECHA_FORMAT_VERSION)
+    if actual_version != expected_version:
+        raise RuntimeError(f"bad recipe version: got {actual_version}, expected {expected_version}")
 
     results = []
 
     def parse(line):
-        command, *args = tokenize(line.strip())
-        positional_args, named_args = preprocess_args(args)
+        line = line.strip()
+        if line.startswith("#"):
+            return
+
+        command, *args = tokenize(line)
+        positional_args, keyword_args = preprocess_args(args)
         if command == "dict":
-            results.append(dict(*positional_args, **named_args))
+            results.append(dict(*positional_args, **keyword_args))
+        elif command == "literal":
+            results.append(LiteralRecipeNode(*positional_args, **keyword_args))
         elif command == "model":
-            results.append(ModelRecipeNode(*positional_args, **named_args))
-        elif command == "parameter":
-            merge_space = MergeSpace[positional_args[1]]
-            results.append(ParameterRecipeNode(positional_args[0], merge_space, **named_args))
+            path = pathlib.Path(positional_args[0])
+            results.append(ModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
             method, *positional_args = positional_args
-            method = extensions.merge_method.resolve(method)
-            results.append(method.create_recipe(*positional_args, **named_args))
+            method = merge_methods.resolve(method)
+            results.append(method(*positional_args, **keyword_args))
         else:
             raise ValueError(f"unknown command: {command}")
 
@@ -54,10 +58,7 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
         named_args = {}
         for arg_index, arg in enumerate(args):
             if '=' in arg:
-                # note: this is wrong if "=" is inside quotes
-                # however, quoted kwarg values (aka string hypers) will raise an exception in the constructor of recipes
-                # so I'm not gonna bother fixing this with the tokenizer until it is actually useful to do so
-                key, value = arg.split('=')
+                key, value = arg.split('=', maxsplit=1)
                 named_args[key] = get_arg_value(value, arg_index)
             else:
                 positional_args.append(get_arg_value(arg, arg_index))
@@ -65,7 +66,9 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
 
     def get_arg_value(arg, arg_index):
         try:
-            if arg.startswith('&'):
+            if arg in CONSTANTS:
+                return CONSTANTS[arg]
+            elif arg.startswith('&'):
                 ref_index = int(arg[1:])
                 if ref_index < 0 or ref_index >= len(results):
                     raise ValueError(f"reference {arg} out of bounds")
@@ -82,13 +85,24 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
     def tokenize(line):
         tokens = []
         current_token = []
+        quote_prefix = []
         inside_quotes = False
+        is_escape = False
         for char in line:
-            if char == '"':
+            if is_escape:
+                is_escape = False
+            elif char == "\\":
+                is_escape = True
+                continue
+            elif char == '"':
                 inside_quotes = not inside_quotes
-                if not inside_quotes:  # End of quoted string
-                    tokens.append(f'"{"".join(current_token)}"')
+                if inside_quotes:  # Begin of quoted string
+                    quote_prefix = current_token
                     current_token = []
+                else:  # End of quoted string
+                    tokens.append(f'{"".join(quote_prefix)}"{"".join(current_token)}"')
+                    current_token = []
+                    quote_prefix = []
                 continue
             elif char == ' ' and not inside_quotes:
                 if current_token:  # End of a token
@@ -114,42 +128,75 @@ def deserialize(recipe: List[str] | str | pathlib.Path) -> RecipeNode:
 def serialize(recipe: RecipeNode) -> str:
     serializer = SerializerVisitor()
     recipe.accept(serializer)
-    return "\n".join(serializer.instructions)
+    version_header = get_version_header(MECHA_FORMAT_VERSION)
+    body = "\n".join([version_header] + serializer.instructions)
+    return body
+
+
+def get_version_header(version: str):
+    return f"version {version}"
 
 
 class SerializerVisitor(RecipeVisitor):
     def __init__(self, instructions: Optional[List[str]] = None):
         self.instructions = instructions if instructions is not None else []
 
-    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> int:
-        line = f'model "{node.path}" "{node.model_arch.identifier}" "{node.model_type.identifier}"'
+    def visit_literal(self, node: LiteralRecipeNode):
+        value = self.__serialize_value(node.value)
+        if node.model_config is None:
+            return value
+        else:
+            config = self.__serialize_value(node.model_config.identifier)
+            line = f"literal {value} model_config={config}"
+            return self.__add_instruction(line)
+
+    def visit_model(self, node: ModelRecipeNode) -> str:
+        path = self.__serialize_value(str(node.path))
+        config = self.__serialize_value(getattr(node.model_config, "identifier", None))
+        line = f"model {path} model_config={config}"
         return self.__add_instruction(line)
 
-    def visit_parameter(self, node: recipe_nodes.ParameterRecipeNode) -> int:
-        merge_space = str(MergeSpace.BASE).split(".")[1]
-        model_arch = f' "{node.model_arch.identifier}"' if node.model_arch else ""
-        line = f'parameter "{node.name}" "{merge_space}"' + model_arch
-        return self.__add_instruction(line)
-
-    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> int:
-        models = [
-            f" &{model.accept(self)}"
-            for model in node.models
+    def visit_merge(self, node: MergeRecipeNode) -> str:
+        identifier = self.__serialize_value(node.merge_method.get_identifier())
+        parts = ["merge", identifier] + [
+            self.__serialize_value(v)
+            for v in node.args
+        ] + [
+            f"{k}={self.__serialize_value(v)}"
+            for k, v in node.kwargs.items()
         ]
-
-        hypers = []
-        for hyper_k, hyper_v in node.hypers.items():
-            if isinstance(hyper_v, dict):
-                dict_line = "dict" + "".join(f" {k}={v}" for k, v in hyper_v.items())
-                hyper_v = f"&{self.__add_instruction(dict_line)}"
-            hypers.append(f" {hyper_k}={hyper_v}")
-
-        line = f'merge "{node.merge_method.get_name()}"{"".join(models)}{"".join(hypers)}'
+        line = " ".join(parts)
         return self.__add_instruction(line)
 
-    def __add_instruction(self, instruction: str) -> int:
+    def __serialize_value(self, value) -> str:
+        if isinstance(value, str):
+            value = value.replace("\\", "\\\\").replace('"', "\\\"")
+            return f'"{value}"'
+        if isinstance(value, dict):
+            dict_line = "dict " + " ".join(f"{k}={self.__serialize_value(v)}" for k, v in value.items())
+            return self.__add_instruction(dict_line)
+        if isinstance(value, (int, float)):
+            return str(value)
+        # int or float needs to be handled before this (1.0 == True)
+        if isinstance(value, Hashable) and value in REVERSE_CONSTANTS:
+            return REVERSE_CONSTANTS[value]
+        if isinstance(value, RecipeNode):
+            return value.accept(self)
+        raise TypeError(f"type {type(value)} cannot be serialized: {value}")
+
+    def __add_instruction(self, instruction: str) -> str:
         try:
-            return self.instructions.index(instruction)
+            return f"&{self.instructions.index(instruction)}"
         except ValueError:
             self.instructions.append(instruction)
-            return len(self.instructions) - 1
+            return f"&{len(self.instructions) - 1}"
+
+
+CONSTANTS = {
+    "null": None,
+    "true": True,
+    "false": False,
+}
+REVERSE_CONSTANTS = {
+    v: k for k, v in CONSTANTS.items()
+}
