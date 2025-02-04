@@ -9,15 +9,15 @@ To contribute to this guide, or bring attention to ambiguous or erroneous sectio
 
 This guide is tied to a specific version of sd-mecha.
 Verify this is the appropriate version.
-To access the guide for a different version of sd-mecha, please refer to the source tree under docs/ of the appropriate tag or commit.
+To access the guide for a different version of sd-mecha, please refer to the source tree under docs/ of the appropriate git tag or commit.
 
 This guide is structured so that the files listing above serves as the table of contents.
 It is separated into the following chapters:
 
 - **Introduction**: overview of the features of sd-mecha
-- **Chapter 1**: recipes
+- **Chapter 1**: merge methods
 - **Chapter 2**: user-defined merge methods
-- **Chapter 3**: recipe serialization/deserialization
-- **Chapter 4**: user-defined model architectures
+- **Chapter 3**: conversion methods
+- **Chapter 4**: recipe serialization/deserialization
 
 Next: [Introduction](0-introduction)

@@ -1,6 +1,6 @@
 # Recipes listing
 
-Here is a comprehensive list of built-in recipes and a description of what they do.
+Here is a comprehensive list of built-in merge methods and a description of what they do.
 
 ### `sd_mecha.weighted_sum(a, b, *, alpha: float = 0.5)`
 
