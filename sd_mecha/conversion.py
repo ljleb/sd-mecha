@@ -58,9 +58,6 @@ def dijkstra(graph, start, goal):
              or None if no path exists.
     """
 
-    if start == goal:
-        return []
-
     distances = {node: float('inf') for node in graph}
     distances[start] = 0
     predecessors = {node: None for node in graph}  # will store the node we came from
