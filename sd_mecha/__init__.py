@@ -22,6 +22,7 @@ from .merge_methods import (
     clamp,
     model_stock,
     fallback,
+    filter_component,
 )
 from .merge_method_wrappers import (
     add_difference,
