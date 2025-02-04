@@ -7,10 +7,12 @@
 import sd_mecha
 
 # create the merge plan
-recipe = sd_mecha.weighted_sum("/path/to/model_a.safetensors", "/path/to/model_b.safetensors", alpha=0.5)
+model_a = sd_mecha.model("model_a.safetensors")
+model_b = sd_mecha.model("model_b.safetensors")
+recipe = sd_mecha.weighted_sum(model_a, model_b, alpha=0.5)
 
-# initialize merge engine
-merger = sd_mecha.RecipeMerger()
+# initialize merger
+merger = sd_mecha.RecipeMerger(models_dir="/path/to/models")
 
 # merge!
 merger.merge_and_save(recipe)
@@ -34,6 +36,7 @@ sd-mecha is a general memory-efficient model merging library. It can merge *any*
   - Stable Diffusion 1.5
   - Stable Diffusion XL
   - Stable Diffusion 3
+  - FLUX Schnell/Dev
 - Merge LyCORIS networks together and to checkpoints
 - Block-wise hyperparameters for precise control of blocks (aka MBW)
 
@@ -57,23 +60,18 @@ A recipe is a list of instructions that describes the exact steps needed to obta
 Here's an example script that merges three Stable Diffusion 1.5 models:
 
 ```python
-import sd_mecha
+from sd_mecha import model, clamp, RecipeMerger
 
-# create a simple weighted sum recipe
+# create a simple add difference recipe
 # all builtin merge methods are direct properties of the `sd_mecha` package for convenience
-recipe = sd_mecha.weighted_sum(
-    sd_mecha.weighted_sum(
-        "ghostmix_v20Bakedvae.safetensors",
-        "deliberate_v2.safetensors",
-        alpha=0.5,
-    ),
-    "dreamshaper_332BakedVaeClipFix.safetensors",
-    alpha=0.33,
-)
+a = model("ghostmix_v20Bakedvae.safetensors")
+b = model("deliberate_v2.safetensors")
+c = model("dreamshaper_332BakedVaeClipFix.safetensors")
+recipe = clamp(a + (b - c), a, b)
 
 # merger contains default parameters
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
+merger = RecipeMerger(
+    models_dir="/path/to/models",
 )
 
 # perform the entire merge plan and save to output path
@@ -88,12 +86,12 @@ To specify block weights, we need to know the name of the blocks.
 
 This information can be discovered using the `extensions.model_configs` submodule.
 
-Mecha has builtin support for Stable Diffusion 1.X, Stable Diffusion XL and Stable Diffusion 3:
+Mecha has builtin support for Stable Diffusion 1.X, Stable Diffusion XL, Stable Diffusion 3 and FLUX Schnell/Dev:
 
 ```python
-from sd_mecha.extensions.model_configs import get_all
+from sd_mecha.extensions import model_configs
 
-all_configs = get_all()
+all_configs = model_configs.get_all()
 
 print([config.identifier for config in all_configs])
 # ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
