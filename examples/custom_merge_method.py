@@ -1,64 +1,50 @@
 import sd_mecha
 import torch
-from sd_mecha.extensions.merge_method import convert_to_recipe, LiftFlag, MergeSpace
+from torch import Tensor
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return
+
+
+# sets loglevel to INFO. some operations will report extra detail through stdout/stderr
 sd_mecha.set_log_level()
 
 
 # define a custom merge method
-# `@convert_to_recipe` converts the annotated function to work with the merge recipe API
-@convert_to_recipe
+# `@merge_method` converts the annotated function to work with the merge method API
+@merge_method
 def custom_sum(
-    # Each positional argument is either a weight or bias
-    # Merge methods are called once for each key that all input models have in common
-    # We use a type system trick to specify the expected merge space of each model: `Tensor | LiftFlag[MergeSpace...]`
-    # We can represent complex constraints where multiple models must be in the exact same merge space using a TypeVar:
-    #    ```
-    #    SameSpace = TypeVar("SharedSpace", bound=LiftFlag[MergeSpace.BASE | MergeSpace.DELTA])
-    #    ...
-    #    def my_method(
-    #        a: torch.Tensor | SameSpace,
-    #        b: torch.Tensor | SameSpace,
-    #        **kwargs,
-    #    ) -> torch.Tensor | SameSpace
-    #    ```
-    # In this code, `a` and `b` must be in the same space, either in BASE space or DELTA space.
-    # The return merge space is exactly the merge space that satisfies `a` and `b` at the same time.
-    # For more examples, see /sd_mecha/merge_methods.py
-    a: torch.Tensor | LiftFlag[MergeSpace.BASE],
-    b: torch.Tensor | LiftFlag[MergeSpace.BASE],
-    *,
-    # hyperparameters go here
-    alpha: float = 0.5,  # default arguments are honored
-    beta: float,
-    # `@convert_to_recipe` introduces additional kwargs: `device=` and `dtype=`
-    # We must put `**kwargs` to satisfy the type system:
+    # Each positional argument is a single tensor from one of the input models.
+    # Merge methods are called once for each key that all input models have in common.
+    a: Parameter(Tensor),
+    b: Parameter(Tensor),
+    beta: Parameter(Tensor, merge_space="param"),
+    alpha: Parameter(Tensor) = 0.5,  # params with a default value are automatically in "param" merge space
+    # extra info or metadata is passed in **kwargs if it is present
+    # this includes the name of the key currently being merged, a cache mechanism, and a few more things
+    # add **kwargs to receive this extra information:`
     **kwargs,
-) -> torch.Tensor | LiftFlag[MergeSpace.BASE]:
+) -> Return(Tensor, "weight"):
+    weighted_sum = (1-alpha)*a + alpha*b
 
-    # to call an existing `@convert_to_recipe` merge method inside another one (i.e. this one),
-    #  we use the `__wrapped__` attribute that returns the original unwrapped function
-    weighted_sum = sd_mecha.weighted_sum.__wrapped__(a, b, alpha=alpha)
-
-    # in this example we add noise to the sum
+    # just for the sake of the example, let's add noise to the sum
     return (1 - beta) * weighted_sum + beta * torch.randn_like(weighted_sum)
 
 
 # plan our custom weighted sum
 recipe = custom_sum(
-    # put models as positional arguments
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-    # put hyperparameters as keyword arguments
+    # this merge uses the "sd1-ldm" model config.
+    # the config is automatically inferred, there is no need to pass its identifier here
+    sd_mecha.model("ghostmix_v20Bakedvae.safetensors"),
+    sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors"),
+    # merge params, literal values are broadcasted to the entire state dict
     alpha=0.5,
     beta=0.1,
-    # these parameters are added by `@convert_to_recipe`:
-    device="cuda",        # we can change the device just before calling the function
-    dtype=torch.float64,  # same for dtype
 )
 
+# create the merger object. `models_dir` is the path to the models on disk (it can also be a list of paths)
+# this information is used when serializing recipes to make the recipe paths relative
 merger = sd_mecha.RecipeMerger(
     models_dir=r"E:\sd\models\Stable-diffusion",
 )
 
 # perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output="basic_merge")
+merger.merge_and_save(recipe, output="basic_merge.safetensors")

@@ -1,8 +1,12 @@
-.idea
+/.idea
 __pycache__
-sd_mecha.egg-info
-build
-dist
-config
+/sd_mecha.egg-info
+/build
+/dist
+/config
+/venv
+/model_configs/venvs
+/sd_mecha/extensions/builtin/model_configs/**/*.yaml
+/sd_mecha/extensions/builtin/model_configs/**/*.yaml.bak
 
-examples/*_test.py
+/examples/*_test.py
