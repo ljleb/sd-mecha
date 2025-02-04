@@ -12,6 +12,7 @@ from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
 from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
+from ..typing_ import is_subclass
 
 
 T = TypeVar('T', torch.Tensor, *typing.get_args(NonDictLiteralValue))
@@ -98,8 +99,8 @@ class FunctionArgs(Generic[P]):
     vararg: P | SimpleNamespace  # using SimpleNamespace as "empty" because P can be Optional
     kwargs: Dict[str, P]
 
-    def as_dict(self, varargs_count=0) -> Dict[int | str, P]:
-        varargs_count = self._get_varargs_count(varargs_count)
+    def as_dict(self, args_count=None) -> Dict[int | str, P]:
+        varargs_count = self._get_varargs_count(args_count)
         args_dict = {i: v for i, v in enumerate(self.args)}
         vararg_dict = {
             i: self.vararg
@@ -107,13 +108,17 @@ class FunctionArgs(Generic[P]):
         }
         return args_dict | vararg_dict | self.kwargs
 
-    def args_varags(self, varargs_count=1) -> List[P]:
-        varargs_count = self._get_varargs_count(varargs_count)
+    def args_varags(self, args_count=None) -> List[P]:
+        varargs_count = self._get_varargs_count(args_count)
         varargs = [self.vararg]*varargs_count
         return self.args + varargs
 
-    def _get_varargs_count(self, varargs_count):
-        return varargs_count*int(self.has_varargs())
+    def _get_varargs_count(self, args_count):
+        n_args = len(self.args)
+        if args_count is None:
+            args_count = n_args + 1
+
+        return (args_count - n_args) * int(self.has_varargs())
 
     def has_varargs(self):
         return self.vararg != FunctionArgs.EMPTY_VARARGS
@@ -142,26 +147,29 @@ class MergeMethod:
         if self.__f_spec.varkw is None:
             self.has_varkwargs = False
 
-        for param_idx in params.as_dict(1):
+        for param_idx in params.as_dict():
             is_default_arg = (
                 isinstance(param_idx, int) and
                 len(params.args) - len(defaults.args) <= param_idx < len(params.args)
             )
             is_default_kwarg = isinstance(param_idx, str) and param_idx in (self.__f_spec.kwonlydefaults or {})
-            param_name = names.as_dict(1)[param_idx]
+            param_name = names.as_dict()[param_idx]
             if is_default_arg or is_default_kwarg:
-                param_merge_space = input_merge_spaces.as_dict(1)[param_idx]
+                param_merge_space = input_merge_spaces.as_dict()[param_idx]
                 if param_merge_space != {merge_spaces.resolve("param")}:
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
-        input_configs_are_explicit = all(config is not None for config in input_configs.as_dict(1).values())
+        input_configs_are_explicit = all(config is not None for config in input_configs.as_dict().values())
         if input_configs_are_explicit and self.get_return_config(input_configs.args_varags(), input_configs.kwargs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
 
         return_data = self.__get_return_data(self.__f_hints.get("return"))  # validates return type annotation
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
-            if not any(k.merge_space for k in params.as_dict(1).values()):
+            if not any(k.merge_space for k in params.as_dict().values()):
                 raise RuntimeError("when using a merge space symbol as output, it must also be used by at least one input parameter")
+
+    def __repr__(self):
+        return f"<merge method '{self.identifier}'>"
 
     def merge_key(
         self,
@@ -194,16 +202,12 @@ class MergeMethod:
         params = self.get_param_names()
         defaults = self.get_default_args()
 
-        kwargs_args_idx = float("inf")
-        for k, v in kwargs.items():
-            try:
-                i = params.args.index(k)
-                kwargs_args_idx = min(kwargs_args_idx, i) if kwargs_args_idx != float("inf") else i
-            except ValueError:
-                continue
-
+        first_arg_as_kwarg = min(itertools.chain(
+            (i for i, k in enumerate(kwargs) if k in params.args),
+            (float('inf'),)
+        ))
         args = [
-            args[i] if i < kwargs_args_idx
+            args[i] if i < first_arg_as_kwarg
             else kwargs.pop(params.args[i]) if params.args[i] in kwargs
             else defaults.args[i]
             for i in range(len(params.args))
@@ -211,8 +215,9 @@ class MergeMethod:
 
         max_args = len(params.args) if not params.has_varargs() else float("inf")
         min_args = len(params.args) - len(defaults.args)
-        if not (min_args <= len(args) <= max_args):
-            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {len(args)} arguments")
+        n_args = len(args)
+        if not (min_args <= n_args <= max_args):
+            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {n_args} arguments")
 
         for k in kwargs:
             if k not in params.kwargs:
@@ -222,16 +227,16 @@ class MergeMethod:
             if k not in itertools.chain(kwargs.keys(), defaults.kwargs.keys()):
                 raise TypeError(f"Missing keyword-argument '{k}'")
 
-        varargs_len = max(0, len(args) - len(params.args))
-        default_args = defaults.args[len(args) - min_args:]
+        default_args = defaults.args[n_args - min_args:]
         input_configs = self.get_input_configs()
-        default_config = self.get_return_config(input_configs.args_varags(varargs_len), input_configs.kwargs)
-        input_merge_spaces = self.get_input_merge_spaces()
+        input_configs_dict = input_configs.as_dict(n_args)
+        default_config = self.get_return_config(input_configs.args_varags(n_args), input_configs.kwargs)
+        input_merge_spaces_dict = self.get_input_merge_spaces().as_dict(n_args)
 
         def arg_to_node(k: int | str, arg: Any, expected_type: type):
             nonlocal default_config
-            merge_space = input_merge_spaces.as_dict(varargs_len)[k]
-            config = input_configs.as_dict(varargs_len)[k]
+            merge_space = input_merge_spaces_dict[k]
+            config = input_configs_dict[k]
             if config is None:
                 config = default_config
             return value_to_node(arg, expected_type).accept(InferModelConfigVisitor(config, merge_space))
@@ -239,7 +244,7 @@ class MergeMethod:
         input_types = self.get_input_types()
         args = tuple(
             arg_to_node(i, arg, input_types.args[i] if i < len(input_types.args) else input_types.vararg)
-            for i, (arg, k) in enumerate(zip(itertools.chain(args, default_args), params.args_varags(varargs_len)))
+            for i, (arg, k) in enumerate(zip(itertools.chain(args, default_args), params.args_varags(n_args)))
         )
         kwargs = {
             k: arg_to_node(k, arg, input_types.kwargs[k])
@@ -263,14 +268,14 @@ class MergeMethod:
 
     def get_return_merge_space(self, merge_space_args: List[MergeSpace], merge_space_kwargs: Dict[str, MergeSpace]) -> MergeSpace:
         names = self.get_param_names()
-        num_varargs = max(0, len(merge_space_args) - len(names.args))
-        input_merge_spaces = self.get_input_merge_spaces().as_dict(num_varargs)
+        n_args = len(merge_space_args)
+        input_merge_spaces = self.get_input_merge_spaces().as_dict(n_args)
 
         resolved_input_spaces = {}
         arg_tuples = enumerate(merge_space_args)
         kwarg_tuples = ((k, v) for k, v in merge_space_kwargs.items())
         for idx, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
-            name = names.args_varags(num_varargs)[idx] if isinstance(idx, int) else idx
+            name = names.args_varags(n_args)[idx] if isinstance(idx, int) else idx
             merge_space_param = input_merge_spaces[idx]
             is_symbol = isinstance(merge_space_param, MergeSpaceSymbol)
             valid_merge_spaces = merge_space_param.merge_spaces if is_symbol else merge_space_param
@@ -330,9 +335,7 @@ class MergeMethod:
         return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
 
     def get_return_config(self, arg_configs: List[Optional[ModelConfig]], kwarg_configs: Dict[str, Optional[ModelConfig]]) -> ModelConfig:
-        names = self.get_param_names()
-        num_varargs = max(0, len(arg_configs) - len(names.args))
-        input_configs = self.get_input_configs().as_dict(num_varargs)
+        input_configs = self.get_input_configs().as_dict(len(arg_configs))
         default_config = self.__get_return_data(self.__f_hints.get("return")).model_config
 
         arg_tuples = enumerate(arg_configs)
@@ -412,22 +415,32 @@ class MergeMethod:
 @dataclasses.dataclass
 class InferModelConfigVisitor(RecipeVisitor):
     default_model_config: ModelConfig
-    default_merge_space: type
+    param_merge_space: type
 
     def visit_literal(self, node: LiteralRecipeNode):
-        model_config = node.model_config if node.model_config is not None else self.default_model_config
-        return LiteralRecipeNode(node.value, model_config)
+        if isinstance(node.value, dict) and node.model_config is None:
+            from sd_mecha.recipe_merger import infer_model_configs
+            possible_configs = infer_model_configs(node.value)
+            if self.default_model_config in possible_configs:
+                model_config = self.default_model_config
+            elif self.default_model_config is None and len(possible_configs) == 1:
+                model_config = next(iter(possible_configs))
+            else:
+                raise ValueError("Cannot implicitly infer the model config of a dict literal (did you forget to use 'sd_mecha.convert'?)")
+        else:
+            model_config = node.model_config if node.model_config is not None else self.default_model_config
+        return LiteralRecipeNode(node.value, model_config=model_config)
 
     def visit_model(self, node: ModelRecipeNode):
         node_merge_space = node.merge_space
-        default_merge_spaces = merge_spaces.get_identifiers(self.default_merge_space)
+        param_merge_spaces = merge_spaces.get_identifiers(self.param_merge_space)
         # allow to infer merge space 'param' for i.e. approximated fisher diagonal
-        if len(default_merge_spaces) == 1 and default_merge_spaces[0] == "param":
-            node_merge_space = default_merge_spaces[0]
+        if len(param_merge_spaces) == 1 and param_merge_spaces[0] in ["weight", "param"]:
+            node_merge_space = param_merge_spaces[0]
         return ModelRecipeNode(
             node.path if node.state_dict is None else node.state_dict,
-            node.model_config,
-            node_merge_space,
+            model_config=node.model_config,
+            merge_space=node_merge_space,
         )
 
     def visit_merge(self, node: MergeRecipeNode):
@@ -470,10 +483,10 @@ def __recipe_impl(
 
 def validate_config_conversion(merge_method: MergeMethod):
     params = merge_method.get_param_names()
-    args_varargs = params.args if params.args else params.args_varags(1)
+    args_varargs = params.args if params.args else params.args_varags()
     assert len(args_varargs) == 1, f"the merge method should be able to take exactly 1 positional argument"
     configs = merge_method.get_input_configs()
-    input_config = configs.args if configs.args else configs.args_varags(1)[0]
+    input_config = configs.args if configs.args else configs.args_varags()[0]
     assert input_config is not None, f"the input ModelConfig['identifier...'] is missing. It should be appended to the type annotation of `{args_varargs[0]}`"
     return merge_method
 
@@ -510,13 +523,21 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) 
     # verify dict value type consistency
     if isinstance(node_or_value, Mapping) and node_or_value:
         actual_type = type(next(iter(node_or_value.values())))
-        if isinstance(actual_type, numeric):
+        if is_subclass(actual_type, numeric):
             actual_type = numeric
-        if not issubclass(actual_type, NonDictLiteralValue):
+        if is_subclass(actual_type, RecipeNode):
+            actual_type = RecipeNode
+        if not is_subclass(actual_type, NonDictLiteralValue | RecipeNode):
             raise TypeError(f"unsupported type found in input dict: {actual_type} (supported types are {typing.get_args(NonDictLiteralValue)})")
         if not all(isinstance(v, actual_type) for v in node_or_value.values()):
             bad_type = next(iter(type(v) for v in node_or_value.values() if not isinstance(v, actual_type)))
             raise TypeError(f"inconsistent types found in input dict: {actual_type} and {bad_type}")
+        if is_subclass(actual_type, RecipeNode):
+            first_node = next(iter(node_or_value.values()))
+            if not all(r.model_config == first_node.model_config for r in node_or_value.values()):
+                raise RuntimeError("inconsistent model configs found in recipe dict")
+            if not all(r.merge_space == first_node.merge_space for r in node_or_value.values()):
+                raise RuntimeError("inconsistent output merge space found in recipe dict")
 
     try:
         if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):

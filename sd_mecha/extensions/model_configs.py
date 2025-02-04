@@ -41,6 +41,9 @@ class ModelConfig(Protocol):
     def eq(self, other):
         return self.identifier == getattr(other, "identifier", None)
 
+    def __repr__(self):
+        return f"<model config '{self.identifier}'>"
+
     @property
     @abc.abstractmethod
     def identifier(self) -> str:

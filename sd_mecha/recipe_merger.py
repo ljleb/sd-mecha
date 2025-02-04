@@ -208,9 +208,13 @@ class LoadInputDictsVisitor(RecipeVisitor):
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode):
-        if isinstance(node.value, Mapping) and node.model_config is None:
-            node.model_config = infer_model_configs(node.value, None)[0]
-        return node
+        if isinstance(node.value, Mapping):
+            if isinstance(next(iter(node.value.values())), RecipeNode):
+                for v in node.value.values():
+                    v.accept(self)
+
+            if node.model_config is None:
+                node.model_config = infer_model_configs(node.value)[0]
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)
@@ -252,7 +256,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         return self.dicts_cache[cache_key], path
 
 
-def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path]) -> List[ModelConfig]:
+def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path] = None) -> List[ModelConfig]:
     state_dict_set = set(state_dict)
     configs_affinity = {}
     for model_config in model_configs.get_all():
@@ -299,6 +303,8 @@ class KeyMergeVisitor(RecipeVisitor):
                 raise StateDictKeyError(str(e)) from e
         if isinstance(value, str | int | float | bool | type(None)):
             return value
+        if isinstance(value, RecipeNode):
+            return value.accept(self)
         raise RuntimeError(f"Unexpected literal node value of type {type(value)}")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:

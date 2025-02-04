@@ -38,18 +38,18 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
             return
 
         command, *args = tokenize(line)
-        positional_args, named_args = preprocess_args(args)
+        positional_args, keyword_args = preprocess_args(args)
         if command == "dict":
-            results.append(dict(*positional_args, **named_args))
+            results.append(dict(*positional_args, **keyword_args))
         elif command == "literal":
-            results.append(LiteralRecipeNode(*positional_args, **named_args))
+            results.append(LiteralRecipeNode(*positional_args, **keyword_args))
         elif command == "model":
             path = pathlib.Path(positional_args[0])
-            results.append(ModelRecipeNode(path, *positional_args[1:], **named_args))
+            results.append(ModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
             method, *positional_args = positional_args
             method = merge_methods.resolve(method)
-            results.append(method(*positional_args, **named_args))
+            results.append(method(*positional_args, **keyword_args))
         else:
             raise ValueError(f"unknown command: {command}")
 
@@ -147,13 +147,13 @@ class SerializerVisitor(RecipeVisitor):
             return value
         else:
             config = self.__serialize_value(node.model_config.identifier)
-            line = f"literal {value} {config}"
+            line = f"literal {value} model_config={config}"
             return self.__add_instruction(line)
 
     def visit_model(self, node: ModelRecipeNode) -> str:
         path = self.__serialize_value(str(node.path))
         config = self.__serialize_value(getattr(node.model_config, "identifier", None))
-        line = f'model {path} {config}'
+        line = f"model {path} model_config={config}"
         return self.__add_instruction(line)
 
     def visit_merge(self, node: MergeRecipeNode) -> str:

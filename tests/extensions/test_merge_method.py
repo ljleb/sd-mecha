@@ -5,6 +5,8 @@ import pytest
 import safetensors.torch
 import torch
 from typing import TypeVar, Mapping
+
+import sd_mecha
 from sd_mecha import RecipeMerger, merge_method, Parameter, Return, StateDict, StateDictKeyError
 
 

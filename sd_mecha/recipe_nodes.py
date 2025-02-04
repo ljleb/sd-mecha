@@ -73,16 +73,26 @@ class LiteralRecipeNode(RecipeNode):
     def __init__(
         self,
         value: LiteralValue,
+        *,
         model_config: Optional[str | model_configs.ModelConfig] = None,
     ):
         self.value = value
         self.__model_config = model_config
+        if isinstance(self.value, dict):
+            first_value = next(iter(self.value.values()))
+            if self.model_config is not None and isinstance(first_value, RecipeNode) and first_value.model_config != self.model_config:
+                raise ValueError(f"The outer model config ({self.model_config}) should be the same as the inner model config ({first_value.model_config})")
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_literal(self, *args, **kwargs)
 
     @property
     def merge_space(self) -> merge_spaces.MergeSpace:
+        if isinstance(self.value, dict):
+            first_value = next(iter(self.value.values()))
+            if isinstance(first_value, RecipeNode):
+                return first_value.merge_space
+
         return merge_spaces.resolve("param")
 
     @property
@@ -106,6 +116,7 @@ class ModelRecipeNode(RecipeNode):
     def __init__(
         self,
         path: pathlib.Path,
+        *,
         model_config: Optional[str | model_configs.ModelConfig] = None,
         merge_space: str = "weight",
     ):

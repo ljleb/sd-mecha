@@ -26,11 +26,11 @@ def serialize_and_save(
 def model(path: str | pathlib.Path, model_config: Optional[str] = None) -> ModelRecipeNode:
     if isinstance(path, str):
         path = pathlib.Path(path)
-    return ModelRecipeNode(path, model_config)
+    return ModelRecipeNode(path, model_config=model_config)
 
 
 def literal(value: NonDictLiteralValue | dict, model_config: Optional[str] = None) -> LiteralRecipeNode:
-    return LiteralRecipeNode(value, model_config)
+    return LiteralRecipeNode(value, model_config=model_config)
 
 
 def set_log_level(level: str = "INFO"):

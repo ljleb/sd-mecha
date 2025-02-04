@@ -7,7 +7,7 @@ from .extensions.model_configs import ModelConfig
 from .extensions import merge_methods
 
 
-def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_dirs: Iterable[pathlib.Path] = ()):
+def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig, base_dirs: Iterable[pathlib.Path] = ()):
     all_converters = merge_methods.get_all_converters()
     converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
     for converter in all_converters:
@@ -23,25 +23,27 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig = None, base_di
 
     if isinstance(recipe, Mapping):
         from sd_mecha.recipe_merger import infer_model_configs
-        possible_configs = infer_model_configs(recipe, None)
+        possible_configs = infer_model_configs(recipe)
         for possible_config in possible_configs:
-            try:
-                return create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
-            except ValueError:
-                continue
+            res = create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
+            if res is not None:
+                return res
         raise ValueError(f"could not infer the intended config to convert from. explicitly specifying the input config might resolve the issue")
 
     recipe = value_to_node(recipe)
     from sd_mecha.recipe_merger import open_input_dicts
     with open_input_dicts(recipe, base_dirs, buffer_size_per_dict=0):
         src_config = recipe.model_config.identifier
-    return create_conversion_recipe(recipe, converter_paths, src_config, tgt_config)
+    res = create_conversion_recipe(recipe, converter_paths, src_config, tgt_config)
+    if res is None:
+        raise ValueError(f"no config conversion exists from {src_config} to {tgt_config}")
+    return res
 
 
 def create_conversion_recipe(recipe, paths, src_config, tgt_config):
     shortest_path = dijkstra(paths, src_config, tgt_config)
     if shortest_path is None:
-        raise ValueError(f"no config conversion exists from {src_config} to {tgt_config}")
+        return None
     return functools.reduce(lambda v, mm: mm(v), shortest_path, recipe)
 
 
@@ -56,59 +58,39 @@ def dijkstra(graph, start, goal):
              or None if no path exists.
     """
 
-    # 1) Initialize distances to infinity, except start=0
+    if start == goal:
+        return []
+
     distances = {node: float('inf') for node in graph}
     distances[start] = 0
-
-    # 2) Keep track of how we reached each node (the node before it, and the edge ID used)
     predecessors = {node: None for node in graph}  # will store the node we came from
     edge_used = {node: None for node in graph}  # will store which edge ID led here
-
-    # 3) Priority queue (min-heap) for the frontier
-    #    The heap items are (distance_so_far, current_node)
     heap = [(0, start)]
 
     while heap:
         current_dist, current_node = heapq.heappop(heap)
-
-        # If we have already found a better path, skip
         if current_dist > distances[current_node]:
             continue
 
-        # If we've reached the goal, we can stop early
         if current_node == goal:
             break
 
-        # Explore each neighbor of current_node
         for neighbor, edge_id in graph[current_node]:
-            # Decide how you want to interpret "cost" of an edge
-            # Here, we just count each edge as '1'.
-            cost = 1
-
-            distance_via_current = current_dist + cost
+            distance_via_current = current_dist + 1
             if distance_via_current < distances[neighbor]:
-                # Found a better path to 'neighbor'
                 distances[neighbor] = distance_via_current
                 predecessors[neighbor] = current_node
                 edge_used[neighbor] = edge_id
-
-                # Push updated distance & node into the heap
                 heapq.heappush(heap, (distance_via_current, neighbor))
 
-    # If goal is unreachable, distances[goal] will be infinity
     if distances[goal] == float('inf'):
         return None
 
-    # Reconstruct path of edge IDs from goal back to start
     path_ids = []
     node = goal
-
     while node != start:
-        # edge_used[node] is the ID of the edge that got us from predecessors[node] to node
         path_ids.append(edge_used[node])
         node = predecessors[node]
 
-    # The path is in reverse order (goal -> ... -> start), so reverse it
     path_ids.reverse()
-
     return path_ids
