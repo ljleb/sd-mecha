@@ -8,7 +8,7 @@ from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
-
+from ..extensions.model_configs import ModelConfig
 
 T = TypeVar("T")
 
@@ -838,3 +838,17 @@ cast_dtype_map = {
     "int8": torch.int8,
 }
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
+
+
+@merge_method
+def filter_component(
+    a: Parameter(StateDict[T]),
+    component: Parameter(str),
+    **kwargs,
+) -> Return(T):
+    key = kwargs["key"]
+    a_config: ModelConfig = a.model_config
+    if key in a_config.components[component].keys:
+        return a[key]
+    else:
+        raise StateDictKeyError(key)
