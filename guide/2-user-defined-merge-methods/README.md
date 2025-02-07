@@ -1,7 +1,7 @@
 # User-Defined Merge Methods
 
 While there are a multiple merge methods and conversion functions built into sd-mecha, sometimes there is a need for something other than what the builtins can offer.
-This is often the case when experimenting with new methods or when a new foundation model is released and there comes a need to perform state dict operations on it.
+This is often the case when experimenting with new methods or when a new foundational model is released and there comes a need to perform state dict operations on it.
 To take advantage of the low memory usage sd-mecha offers in these cases, a public interface is defined through which it is possible to define custom merge methods.
 
 ## Custom Merge Method
