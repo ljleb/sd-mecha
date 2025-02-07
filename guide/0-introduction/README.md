@@ -41,9 +41,8 @@ On the other hand, you may be inclined to look for alternatives if you:
 - just want to merge a small number of models using popular merge strategies
 - do not know python programming at all
 - do not need to experiment extensively
-- have a system with a ridiculous amount of memory (like 20TB of RAM)
 
-Note that while sd-mecha is a python library without a graphical user interface, there is a work in progress [ComfyUI node pack](https://github.com/ljleb/comfy-mecha).
+While sd-mecha is a python library without a graphical user interface, there is a work in progress [ComfyUI node pack](https://github.com/ljleb/comfy-mecha).
 
 ## Usage and design principles
 
