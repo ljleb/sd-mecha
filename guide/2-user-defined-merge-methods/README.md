@@ -2,11 +2,14 @@
 
 While there are a multiple merge methods and conversion functions built into sd-mecha, sometimes there is a need for something other than what the builtins can offer.
 This is often the case when experimenting with new methods or when a new foundational model is released and there comes a need to perform state dict operations on it.
-To take advantage of the low memory usage of sd-mecha in these cases, a public interface is defined through which it is possible to define custom merge methods.
+To enable taking advantage of the low memory usage of sd-mecha in these cases, a public interface is defined through which it is possible to extend the capabilities of the library.
 
 ## Custom Merge Method
 
-Here is an example merge method that blends parameters with noise. Let's start with the code:
+One entity that can be extended in sd-mecha is the repository of builtin merge methods.
+We can create new merge methods from user code.
+
+To illustrate this, here is an example merge method that blends parameters with noise. Let's start with the code:
 
 ```python
 # 1.
