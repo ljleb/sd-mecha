@@ -44,7 +44,7 @@ merge_and_save(recipe, "path/to/model_out.safetensors")
 In order, we have:
 
 1. imports
-2. definition of our custom merge method `custom_sum`
+2. definition of our custom merge method `noise_sum`
 3. usage of the merge method
 
 Let's focus on the merge method definition.
@@ -53,7 +53,7 @@ In plain english, `noise_sum` is a merge method that accepts 3 parameters: `a`, 
 When the merge method is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `int`.
 The method is expected to return an instance of `torch.Tensor`.
 
-Applying the `@merge_method` decorator to `custom_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
+Applying the `@merge_method` decorator to `noise_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
 The decorator does this by replacing the function in place with an instance of `sd_mecha.extensions.merge_methods.MergeMethod`.
 When called, the `MergeMethod` instantiates a `sd_mecha.recipe_nodes.MergeRecipeNode` (which holds a reference to the original `MergeMethod` object) instead of actually calling the function.
 As shown in 3., we can pass this new recipe node object to `merge_and_save` or `serialize_and_save`. This will finally call the real function on the right inputs as many times as needed to complete the planned task.
