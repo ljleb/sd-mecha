@@ -57,7 +57,7 @@ Applying the `@merge_method` decorator to `noise_sum` tells sd-mecha that the fu
 The decorator does this by replacing the function with an instance of `sd_mecha.extensions.merge_methods.MergeMethod`, which defines a `__call__` method.
 When called, this `MergeMethod` object instantiates a `sd_mecha.recipe_nodes.MergeRecipeNode` (which holds a reference to the original `MergeMethod` object) instead of actually calling `noise_sum`.
 As shown in 3. above, we can pass recipe node objects created by this merge method to `merge_and_save` or `serialize_and_save`.
-This will finally call the real function on the right inputs as many times as needed to complete the planned task.
+This will in turn call the original undecorated function on the right inputs as many times as needed to complete the planned task.
 
 In general, certain rules must be followed to define a custom merge method:
 
