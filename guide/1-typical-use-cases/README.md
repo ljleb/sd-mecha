@@ -19,9 +19,9 @@ sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 
 Here is what happens at each step:
 
-1. `a = sd_mecha.model("path/to/model_a.safetensors")`: creates a handle to a safetensors model on disk. It will not load the model right away, only a reference to it
-2. `b = sd_mecha.model("path/to/model_b.safetensors")`: does the same as 1. but with a different model.
-3. `recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)`: creates a `weighted_sum` recipe node with `a` and `b` as children. It will not merge the models right away
+1. `sd_mecha.model("path/to/model_a.safetensors")`: creates a handle to a safetensors model on disk. It will not load the model right away, only a reference to it
+2. `sd_mecha.model("path/to/model_b.safetensors")`: does the same as 1. but with a different model.
+3. `sd_mecha.weighted_sum(a, b, alpha=0.5)`: creates a `weighted_sum` recipe node with `a` and `b` as children. It will not merge the models right away
 4. `sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")`: merges the recipe graph by streaming one key at a time to disk
 
 The `sd_mecha` module has multiple merge methods builtin (i.e. `sd_mecha.add_difference`, `sd_mecha.train_difference_mask`).
@@ -53,10 +53,10 @@ sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 
 Here is what happens at each step (skipping `merge_and_save` which was covered in [Merge Models](#merge-models)):
 
-- `base = sd_mecha.model("path/to/base.safetensors")`: creates a handle to a base model.
-- `lora = sd_mecha.model("path/to/lora.safetensors")`: creates a handle to a LoRA adapter. (or any other model that is compatible with the base model up to conversion)
-- `diff = sd_mecha.convert(lora, base)`: finds the shortest path of pre-registered conversion functions that converts `lora` from its model config to that of `base`, and then sequentially composes a recipe graph over `lora` from these conversion functions.
-- `recipe = base + diff`: creates a recipe node that will add the decompressed lora to the base model: `+` is a shorthand for `sd_mecha.add_difference` with `alpha=1.0`.
+- `sd_mecha.model("path/to/base.safetensors")`: creates a handle to a base model.
+- `sd_mecha.model("path/to/lora.safetensors")`: creates a handle to a LoRA adapter. (or any other model that is compatible with the base model up to conversion)
+- `sd_mecha.convert(lora, base)`: finds the shortest path of pre-registered conversion functions that converts `lora` from its model config to that of `base`, and then sequentially composes a recipe graph over `lora` from these conversion functions.
+- `base + diff`: creates a recipe node that will add the decompressed lora to the base model: `+` is a shorthand for `sd_mecha.add_difference` with `alpha=1.0`.
 
 ## Blocks Merging (MBW)
 
@@ -96,7 +96,7 @@ sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 
 Step by step:
 
-1. `blocks = {`: The blocks are created as a literal state dictionary of block weights.
+1. `blocks` are created as a literal state dictionary of block weights.
 The keys of the blocks are specific to each architecture.
 However, in the case of supermerger, they are one of `INxx`, `OUTxx`, (here lower case `x` stands for any digit between `0` and `9`) `M00` and `BASE`. (and `VAE` for SDXL)
 2. `blocks = sd_mecha.convert(blocks, a)`: this converts the blocks to a full state dict of weights compatible with the input models.
