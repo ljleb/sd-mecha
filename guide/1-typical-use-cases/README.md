@@ -65,7 +65,7 @@ For this to be possible, we need to define what a "block" is for a given model.
 This is because there is not always a true canonical way to neatly fit all keys of a model into categories.
 For example, sometimes a small group of keys could belong to more than one block.
 
-For convenience, sd-mecha predefines block configs for models that have some block conventions that the community uses often.
+For convenience, sd-mecha predefines block configs for models that have some block conventions the community uses often.
 Some of these include:
 
 - SDXL supermerger blocks (`sdxl-supermerger_blocks`)
