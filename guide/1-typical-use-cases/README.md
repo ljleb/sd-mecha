@@ -58,7 +58,7 @@ Here is what happens at each step (skipping `merge_and_save` which was covered i
 - `sd_mecha.convert(lora, base)`: finds the shortest path of pre-registered conversion functions that converts from the model config of `lora` to that of `base`, and then sequentially composes a recipe graph from these conversion functions.
 - `recipe = base + diff`: creates a recipe node that will add the decompressed lora to the base model: `+` is a shorthand for `sd_mecha.add_difference` with `alpha=1.0`.
 
-### Blocks Merging (MBW)
+## Blocks Merging (MBW)
 
 Another very common use case is to associate a weight to each "block" of a model, and then merge each block according to these (also known as [Merge Block Weighted (MBW)](https://note.com/kohya_ss/n/n9a485a066d5b)).
 For this to be possible, we need to define what a "block" is for a given model.
