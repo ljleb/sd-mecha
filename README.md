@@ -7,15 +7,12 @@
 import sd_mecha
 
 # create the merge plan
-model_a = sd_mecha.model("model_a.safetensors")
-model_b = sd_mecha.model("model_b.safetensors")
-recipe = sd_mecha.weighted_sum(model_a, model_b, alpha=0.5)
-
-# initialize merger
-merger = sd_mecha.RecipeMerger(models_dir="/path/to/models")
+a = sd_mecha.model("path/to/model_a.safetensors")
+b = sd_mecha.model("path/to/model_b.safetensors")
+recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 
 # merge!
-merger.merge_and_save(recipe)
+sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 ```
 
 sd-mecha is a general memory-efficient model merging library. It can merge *any* model:
@@ -49,6 +46,8 @@ pip install sd-mecha
 Make sure to install the appropriate release of [`torch`](https://pytorch.org/get-started/locally/) to get the best performance.
 
 ## Usage
+
+For an in-depth exploration of how to use the library, and to decide whether it is appropriate for your purposes, see the [mecha guide](guide).
 
 ### Merge models
 
@@ -89,7 +88,7 @@ print([config.identifier for config in all_configs])
 # ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
 ```
 
-A component is a subset of keys that belong to the same logical group.
+A *component* of a model config is a subset of keys of the config that belong to the same logical group.
 For example, all keys starting with "first_stage_model." in Stable Diffusion models belong to the component "vae".
 
 It is possible to query the different components of a model config:
