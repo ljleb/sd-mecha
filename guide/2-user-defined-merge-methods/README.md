@@ -111,12 +111,13 @@ This is an example that splits SDXL in two categories (a specific key vs the res
 
 ```python
 from sd_mecha.extensions import model_configs
-model_configs.register(model_configs.from_yaml("""identifier: sdxl-my_blocks
+my_blocks_config = model_configs.from_yaml("""identifier: sdxl-my_blocks
 components:
   blocks:
     the_key_we_want: {shape: [], dtype: float32}
     rest: {shape: [], dtype: float32}
-"""))
+""")
+model_configs.register(my_blocks_config)
 
 
 from typing import TypeVar
