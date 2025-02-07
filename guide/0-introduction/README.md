@@ -6,7 +6,7 @@ sd-mecha is a PyTorch-based python library for general purpose operations on [st
 Some modules of the library can be extended by design. This allows anyone to contribute new models and operations without needing to change the core library.
 
 Historically, model mergers and conversion scripts have been loading all input models in memory before performing any work.
-While this may seem like a good idea to accelerate merge times, this approach takes an unreasonable amount of memory for the actual work that needs to be performed.
+While this approach may seem like a good idea to accelerate merge times, it takes an unreasonable amount of memory for the actual work that needs to be performed.
 
 In contrast to this practice, sd-mecha prioritizes low memory consumption. It can complete complex state dict tasks on low-end systems like:
 - converting the keys of a model to a different format only using a few megabytes of memory
