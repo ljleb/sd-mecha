@@ -49,7 +49,7 @@ In order, we have:
 
 Let's focus on the merge method definition.
 
-In plain english, in this case, `noise_sum` is a merge method that accepts 3 parameters: `a`, `alpha` and `seed`.
+In plain english, `noise_sum` is a merge method that accepts 3 parameters: `a`, `alpha` and `seed`.
 When it is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `int`.
 The method is expected to return an instance of `torch.Tensor`.
 
