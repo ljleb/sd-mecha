@@ -98,7 +98,7 @@ Step by step:
 
 1. `blocks` is a state dictionary of block weights.
 The keys of the blocks are specific to each architecture.
-However, in the case of supermerger, they are one of `INxx`, `OUTxx`, (here lower case `x` stands for any digit between `0` and `9`) `M00` and `BASE`. (and `VAE` for SDXL)
+However, in the case of supermerger, each key name is one of `INxx`, `OUTxx`, (here lower case `x` stands for any digit between `0` and `9`) `M00` and `BASE`. (and `VAE` for SDXL)
 2. `blocks = sd_mecha.convert(blocks, a)`: this converts the blocks to a full state dict of weights compatible with the input models.
 In other words, it broadcasts the block weights to the keys of `a`'s model config. Each key gets one block weight and each block weight is distributed to multiple keys.
 See [Convert Models](#convert-models) for an overview of `sd_mecha.convert`.
