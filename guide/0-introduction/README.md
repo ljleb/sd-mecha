@@ -33,7 +33,7 @@ There are 2 public modules that user code can import and use:
 You might find value in using sd-mecha for state dict tasks if you need to:
 - operate on a very large state dict with minimal memory usage
 - merge a large number of models together
-- merge multiple models for an ablation study
+- merge multiple variants of a state dict recipe for an ablation study
 - experiment with new merge methods
 - keep a trace of past attempts and experiments
 
