@@ -118,7 +118,7 @@ class FunctionArgs(Generic[P]):
         if args_count is None:
             args_count = n_args + 1
 
-        return (args_count - n_args) * int(self.has_varargs())
+        return max(0, args_count - n_args) * int(self.has_varargs())
 
     def has_varargs(self):
         return self.vararg != FunctionArgs.EMPTY_VARARGS
@@ -306,9 +306,10 @@ class MergeMethod:
         names = self.get_param_names()
         defaults = self.get_default_args()
 
-        def get_merge_space_or_default(merge_space, has_default):
+        def get_merge_space_or_default(param, has_default):
+            merge_space = param.merge_space
             if merge_space is None:
-                if has_default:
+                if has_default or is_subclass(param.interface, NonDictLiteralValue):
                     merge_space = {merge_spaces.resolve("param")}
                 else:
                     merge_space = self.default_merge_space
@@ -316,8 +317,8 @@ class MergeMethod:
 
         args_merge_spaces = []
         for i in range(len(names.args)):
-            merge_space = params.args[i].merge_space
-            merge_space = get_merge_space_or_default(merge_space, i >= len(names.args) - len(defaults.args))
+            param = params.args[i]
+            merge_space = get_merge_space_or_default(param, i >= len(names.args) - len(defaults.args))
             args_merge_spaces.append(merge_space)
 
         varargs_merge_space = FunctionArgs.EMPTY_VARARGS
@@ -328,8 +329,8 @@ class MergeMethod:
 
         kwargs_merge_spaces = {}
         for name in names.kwargs:
-            merge_space = params.kwargs[name].merge_space
-            merge_space = get_merge_space_or_default(merge_space, name in defaults.kwargs)
+            param = params.kwargs[name]
+            merge_space = get_merge_space_or_default(param, name in defaults.kwargs)
             kwargs_merge_spaces[name] = merge_space
 
         return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
@@ -419,7 +420,7 @@ class InferModelConfigVisitor(RecipeVisitor):
 
     def visit_literal(self, node: LiteralRecipeNode):
         if isinstance(node.value, dict) and node.model_config is None:
-            from sd_mecha.recipe_merger import infer_model_configs
+            from sd_mecha.recipe_merging import infer_model_configs
             possible_configs = infer_model_configs(node.value)
             if self.default_model_config in possible_configs:
                 model_config = self.default_model_config
@@ -455,7 +456,7 @@ def merge_method(
     identifier: Optional[str] = None,
     register: bool = True,
     is_conversion: bool = False,
-) -> F:
+) -> MergeRecipeNode | Callable[[F], MergeRecipeNode]:
     if f is None:
         return lambda f: __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
     return __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)

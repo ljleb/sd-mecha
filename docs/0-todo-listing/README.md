@@ -1,3 +1,5 @@
+**NOTE: put this information in docstrings, and then use a tool to generate docs from these**
+
 # Recipes listing
 
 Here is a comprehensive list of built-in merge methods and a description of what they do.

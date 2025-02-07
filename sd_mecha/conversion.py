@@ -2,12 +2,14 @@ import functools
 import heapq
 import pathlib
 from typing import Dict, Tuple, Any, List, Iterable, Mapping
-from .extensions.merge_methods import RecipeNodeOrValue, value_to_node
+from .extensions.merge_methods import value_to_node
 from .extensions.model_configs import ModelConfig
 from .extensions import merge_methods
+from .recipe_nodes import RecipeNode, RecipeNodeOrValue
+from sd_mecha.recipe_merging import open_input_dicts
 
 
-def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig, base_dirs: Iterable[pathlib.Path] = ()):
+def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, base_dirs: Iterable[pathlib.Path] = ()):
     all_converters = merge_methods.get_all_converters()
     converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
     for converter in all_converters:
@@ -19,10 +21,14 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig, base_dirs: Ite
         converter_paths.setdefault(tgt_config, [])
         converter_paths[src_config].append((tgt_config, converter))
 
+    if isinstance(config, RecipeNode):
+        with open_input_dicts(config, base_dirs, 0):
+            config = config.model_config
+
     tgt_config = config if isinstance(config, str) else config.identifier
 
     if isinstance(recipe, Mapping):
-        from sd_mecha.recipe_merger import infer_model_configs
+        from sd_mecha.recipe_merging import infer_model_configs
         possible_configs = infer_model_configs(recipe)
         for possible_config in possible_configs:
             res = create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
@@ -31,7 +37,6 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig, base_dirs: Ite
         raise ValueError(f"could not infer the intended config to convert from. explicitly specifying the input config might resolve the issue")
 
     recipe = value_to_node(recipe)
-    from sd_mecha.recipe_merger import open_input_dicts
     with open_input_dicts(recipe, base_dirs, buffer_size_per_dict=0):
         src_config = recipe.model_config.identifier
     res = create_conversion_recipe(recipe, converter_paths, src_config, tgt_config)

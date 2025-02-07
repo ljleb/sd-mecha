@@ -1,6 +1,6 @@
 import torch
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Return, Parameter
-from .convert_vae_to_original import convert_vae
+from .convert_diffusers_sd_vae_to_original import convert_vae
 
 
 @merge_method(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)

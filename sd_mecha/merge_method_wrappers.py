@@ -1,8 +1,9 @@
 import torch
 from typing import Optional, Dict
 from .extensions.merge_methods import value_to_node, RecipeNodeOrValue
-from . import recipe_nodes, merge_methods
-from .merge_methods import (
+from . import recipe_nodes
+from sd_mecha.extensions.builtin import merge_methods
+from sd_mecha.extensions.builtin.merge_methods import (
     subtract,
     ties_sum,
     ties_sum_extended,
