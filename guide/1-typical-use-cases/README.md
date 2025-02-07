@@ -33,7 +33,7 @@ Some models have multiple different formats in which they can be represented.
 For example, SDXL has the SGM format, the diffusers format, and a bunch of others used to represent SDXL PEFT adapters.
 This is known to be a somewhat unwieldy part of handling models in the merging community.
 It prevents otherwise compatible models from easily being used together in state dict recipes.
-There exists code that converts between different formats for the same model.
+There exists code out there that converts between different formats of the same model.
 However, all conversion functions are scattered across different repositories.
 Furthermore, none of these conversion utilities are remotely efficient when it comes to system resources utilization.
 
