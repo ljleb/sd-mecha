@@ -106,3 +106,5 @@ See [Convert Models](#convert-models) for an overview of `sd_mecha.convert`.
 Note that this is optional if all block weights have been explicitly specified in the literal state dict.
 
 Defining custom blocks is a tad more involved, see [User-Defined Merge Methods > Custom Blocks Config](../2-user-defined-merge-methods#custom-blocks-config) for more info.
+
+Next: [User-Defined Merge Methods](../2-user-defined-merge-methods)
