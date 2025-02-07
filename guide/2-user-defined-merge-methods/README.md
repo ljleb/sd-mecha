@@ -111,6 +111,7 @@ This is an example that splits SDXL in two categories (a specific key vs the res
 
 ```python
 from sd_mecha.extensions import model_configs
+
 my_blocks_config = model_configs.from_yaml("""
 identifier: sdxl-my_blocks
 components:
@@ -118,14 +119,14 @@ components:
     the_key_we_want: {shape: [], dtype: float32}
     rest: {shape: [], dtype: float32}
 """)
+
 model_configs.register(my_blocks_config)
 
 
-from typing import TypeVar
-T = TypeVar("T")
-
-
 from sd_mecha import merge_method, Parameter, Return, StateDict
+from typing import TypeVar
+
+T = TypeVar("T")
 
 @merge_method(is_conversion=True)
 def convert_blocks_to_sdxl(
@@ -141,6 +142,7 @@ def convert_blocks_to_sdxl(
 
 # we can then use the conversion like this:
 from sd_mecha import model, convert, weighted_sum
+
 a = model("path/to/model_a.safetensors")
 b = model("path/to/model_b.safetensors")
 
