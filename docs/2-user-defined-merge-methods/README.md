@@ -18,7 +18,7 @@ from sd_mecha import model, merge_and_save, merge_method, Parameter, Return
 @merge_method
 def noise_sum(
     a: Parameter(Tensor),
-    alpha: Parameter(Tensor, merge_space="param") = 0.5,
+    alpha: Parameter(Tensor) = 0.5,
     seed: Parameter(int) = None,
 ) -> Return(Tensor):
     gen = Generator()
@@ -44,12 +44,19 @@ In order, we have:
 2. definition of our custom merge method `custom_sum`
 3. usage of the merge method
 
-Let's focus on the merge method definition. Certain rules must be followed to define a custom merge method:
+Let's focus on the merge method definition.
 
-- The `@merge_method` decorator must be applied to `custom_sum`. This tells sd-mecha that the function is a merge method and should be converted in place to a recipe node constructor.
-    The decorator does this by replacing the function with an instance of `sd_mecha.extensions.merge_methods.MergeMethod`.
-    When called, this object instantiates a `sd_mecha.recipe_nodes.MergeRecipeNode` (which holds a reference to the `MergeMethod` object) instead of actually calling the function.
-    Then, as is shown in 3., we can pass this recipe node object to `merge_and_save`, which will finally call the real function on the right inputs as many times as needed to complete the planned task.
+In plain english, in this case, `noise_sum` is a merge method that accepts 3 parameters: `a`, `alpha` and `seed`.
+When it is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `int`.
+The method is expected to return an instance of `torch.Tensor`.
+
+Applying the `@merge_method` decorator to `custom_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
+The decorator does this by replacing the function in place with an instance of `sd_mecha.extensions.merge_methods.MergeMethod`.
+When called, the `MergeMethod` instantiates a `sd_mecha.recipe_nodes.MergeRecipeNode` (which holds a reference to the original `MergeMethod` object) instead of actually calling the function.
+As shown in 3., we can pass this new recipe node object to `merge_and_save` or `serialize_and_save`. This will finally call the real function on the right inputs as many times as needed to complete the planned task.
+
+In general, certain rules must be followed to define a custom merge method:
+
 - The type of each function parameter needs to be `sd_mecha.Parameter(type, ...)`. This type is used to specify additional metadata for a recipe node parameter.
     In particular, additional keyword arguments can be passed to `Parameter(...)` if a parameter needs to:
     - receive a specific model config (`model_config=...`) or
