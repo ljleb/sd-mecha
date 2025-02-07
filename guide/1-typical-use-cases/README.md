@@ -25,7 +25,7 @@ Here is what happens at each step:
 4. `sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")`: merges the recipe graph by streaming one key at a time to disk
 
 The `sd_mecha` module has multiple merge methods builtin (i.e. `sd_mecha.add_difference`, `sd_mecha.train_difference_mask`).
-See the [builtin merge methods reference](todo) for a comprehensive list and companion description of the builtin merge methods.
+See the [builtin merge methods reference](todo) for a comprehensive list of builtin merge methods and their associated descriptions.
 
 ## Convert Models
 
