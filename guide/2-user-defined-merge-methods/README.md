@@ -1,6 +1,6 @@
 # User-Defined Merge Methods
 
-While there are a large number of merge methods and conversion functions in sd-mecha, sometimes there is a need for something other than what the builtins can offer.
+While there are a multiple merge methods and conversion functions built into sd-mecha, sometimes there is a need for something other than what the builtins can offer.
 This is often the case when experimenting with new methods or trying to implement a new method that was developed by a team of researchers.
 To take advantage of the low memory usage sd-mecha offers in these cases, a public interface is defined through which it is possible to define custom merge methods.
 
