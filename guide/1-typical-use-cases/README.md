@@ -55,7 +55,7 @@ Here is what happens at each step (skipping `merge_and_save` which was covered i
 
 - `base = sd_mecha.model("path/to/base.safetensors")`: creates a handle to a base model.
 - `lora = sd_mecha.model("path/to/lora.safetensors")`: creates a handle to a LoRA adapter. (or any other model that is compatible with the base model up to conversion)
-- `sd_mecha.convert(lora, base)`: finds the shortest path of pre-registered conversion functions that converts from the model config of `lora` to that of `base`, and then sequentially composes a recipe graph from these conversion functions.
+- `sd_mecha.convert(lora, base)`: finds the shortest path of pre-registered conversion functions that converts `lora` from its model config to that of `base`, and then sequentially composes a recipe graph from these conversion functions.
 - `recipe = base + diff`: creates a recipe node that will add the decompressed lora to the base model: `+` is a shorthand for `sd_mecha.add_difference` with `alpha=1.0`.
 
 ## Blocks Merging (MBW)
