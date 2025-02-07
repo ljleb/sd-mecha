@@ -17,6 +17,5 @@ It is separated into the following chapters:
 - **Introduction**: overview of sd-mecha
 - **Chapter 1**: examples of use cases
 - **Chapter 2**: user-defined merge methods
-- **Chapter 3**: user-defined model configs
 
 Next: [Introduction](0-introduction)
