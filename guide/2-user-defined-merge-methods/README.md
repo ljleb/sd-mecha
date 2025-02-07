@@ -64,8 +64,8 @@ In general, certain rules must be followed to define a custom merge method:
 - The type of each function parameter needs to be `sd_mecha.Parameter(type, ...)`. This type is used to specify additional metadata for a merge method parameter.
     In particular, additional keyword arguments can be passed to `Parameter(...)` if a parameter is to be required to:
 
-    - receive a specific model config. (`model_config=...`)
-    - constrain its merge space. (`merge_space=...`)
+    - receive a specific model config (`model_config=...`)
+    - constrain its merge space (`merge_space=...`)
 
     This can be useful in different contexts and for different reasons, all covered below.
 - The return type needs to be `sd_mecha.Return(type, ...)`. This type is used similarly to `Parameter(...)`.
