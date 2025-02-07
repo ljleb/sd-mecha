@@ -107,4 +107,23 @@ Note that this is optional if all block weights have been explicitly specified i
 
 Defining custom blocks is a tad more involved, see [User-Defined Merge Methods > Custom Blocks Config](../2-user-defined-merge-methods#custom-blocks-config) for more info.
 
+## Replace Model Components
+
+Sometimes, all we really want is to replace one component of a model with another one
+
+```python
+import sd_mecha
+
+a = sd_mecha.model("path/to/model_a.safetensors")
+b = sd_mecha.model("path/to/model_b.safetensors")
+
+vae_only = sd_mecha.filter_component(a, "vae")
+recipe = vae_only | b
+
+sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
+```
+
+- `sd_mecha.filter_component(a, "diffuser")`: picks the "vae" component of model `a`. It discards all other keys.
+- `diffuser_only | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. `|` is a shorthand for `sd_mecha.fallback`.
+
 Next: [User-Defined Merge Methods](../2-user-defined-merge-methods)
