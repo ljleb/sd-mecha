@@ -12,7 +12,7 @@ In contrast to this practice, sd-mecha prioritizes low memory consumption. It ca
 - converting the keys of a model to a different format only using a few megabytes of memory
 - merging 10 models together into a single one
 - allocating more memory to the intermediate results of expensive methods
-- batch converting multiple models to a different format
+- sequentially completing multiple state dict tasks
 
 The way sd-mecha does this is by taking advantage of the [safetensors](https://github.com/huggingface/safetensors) format.
 This format specifies a light header that lists all the key names, and the location of their corresponding value in the data section and their span.
