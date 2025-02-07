@@ -60,7 +60,7 @@ Here is what happens at each step (skipping `merge_and_save` which was covered i
 
 ## Blocks Merging (MBW)
 
-Another very common use case is to associate a weight to each "block" of a model, and then merge each block according to these weights (also known as [Merge Block Weighted (MBW)](https://note.com/kohya_ss/n/n9a485a066d5b)).
+Another very common use case is to associate a weight to each "block" of a model, and then merge each "block" according to these weights (also known as [Merge Block Weighted (MBW)](https://note.com/kohya_ss/n/n9a485a066d5b)).
 For this to be possible, we need to define what a "block" is for a given model.
 This is because there is not always a true canonical way to neatly fit all keys of a model into categories.
 For example, sometimes a small group of keys could belong to more than one block.
