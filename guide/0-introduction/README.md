@@ -25,7 +25,7 @@ While execution speed is not the first priority of sd-mecha, many optimizations 
 
 There are 2 public modules that user code can import and use:
 - `sd_mecha`: for recipe operations like composition, merging, serialization, etc.
-- `sd_mecha.extensions`: for extending the features of sd-mecha like model architecture, model type, merge methods, etc.
+- `sd_mecha.extensions`: for extending the features of sd-mecha like model configs and merge methods
 
 
 ## Is sd-mecha for you?
