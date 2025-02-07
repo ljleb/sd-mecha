@@ -50,7 +50,7 @@ In order, we have:
 Let's focus on the merge method definition.
 
 In plain english, `noise_sum` is a merge method that accepts 3 parameters: `a`, `alpha` and `seed`.
-When it is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `int`.
+When the merge method is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `int`.
 The method is expected to return an instance of `torch.Tensor`.
 
 Applying the `@merge_method` decorator to `custom_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
