@@ -42,7 +42,7 @@ On the other hand, you may be inclined to look for alternatives if you:
 - do not know python programming at all
 - do not need to experiment extensively
 
-While sd-mecha is a python library without a graphical user interface, there is a work in progress [ComfyUI node pack](https://github.com/ljleb/comfy-mecha).
+While sd-mecha is a python library without a graphical user interface, there is a work in progress [ComfyUI node pack](https://github.com/ljleb/comfy-mecha) that intends to bridge usage for less technical users.
 
 ## Usage and design principles
 
