@@ -20,7 +20,7 @@ sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 Here is what happens at each step:
 
 1. `a = sd_mecha.model("path/to/model_a.safetensors")`: creates a handle to a safetensors model on disk. It will not load the model right away, only a reference to it
-2. `b = sd_mecha.model("path/to/model_b.safetensors")`: does the same as above with a different model.
+2. `b = sd_mecha.model("path/to/model_b.safetensors")`: does the same as 1. but with a different model.
 3. `recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)`: creates a weighted sum merge node with `a` and `b` as children. It will not merge the models right away
 4. `sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")`: merges the recipe by streaming one key at a time to the filesystem
 
