@@ -46,19 +46,19 @@ While sd-mecha is a python library without a graphical user interface, there is 
 
 ## Usage and design principles
 
-In sd-mecha, virtually every feature revolves around "recipes".
-A recipe is a list of ordered instructions that explain methodically how to derive a state dict.
+In sd-mecha, every task revolves around *recipe graphs*.
+A recipe graph is a graph of instructions that explain methodically how to derive a state dict.
 
 For example, you can:
-- compose recipes together into larger recipes
-- merge a recipe to disk or into an in-memory dictionary
-- serialize a recipe to a human-readable textual format (.mecha) and then deserialize it later
+- compose recipe graphs together into larger recipe graphs
+- materialize a state dict from a recipe graph to disk or memory
+- serialize a recipe graph to a human-readable textual format (.mecha) and then deserialize it later
 
-Recipes have a lifecycle that goes something like this:
-1. create or deserialize a recipe
-2. merge and/or serialize the recipe
+Recipe graphs have a lifecycle that goes something like this:
+1. create or deserialize a recipe graph
+2. merge and/or serialize the recipe graph
 
-The library uses recipes as the planning tool for all state dict operations.
-Planning state dict operations in advance allows the library to pick the best timing to load tensors from disk or to reuse already loaded tensors.
+The library uses recipe graphs as the planning tool for all state dict operations.
+Planning state dict operations in advance allows to pick the best timing to load tensors from disk and to reuse already loaded tensors.
 
 Next: [Typical use cases](../1-typical-use-cases)
