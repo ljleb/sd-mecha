@@ -78,7 +78,7 @@ In general, certain rules must be followed to define a custom merge method:
 - Optionally, `**kwargs` can be added to the method. If present, the merge method will receive these additional parameters when called:
 
     - `key`: the name of the target key currently being processed.
-    This is the name of the key from the model config for which the merge method is returning values.
+    This is the name of the key from the target model config for which the merge method is expected to return a value.
     - `cache`: either a dict or `None`. When it is a dict, the reference will be the same for different calls to `merge_and_save` on the same recipe.
     This can be used to save intermediate results that are reusable even if some of the parameters change.
     Sometimes, reusing intermediate results can significantly accelerate a merge method when testing multiple different values for some parameters.
