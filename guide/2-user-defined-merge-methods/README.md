@@ -95,8 +95,8 @@ The types that can be used as input to a merge method are:
 
 When a parameter is of type `sd_mecha.StateDict[T]`, instead of receiving a value from an input state dict, it will be an instance of a subclass of `sd_mecha.StateDict`.
 While it looks like we are materializing the entire input dict for each output key to be merged, in fact `sd_mecha.StateDict` is a dict-like interface that loads tensors from disk or other sources *on demand*.
-When the input config is the same as the output config, we can simply use `state_dict[kwargs["key"]]` to materialize the expected key from the input.
-When the input config is not the same as the output config, we can list all keys from the associated input config using `state_dict.keys()`.
+When the config of a state dict parameter is the same as the target config, we can simply use `state_dict[kwargs["key"]]` to materialize the target key from the state dict.
+When the config of a state dict parameter is not the same as the target config, we can list all keys in the state dict using `state_dict.keys()` and then chose which one to load to derive a value for the target key.
 
 ## Custom Blocks Config
 
