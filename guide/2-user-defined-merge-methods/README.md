@@ -74,7 +74,7 @@ In general, certain rules must be followed to define a custom merge method:
     - the type cannot be `sd_mecha.StateDict[...]`
     - the merge space has to be either a single merge space or an instance of `sd_mecha.MergeSpaceSymbol`
 
-    Otherwise, it is used in the same way as `sd_mecha.Parameter(...)` by `@merge_method` to instantiate the method object
+    Otherwise, it is used in the same way as `sd_mecha.Parameter(...)` by `@merge_method` to instantiate the `MergeMethod` object
 - Optionally, `**kwargs` can be added to the method. If present, the merge method will receive these additional parameters when called:
 
     - `key`: the name of the target key currently being processed.
