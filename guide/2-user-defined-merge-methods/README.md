@@ -81,7 +81,7 @@ In general, certain rules must be followed to define a custom merge method:
     This is the name of the key from the target model config for which the merge method is expected to return a value.
     - `cache`: either a dict or `None`. When it is a dict, the reference will be the same for different calls to `merge_and_save` on the same recipe and for each key to be processed.
     This is useful when there is an opportunity to save intermediate results that can be reused across calls to the merge method with different parameters or keys.
-    Sometimes, reusing intermediate results can significantly accelerate a merge method when testing multiple different values for some parameters.
+    Sometimes, reusing intermediate results can significantly accelerate a merge method.
 
 The types that can be used as input to a merge method are:
 
