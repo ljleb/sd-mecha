@@ -15,7 +15,7 @@ This guide is structured so that the files listing above serves as the table of 
 It is separated into the following chapters:
 
 - **Introduction**: overview of sd-mecha
-- **Chapter 1**: examples of use cases
+- **Chapter 1**: typical use cases
 - **Chapter 2**: user-defined merge methods
 
 Next: [Introduction](0-introduction)
