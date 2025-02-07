@@ -151,7 +151,7 @@ blocks = convert(blocks, a)  # <- the conversion method is called here
 recipe = weighted_sum(a, b, alpha=blocks)
 ```
 
-Passing `is_conversion=True` to the `@merge_method` decorator tells sd-mecha to register the merge method as a conversion method.
+Passing `is_conversion=True` to `@merge_method` tells sd-mecha to register the merge method as a conversion method.
 This makes the merge method a candidate transition between two model configs (in this case "sdxl-my_blocks" -> "sdxl-sgm") when looking for a conversion path using `sd_mecha.convert()`
 
 As an alternative, we can still create the recipe node by calling the conversion method directly:
