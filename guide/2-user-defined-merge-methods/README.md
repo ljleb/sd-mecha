@@ -12,12 +12,12 @@ We can create new merge methods from user code.
 To illustrate this, here is an example merge method that blends parameters with noise. Let's start with the code:
 
 ```python
-# 1.
+# 1. imports
 from torch import Tensor, randn, Generator
 from sd_mecha import model, merge_and_save, merge_method, Parameter, Return
 
 
-# 2.
+# 2. definition of our custom merge method `noise_sum`
 @merge_method
 def noise_sum(
     a: Parameter(Tensor),
@@ -31,7 +31,7 @@ def noise_sum(
     return (1-alpha)*a + alpha*noise
 
 
-# 3.
+# 3. usage of the merge method
 any_model = model("path/to/any_model.safetensors")
 recipe = noise_sum(
     any_model,
@@ -40,12 +40,6 @@ recipe = noise_sum(
 )
 merge_and_save(recipe, "path/to/model_out.safetensors")
 ```
-
-In order, we have:
-
-1. imports
-2. definition of our custom merge method `noise_sum`
-3. usage of the merge method
 
 Let's focus on the merge method definition.
 
