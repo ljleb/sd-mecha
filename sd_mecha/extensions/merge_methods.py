@@ -97,7 +97,7 @@ def Return(interface: type[NonDictLiteralValueOrTensor] | TypeVar, merge_space: 
         interface (type):
             The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
         merge_space (str or MergeSpaceSymbol, optional):
-            Merge space(s) valid for the return, or a symbol that depends on the input spaces.
+            The single merge space valid for the return, or a symbol that depends on the input spaces.
         model_config (str or ModelConfig, optional):
             The model config that the returned tensor or dictionary should belong to.
 
