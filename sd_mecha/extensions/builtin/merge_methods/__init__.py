@@ -8,7 +8,6 @@ from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
-from sd_mecha.extensions.model_configs import ModelConfig
 
 
 T = TypeVar("T")
