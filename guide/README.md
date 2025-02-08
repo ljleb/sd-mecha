@@ -12,6 +12,7 @@ Verify this is the appropriate version.
 To access the guide for a different version of sd-mecha, please refer to the source tree under [guide/](/guide) of the appropriate git tag or commit.
 
 This guide is structured so that the files listing above serves as the table of contents.
+Feel free to use the directory tree as a navigation tool throughout the guide.
 It is separated into the following chapters:
 
 - **Introduction**: overview of sd-mecha
