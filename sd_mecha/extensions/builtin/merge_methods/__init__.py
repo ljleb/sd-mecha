@@ -848,8 +848,7 @@ def pick_component(
     **kwargs,
 ) -> Return(T):
     key = kwargs["key"]
-    a_config: ModelConfig = a.model_config
-    if key in a_config.components[component].keys:
+    if key in a.model_config.components[component].keys:
         return a[key]
     else:
         raise StateDictKeyError(key)
