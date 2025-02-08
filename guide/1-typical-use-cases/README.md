@@ -109,7 +109,8 @@ Defining custom blocks is a tad more involved, see [User-Defined Merge Methods >
 
 ## Replace Model Components
 
-Sometimes, all we really want is to replace one component of a model with another one
+The keys of model configs are always distributed into different *components*. For example, SDXL has 4 components: `diffuser`, `clip_l`, `clip_g` and `vae`.
+Sometimes, all we really want is to replace one self-contained component of a model with a different one. Here is how to achieve this:
 
 ```python
 import sd_mecha
@@ -123,7 +124,9 @@ recipe = vae_only | b
 sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 ```
 
-- `sd_mecha.filter_component(a, "diffuser")`: picks the "vae" component of model `a`. It discards all other keys.
+Explanation:
+
+- `sd_mecha.filter_component(a, "diffuser")`: picks the `vae` component of model `a`. It discards all other keys.
 - `diffuser_only | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. `|` is a shorthand for `sd_mecha.fallback`.
 
 Next: [User-Defined Merge Methods](../2-user-defined-merge-methods)
