@@ -47,7 +47,7 @@ In plain english, `noise_sum` is a merge method that accepts 3 parameters: `a`, 
 When the merge method is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `Optional[int]`.
 The method is expected to return an instance of `torch.Tensor`.
 
-Applying the `@merge_method` decorator to `noise_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
+Applying the `@merge_method` decorator to `def noise_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
 The decorator does this by replacing the function with an instance of `sd_mecha.extensions.merge_methods.MergeMethod`, which defines a `__call__` method.
 When called, this `MergeMethod` object instantiates a `sd_mecha.recipe_nodes.MergeRecipeNode` (which holds a reference to the original `MergeMethod` object) instead of actually calling `noise_sum`.
 As shown in 2. above, we can pass recipe node objects created by this merge method to `merge_and_save` or `serialize_and_save`.
