@@ -12,12 +12,10 @@ We can create new merge methods from user code.
 To illustrate this, here is an example merge method `noise_sum` that blends parameters with noise:
 
 ```python
-# 1. imports
-from sd_mecha import model, merge_and_save, merge_method, Parameter, Return
+# 1. definition of our custom merge method `noise_sum`
+from sd_mecha import merge_method, Parameter, Return
 from torch import Tensor, randn, Generator
 
-
-# 2. definition of our custom merge method `noise_sum`
 @merge_method
 def noise_sum(
     a: Parameter(Tensor),
@@ -31,7 +29,8 @@ def noise_sum(
     return (1-alpha)*a + alpha*noise
 
 
-# 3. usage of the merge method
+# 2. usage of the merge method
+from sd_mecha import model, merge_and_save
 any_model = model("path/to/any_model.safetensors")
 recipe = noise_sum(
     any_model,
@@ -44,13 +43,14 @@ merge_and_save(recipe, "path/to/model_out.safetensors")
 Let's focus on the merge method definition.
 
 In plain english, `noise_sum` is a merge method that accepts 3 parameters: `a`, `alpha` and `seed`.
-When the merge method is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `int`.
+`alpha` has a default value of `0.5` (which gets implicitly converted to a tensor if used) and `seed` has a default value of `None`.
+When the merge method is eventually called, `a` and `alpha` will be instances of `torch.Tensor`, and `seed` will be an `Optional[int]`.
 The method is expected to return an instance of `torch.Tensor`.
 
 Applying the `@merge_method` decorator to `noise_sum` tells sd-mecha that the function is a merge method and should be converted to a recipe node constructor.
 The decorator does this by replacing the function with an instance of `sd_mecha.extensions.merge_methods.MergeMethod`, which defines a `__call__` method.
 When called, this `MergeMethod` object instantiates a `sd_mecha.recipe_nodes.MergeRecipeNode` (which holds a reference to the original `MergeMethod` object) instead of actually calling `noise_sum`.
-As shown in 3. above, we can pass recipe node objects created by this merge method to `merge_and_save` or `serialize_and_save`.
+As shown in 2. above, we can pass recipe node objects created by this merge method to `merge_and_save` or `serialize_and_save`.
 This will in turn call the original undecorated function on the right inputs as many times as needed to complete the planned task.
 
 In general, certain rules must be followed to define a custom merge method:
