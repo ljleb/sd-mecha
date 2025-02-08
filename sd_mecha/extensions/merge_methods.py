@@ -339,9 +339,9 @@ class MergeMethod:
         if merge_space_param is None:
             if self.default_merge_space in resolved_input_spaces:
                 return resolved_input_spaces[self.default_merge_space]
-            any_merge_param_k = next(iter(input_merge_spaces))
-            if all(v == input_merge_spaces[any_merge_param_k] for v in input_merge_spaces.values()):
-                return input_merge_spaces[any_merge_param_k]
+            any_input_merge_space = next(iter(input_merge_spaces.values()))
+            if all(v == any_input_merge_space for v in input_merge_spaces.values()):
+                return any_input_merge_space
             raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
         return next(iter(merge_space_param))  # get the only value
 
