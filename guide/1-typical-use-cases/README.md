@@ -118,8 +118,8 @@ import sd_mecha
 a = sd_mecha.model("path/to/model_a.safetensors")
 b = sd_mecha.model("path/to/model_b.safetensors")
 
-vae_only = sd_mecha.filter_component(a, "vae")
-recipe = vae_only | b
+a_vae = sd_mecha.filter_component(a, "vae")
+recipe = a_vae | b
 
 sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 ```
