@@ -9,7 +9,7 @@ To enable taking advantage of the low memory usage of sd-mecha in these cases, a
 One entity that can be extended in sd-mecha is the repository of builtin merge methods.
 We can create new merge methods from user code.
 
-To illustrate this, here is an example merge method that blends parameters with noise. Let's start with the code:
+To illustrate this, here is an example merge method `noise_sum` that blends parameters with noise. Let's start with the code:
 
 ```python
 # 1. imports
