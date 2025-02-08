@@ -42,7 +42,11 @@ class ParameterType:
     data: ParameterData
 
 
-def Parameter(interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLiteralValueOrTensor]] | TypeVar, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+def Parameter(
+    interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLiteralValueOrTensor]] | TypeVar,
+    merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
+    model_config: Optional[ModelConfig | str] = None,
+) -> type[Any]:
     """
     Describe a parameter to a merge method with its type, optional merge space, and optional model config.
 
@@ -68,7 +72,7 @@ def Parameter(interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLit
     if not isinstance(interface, TypeVar) and not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
         raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
-    if isinstance(merge_space, str):
+    if isinstance(merge_space, (str, MergeSpace)):
         merge_space = (merge_space,)
     if isinstance(merge_space, Iterable):
         merge_space = {
@@ -89,16 +93,20 @@ class ReturnType:
     data: ParameterData
 
 
-def Return(interface: type[NonDictLiteralValueOrTensor] | TypeVar, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+def Return(
+    interface: type[NonDictLiteralValueOrTensor] | TypeVar,
+    merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
+    model_config: Optional[ModelConfig | str] = None,
+) -> type[Any]:
     """
     Describe the return type of a merge method, optionally including its merge space and model config.
 
     Args:
         interface (type):
             The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
-        merge_space (str or MergeSpaceSymbol, optional):
+        merge_space (MergeSpace, str or MergeSpaceSymbol, optional):
             The single merge space valid for the return, or a symbol that depends on the input spaces.
-        model_config (str or ModelConfig, optional):
+        model_config (ModelConfig or str, optional):
             The model config that the returned tensor or dictionary should belong to.
 
     Returns:
