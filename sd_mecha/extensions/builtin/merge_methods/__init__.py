@@ -842,7 +842,7 @@ cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 
 @merge_method
-def filter_component(
+def pick_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
     **kwargs,

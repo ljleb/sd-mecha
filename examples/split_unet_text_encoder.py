@@ -13,10 +13,10 @@ unet_recipe = sd_mecha.weighted_sum(
     sd_mecha.model("furry-xl-4.0.safetensors"),
 )
 
-recipe = sd_mecha.filter_component(unet_recipe, "diffuser") | text_encoder_recipe
+recipe = sd_mecha.pick_component(unet_recipe, "diffuser") | text_encoder_recipe
 
 merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
+    model_dirs=r"E:\sd\models\Stable-diffusion",
 )
 
 merger.merge_and_save(recipe, output={})
