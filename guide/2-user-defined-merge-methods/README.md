@@ -83,7 +83,7 @@ The types that can be used as input to a merge method are:
 - `bool`
 - `str`
 - an instance of `typing.TypeVar`
-- `sd_mecha.StateDict[T]` where `T` is any of the above types (excluding `StateDict` itself)
+- `sd_mecha.StateDict[T]` where `T` is any of the above (excluding `StateDict` itself)
 
 When a parameter is of type `sd_mecha.StateDict[T]`, instead of receiving a value from an input state dict, it will be an instance of a subclass of `sd_mecha.StateDict`.
 While it looks like we are materializing the entire input dict for each output key to be merged, in fact `sd_mecha.StateDict` is a dict-like interface that loads tensors from disk or other sources *on demand*.
