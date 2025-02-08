@@ -102,6 +102,7 @@ To define a custom block config, two things need to be defined:
 This is an example that splits SDXL in two categories (a specific key vs the rest of the model):
 
 ```python
+# 1. define our custom blocks config
 from sd_mecha.extensions import model_configs
 
 my_blocks_config = model_configs.from_yaml("""
@@ -115,6 +116,7 @@ components:
 model_configs.register(my_blocks_config)
 
 
+# 2. define a conversion method from our blocks config to sdxl-sgm
 from sd_mecha import merge_method, Parameter, Return, StateDict
 from typing import TypeVar
 
@@ -132,7 +134,7 @@ def convert_blocks_to_sdxl(
         return blocks_dict["rest"]
 
 
-# we can then use the conversion like this:
+# 3. use the conversion method
 from sd_mecha import model, convert, weighted_sum
 
 a = model("path/to/model_a.safetensors")
