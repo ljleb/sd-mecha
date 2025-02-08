@@ -161,7 +161,7 @@ blocks = convert_blocks_to_sdxl({
 
 While `sd_mecha.convert` is usually preferred for simplicity, calling the conversion method directly removes the need to use `model_configs.register`.
 Although, we still need to define the config to be able to define the conversion method.
-In this case, since the model config registry will not aware of the custom config, it will not be possible to infer the custom config automatically.
+In this case, since the model config registry will not be aware of the custom config, it will not be possible to infer the custom config automatically.
 As a result, we would then need to explicitly specify the unregistered config when we want to use it:
 
 ```python
