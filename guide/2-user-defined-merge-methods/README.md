@@ -13,8 +13,8 @@ To illustrate this, here is an example merge method `noise_sum` that blends para
 
 ```python
 # 1. imports
-from torch import Tensor, randn, Generator
 from sd_mecha import model, merge_and_save, merge_method, Parameter, Return
+from torch import Tensor, randn, Generator
 
 
 # 2. definition of our custom merge method `noise_sum`
