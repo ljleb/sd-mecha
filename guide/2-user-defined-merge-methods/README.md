@@ -97,7 +97,7 @@ Block merging basics are covered in [Typical Use Cases > Blocks Merging (MBW)](.
 To define a custom block config, two things need to be defined:
 
 1. A model config to hold the block keys. This is required to enable conversion and serialization
-2. A conversion function that maps each block to a key
+2. A conversion function that maps each block to a key in a different model config
 
 This is an example that splits SDXL in two categories (a specific key vs the rest of the model):
 
