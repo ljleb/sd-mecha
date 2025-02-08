@@ -169,8 +169,8 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, f: Callable, identifier: str):
-        self.__wrapped__ = f
+    def __init__(self, fn: Callable, identifier: str):
+        self.__wrapped__ = fn
         self.__f_spec = inspect.getfullargspec(self.__wrapped__)
         self.__f_hints = typing.get_type_hints(self.__wrapped__)
         self.identifier = identifier
@@ -339,6 +339,9 @@ class MergeMethod:
         if merge_space_param is None:
             if self.default_merge_space in resolved_input_spaces:
                 return resolved_input_spaces[self.default_merge_space]
+            any_merge_param_k = next(iter(input_merge_spaces))
+            if all(v == input_merge_spaces[any_merge_param_k] for v in input_merge_spaces.values()):
+                return input_merge_spaces[any_merge_param_k]
             raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
         return next(iter(merge_space_param))  # get the only value
 
@@ -493,7 +496,7 @@ F = TypeVar("F", bound=Callable)
 
 
 def merge_method(
-    f: Optional[F] = None, *,
+    fn: Optional[F] = None, *,
     identifier: Optional[str] = None,
     register: bool = True,
     is_conversion: bool = False,
@@ -506,7 +509,7 @@ def merge_method(
     considered "weight" or "param" merges, and so on.
 
     Args:
-        f (callable, optional):
+        fn (callable, optional):
             The function to decorate. If omitted, the decorator can be used with named
             arguments (e.g. `@merge_method(is_conversion=True)`).
         identifier (str, optional):
@@ -520,9 +523,9 @@ def merge_method(
     Returns:
         A `MergeMethod` object or a decorator.
     """
-    if f is None:
-        return lambda f: __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
-    return __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
+    if fn is None:
+        return lambda fn: __recipe_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion)
+    return __recipe_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion)
 
 
 def __recipe_impl(
@@ -581,13 +584,14 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) 
 
     This helper is primarily used internally when constructing recipe graphs. For instance,
     if you pass a float to a merge method where a tensor is expected, `value_to_node` wraps
-    that float in a node that can broadcast into a tensor if needed.
+    that float in a node that will automatically convert it into a tensor when broadcasting
+    over state dict keys.
 
     Args:
         node_or_value:
             The input that should become a `RecipeNode`.
         expected_type (type, optional):
-            An expected type hint (e.g., torch.Tensor) for extra validation.
+            The target type that the value should be converted to.
 
     Returns:
         A `RecipeNode` instance, if conversion is successful.
@@ -597,6 +601,12 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) 
 
     if not isinstance(node_or_value, RecipeNodeOrValue):
         raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}, not {type(node_or_value)}")
+
+    if expected_type is None:
+        if isinstance(node_or_value, Mapping):
+            expected_type = next(iter(node_or_value.values()))
+        else:
+            expected_type = type(node_or_value)
 
     numeric = int | float
 
