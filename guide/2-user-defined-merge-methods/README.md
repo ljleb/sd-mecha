@@ -152,6 +152,11 @@ This makes the merge method a candidate transition between two model configs (in
 As an alternative, we can still instantiate a recipe node by calling the conversion method directly:
 
 ```python
+# ...
+blocks = convert_blocks_to_sdxl({
+    "the_key_we_want": 1.0,
+    "rest": 0.0,
+})
 ```
 
 While `sd_mecha.convert` is usually preferred for simplicity, calling the conversion method directly removes the need to use `model_configs.register`.
