@@ -153,10 +153,10 @@ As an alternative, we can still instantiate a recipe node by calling the convers
 
 ```python
 # ...
-blocks = convert_blocks_to_sdxl({
+blocks = convert_blocks_to_sdxl(sd_mecha.literal({
     "the_key_we_want": 1.0,
     "rest": 0.0,
-})
+}, my_blocks_config))
 ```
 
-While `sd_mecha.convert` is usually preferred for simplicity, calling the conversion method directly removes the need to register the model config with the registry (although we still need to define the config to be able to define the conversion method).
+While `sd_mecha.convert` is usually preferred for simplicity, calling the conversion method directly removes the need to use `model_configs.register` (although we still need to define the config to be able to define the conversion method).
