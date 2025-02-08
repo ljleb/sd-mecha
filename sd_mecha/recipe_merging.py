@@ -26,9 +26,9 @@ from .typing_ import is_subclass
 
 def merge_and_save(
     recipe: RecipeNodeOrValue,
-    output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
+    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
     fallback_model: Optional[RecipeNodeOrValue] = ...,
-    merge_device: Optional[str] = ...,
+    merge_device: Optional[str | torch.device] = ...,
     merge_dtype: Optional[torch.dtype] = ...,
     output_device: Optional[str | torch.device] = ...,
     output_dtype: Optional[torch.dtype] = ...,
@@ -38,7 +38,49 @@ def merge_and_save(
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
     tqdm: type = ...,
-):
+) -> Optional[MutableMapping[str, torch.Tensor]]:
+    """
+    Merge a recipe graph into a final state dict and save it.
+
+    This function streams each key from the underlying safetensors or dictionaries,
+    applies all instructions in the `recipe`, and writes the resulting data to `output`.
+
+    Args:
+        recipe:
+            A `RecipeNode`, python literal, or dictionary describing how to merge or transform multiple models.
+        output (optional):
+            Where to store the merged state dict. Can be a filesystem path (string or
+            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
+            If it is None or omitted, an empty dict is created and returned when the merge completes.
+        fallback_model (optional):
+            A secondary recipe or model to provide values for any keys missing from `recipe`.
+        merge_device (optional):
+            Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
+        merge_dtype (optional):
+            Torch dtype for intermediate merges (e.g., `torch.float32`, `torch.float64`).
+        output_device (optional):
+            Final output device (e.g., "cpu").
+        output_dtype (optional):
+            Final dtype for the saved model.
+        threads (optional):
+            Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
+        total_buffer_size (optional):
+            Total byte size of the buffers for all safetensors state dicts (input and output).
+        model_dirs (optional):
+            One or more directories to search for model files if `recipe` references relative paths.
+        strict_weight_space (optional):
+            If True, verifies that merges occur in "weight" space. If False, merges can happen
+            in other merge spaces (like "delta" or "param").
+        check_finite (optional):
+            If True, warns if any non-finite values appear in the final merged tensors.
+        tqdm (optional):
+            A custom progress-bar factory. By default, uses `tqdm.tqdm`.
+
+    Returns:
+        None, or the in-memory dictionary if `output` is either a mutable mapping or None.
+    """
+    if output is ...:
+        output = None
     if fallback_model is ...:
         fallback_model = None
     if merge_device is ...:
@@ -123,10 +165,13 @@ def merge_and_save(
                     raise future.exception()
                 future.result()
 
+            if isinstance(output_dict, MutableMapping):
+                return output_dict
+
 
 @contextlib.contextmanager
 def _get_output_dict(
-    output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
+    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
     merged_header: Mapping[str, TensorMetadata],
     serialized_recipe: str,
     model_dirs: Iterable[pathlib.Path],
@@ -154,6 +199,8 @@ def _get_output_dict(
         finally:
             streamed_output.close()
     else:
+        if output is None:
+            output = {}
         yield output
 
 
@@ -202,9 +249,9 @@ class ThisThreadExecutor(nullcontext):
 
 
 @contextlib.contextmanager
-def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: Iterable[pathlib.Path] = (), buffer_size_per_dict: int = 2**28, empty_cuda_cache: bool = False):
+def open_input_dicts(recipe: recipe_nodes.RecipeNode, model_dirs: Iterable[pathlib.Path] = (), buffer_size_per_dict: int = 2**28, empty_cuda_cache: bool = False):
     try:
-        recipe.accept(LoadInputDictsVisitor(base_dirs, buffer_size_per_dict))
+        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict))
         yield recipe
     finally:
         recipe.accept(CloseInputDictsVisitor())
@@ -215,7 +262,7 @@ def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: Iterable[pathli
 
 @dataclasses.dataclass
 class LoadInputDictsVisitor(RecipeVisitor):
-    base_dirs: Iterable[pathlib.Path]
+    model_dirs: Iterable[pathlib.Path]
     buffer_size_per_dict: int
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
@@ -245,7 +292,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         if not isinstance(path, pathlib.Path):
             path = pathlib.Path(path)
         if not path.is_absolute():
-            for base_dir in self.base_dirs:
+            for base_dir in self.model_dirs:
                 path_attempt = base_dir / path
                 if path_attempt.exists():
                     path = path_attempt

@@ -15,7 +15,8 @@ from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic
 from ..typing_ import is_subclass
 
 
-T = TypeVar('T', torch.Tensor, *typing.get_args(NonDictLiteralValue))
+NonDictLiteralValueOrTensor = NonDictLiteralValue | torch.Tensor
+T = TypeVar('T', *typing.get_args(NonDictLiteralValueOrTensor))
 
 
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
@@ -41,7 +42,25 @@ class ParameterType:
     data: ParameterData
 
 
-def Parameter(interface: type | TypeVar, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+def Parameter(interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLiteralValueOrTensor]] | TypeVar, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+    """
+    Describe a parameter to a merge method with its type, optional merge space, and optional model config.
+
+    `Parameter` is used in function type hints to specify how `@merge_method` should handle each
+    argument. For example, `Parameter(Tensor, "weight")` means "this argument is a tensor
+    in weight space."
+
+    Args:
+        interface (type):
+            The Python or Torch type of this parameter.
+        merge_space (str or Iterable[str], optional):
+            Which merge space(s) are valid for this parameter (e.g., "weight", "delta").
+        model_config (str or ModelConfig, optional):
+            A specific model config or config identifier if it must match a certain architecture.
+
+    Returns:
+        A special type annotation object used by `@merge_method` to interpret function arguments.
+    """
     supported_types = [StateDict] + list(T.__constraints__)
     if type(None) in (typing.get_args(interface) or ()):
         interface = typing.get_args(interface)[0]
@@ -70,7 +89,21 @@ class ReturnType:
     data: ParameterData
 
 
-def Return(interface: type | TypeVar, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+def Return(interface: type[NonDictLiteralValueOrTensor] | TypeVar, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+    """
+    Describe the return type of a merge method, optionally including its merge space and model config.
+
+    Args:
+        interface (type):
+            The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
+        merge_space (str or MergeSpaceSymbol, optional):
+            Merge space(s) valid for the return, or a symbol that depends on the input spaces.
+        model_config (str or ModelConfig, optional):
+            The model config that the returned tensor or dictionary should belong to.
+
+    Returns:
+        A type annotation object used by `@merge_method` for the return signature.
+    """
     if not isinstance(interface, TypeVar):
         supported_types = list(T.__constraints__)
         if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
@@ -457,6 +490,28 @@ def merge_method(
     register: bool = True,
     is_conversion: bool = False,
 ) -> MergeRecipeNode | Callable[[F], MergeRecipeNode]:
+    """
+    Decorator to define a custom merge method.
+
+    This converts the decorated function into a `MergeMethod` object that can be used in
+    recipe graphs. The type hints in the function signature determine which arguments are
+    considered "weight" or "param" merges, and so on.
+
+    Args:
+        f (callable, optional):
+            The function to decorate. If omitted, the decorator can be used with named
+            arguments (e.g. `@merge_method(is_conversion=True)`).
+        identifier (str, optional):
+            An explicit name to register this method under. By default, uses the function’s name.
+        register (bool):
+            If True (default), registers the merge method globally so it can be accessed by `merge_methods.resolve()`.
+        is_conversion (bool):
+            If True, marks this merge method as a config-conversion function. That means `convert()`
+            will consider it as an implicit transition when converting between different model configs.
+
+    Returns:
+        A `MergeMethod` object or a decorator.
+    """
     if f is None:
         return lambda f: __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
     return __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
@@ -513,6 +568,22 @@ def get_all_converters() -> List[MergeMethod]:
 
 
 def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) -> RecipeNode:
+    """
+    Convert a literal or path into a `RecipeNode`, if it isn't one already.
+
+    This helper is primarily used internally when constructing recipe graphs. For instance,
+    if you pass a float to a merge method where a tensor is expected, `value_to_node` wraps
+    that float in a node that can broadcast into a tensor if needed.
+
+    Args:
+        node_or_value:
+            The input that should become a `RecipeNode`.
+        expected_type (type, optional):
+            An expected type hint (e.g., torch.Tensor) for extra validation.
+
+    Returns:
+        A `RecipeNode` instance, if conversion is successful.
+    """
     if isinstance(node_or_value, RecipeNode):
         return node_or_value
 

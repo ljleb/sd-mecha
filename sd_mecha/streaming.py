@@ -176,7 +176,12 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
 
 
 class StateDictKeyError(KeyError):
-    pass
+    """
+    Exception raised when a requested key is missing from a streamed or in-memory state dict.
+
+    It behaves like a normal `KeyError`, but is specialized for reporting missing keys
+    within streaming merges or recipes.
+    """
 
 
 @dataclasses.dataclass
