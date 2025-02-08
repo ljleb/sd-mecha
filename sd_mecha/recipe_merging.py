@@ -249,7 +249,12 @@ class ThisThreadExecutor(nullcontext):
 
 
 @contextlib.contextmanager
-def open_input_dicts(recipe: recipe_nodes.RecipeNode, model_dirs: Iterable[pathlib.Path] = (), buffer_size_per_dict: int = 2**28, empty_cuda_cache: bool = False):
+def open_input_dicts(
+    recipe: recipe_nodes.RecipeNode,
+    model_dirs: Iterable[pathlib.Path] = (),
+    buffer_size_per_dict: int = 0,
+    empty_cuda_cache: bool = False,
+):
     try:
         recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict))
         yield recipe

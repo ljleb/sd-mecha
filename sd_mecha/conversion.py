@@ -40,7 +40,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
         converter_paths[src_config].append((tgt_config, converter))
 
     if isinstance(config, RecipeNode):
-        with open_input_dicts(config, model_dirs, 0):
+        with open_input_dicts(config, model_dirs):
             config = config.model_config
 
     tgt_config = config if isinstance(config, str) else config.identifier
@@ -55,7 +55,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
         raise ValueError(f"could not infer the intended config to convert from. explicitly specifying the input config might resolve the issue")
 
     recipe = value_to_node(recipe)
-    with open_input_dicts(recipe, model_dirs, buffer_size_per_dict=0):
+    with open_input_dicts(recipe, model_dirs):
         src_config = recipe.model_config.identifier
     res = create_conversion_recipe(recipe, converter_paths, src_config, tgt_config)
     if res is None:
