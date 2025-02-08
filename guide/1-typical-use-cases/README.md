@@ -127,6 +127,6 @@ sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 Explanation:
 
 - `sd_mecha.pick_component(a, "vae")`: picks the `vae` component of model `a`. It discards all keys from other components.
-- `diffuser_only | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. `|` is a shorthand for `sd_mecha.fallback`.
+- `a_vae | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. `|` is a shorthand for `sd_mecha.fallback`.
 
 Next: [User-Defined Merge Methods](../2-user-defined-merge-methods)
