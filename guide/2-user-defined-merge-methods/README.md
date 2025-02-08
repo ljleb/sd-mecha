@@ -31,12 +31,9 @@ def noise_sum(
 
 # 2. usage of the merge method
 from sd_mecha import model, merge_and_save
+
 any_model = model("path/to/any_model.safetensors")
-recipe = noise_sum(
-    any_model,
-    alpha=0.01,
-    seed=42,
-)
+recipe = noise_sum(any_model, alpha=0.01, seed=42)
 merge_and_save(recipe, "path/to/model_out.safetensors")
 ```
 
@@ -61,7 +58,7 @@ In general, certain rules must be followed to define a custom merge method:
     - receive a specific model config (`model_config=...`)
     - constrain its merge space (`merge_space=...`)
 
-    This can be useful in different contexts and for different reasons, all covered below.
+    This can be useful for different reasons, all covered below.
 - The return type needs to be `sd_mecha.Return(interface, ...)`. This type is used similarly to `Parameter(...)`.
     However, it differs slightly in what it can receive as arguments:
 
