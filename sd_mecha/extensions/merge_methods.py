@@ -33,7 +33,7 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
 @dataclasses.dataclass
 class ParameterData:
     interface: type | TypeVar
-    merge_space: Optional[AnyMergeSpace]
+    merge_space: Optional[MergeSpace | AnyMergeSpace]
     model_config: Optional[ModelConfig]
 
 
@@ -117,13 +117,8 @@ def Return(
         if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
             raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
 
-    if isinstance(merge_space, (str, MergeSpace)):
-        merge_space = (merge_space,)
-    if isinstance(merge_space, Iterable):
-        merge_space = {
-            merge_spaces.resolve(m) if isinstance(m, str) else m
-            for m in merge_space
-        }
+    if isinstance(merge_space, str):
+        merge_space = merge_spaces.resolve(merge_space)
 
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
@@ -333,7 +328,7 @@ class MergeMethod:
             else:
                 resolved_input_spaces[merge_space_param] = merge_space_arg
 
-        merge_space_param = self.__get_return_data(self.__f_hints.get("return")).merge_space
+        merge_space_param: MergeSpace | MergeSpaceSymbol = self.__get_return_data(self.__f_hints.get("return")).merge_space
         if isinstance(merge_space_param, MergeSpaceSymbol):
             return resolved_input_spaces[merge_space_param]
         if merge_space_param is None:
@@ -343,7 +338,7 @@ class MergeMethod:
             if all(v == any_input_merge_space for v in input_merge_spaces.values()):
                 return any_input_merge_space
             raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
-        return next(iter(merge_space_param))  # get the only value
+        return merge_space_param
 
     def get_input_merge_spaces(self) -> FunctionArgs[AnyMergeSpace]:
         params = self.get_params()

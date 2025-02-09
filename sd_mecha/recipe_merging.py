@@ -97,6 +97,8 @@ def merge_and_save(
         total_buffer_size = 2**28
     if model_dirs is ...:
         model_dirs = ()
+    else:
+        model_dirs = list(model_dirs)
     if strict_weight_space is ...:
         strict_weight_space = True
     if check_finite is ...:
