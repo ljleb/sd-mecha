@@ -828,18 +828,18 @@ def cast(
 cast_dtype_map = {
     "float64": torch.float64,
     "int64": torch.int64,
-    "uint64": torch.int64,
+    "uint64": torch.uint64,
     "float32": torch.float32,
     "int32": torch.int32,
-    "uint32": torch.int32,
+    "uint32": torch.uint32,
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
     "int16": torch.int16,
-    "uint16": torch.int16,
+    "uint16": torch.uint16,
     "float8_e4m3fn": torch.float8_e4m3fn,
     "float8_e5m2": torch.float8_e5m2,
     "int8": torch.int8,
-    "uint8": torch.int8,
+    "uint8": torch.uint8,
     "bool": torch.bool,
 }
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
