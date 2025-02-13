@@ -28,7 +28,11 @@ def weighted_sum(
     elif torch.allclose(alpha, torch.ones_like(alpha)):
         return b[key]
 
-    return (1 - alpha) * a[key] + alpha * b[key]
+    return weighted_sum_impl(a[key], b[key], alpha)
+
+
+def weighted_sum_impl(a: Tensor | np.array, b: Tensor | np.array, alpha: Tensor | np.array) -> Tensor | np.array:
+    return (1-alpha)*a + alpha*b
 
 
 @merge_method
@@ -54,9 +58,9 @@ def slerp(
     a_contrib = a_normalized * torch.sin((1-alpha)*omega)
     b_contrib = b_normalized * torch.sin(alpha*omega)
     res = (a_contrib + b_contrib) / torch.sin(omega)
-    res *= weighted_sum.__wrapped__(a.norm(), b.norm(), alpha=alpha)
+    res *= weighted_sum_impl(a.norm(), b.norm(), alpha=alpha)
     if res.isnan().any():
-        return weighted_sum.__wrapped__(a, b, alpha=alpha)
+        return weighted_sum_impl(a, b, alpha=alpha)
     return res
 
 
@@ -132,7 +136,7 @@ def add_cosine_b(
 
 def add_cosine_generic(a: Tensor, b: Tensor, alpha: Tensor, similarity: Tensor) -> Tensor:
     k = 1 - torch.clamp(similarity - alpha, 0, 1)
-    return weighted_sum.__wrapped__(a, b, alpha=k)
+    return weighted_sum_impl(a, b, alpha=k)
 
 
 @merge_method
@@ -314,10 +318,10 @@ def crossover(
     if alpha == 1:
         return b
     if tilt == 1:
-        return weighted_sum.__wrapped__(a, b, alpha=alpha)
+        return weighted_sum_impl(a, b, alpha=alpha)
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return weighted_sum.__wrapped__(a, b, alpha=tilt)
+        return weighted_sum_impl(a, b, alpha=tilt)
 
     shape = a.shape
 
@@ -650,9 +654,9 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
         expanded_binomial_pmf[i-1] = binomial_pmf[num_sets-1] / binomial_coefficient_np(n, num_sets)
     expanded_binomial_pmf /= expanded_binomial_pmf.sum()
 
-    pmf = weighted_sum.__wrapped__(
+    pmf = weighted_sum_impl(
         pmf,
-        weighted_sum.__wrapped__(pmf, expanded_binomial_pmf, alpha=1-abs(2*overlap-1)),
+        weighted_sum_impl(pmf, expanded_binomial_pmf, alpha=1-abs(2*overlap-1)),
         alpha=overlap_emphasis,
     )
     return np.concatenate([[p], pmf * (1 - p)])
