@@ -226,8 +226,7 @@ def rotate(
         a, b,
         alignment=alignment,
         alpha=alpha,
-        cache=cache,
-    )
+    ).set_cache(cache)
 
     if c is not None:
         res = merge_methods.add_difference(
