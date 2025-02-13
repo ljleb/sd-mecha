@@ -1,8 +1,9 @@
 import torch
 from typing import Optional, Dict
 from .extensions.merge_methods import value_to_node, RecipeNodeOrValue
-from . import recipe_nodes, merge_methods
-from .merge_methods import (
+from . import recipe_nodes
+from sd_mecha.extensions.builtin import merge_methods
+from sd_mecha.extensions.builtin.merge_methods import (
     subtract,
     ties_sum,
     ties_sum_extended,
@@ -14,7 +15,7 @@ from .merge_methods import (
 def add_difference(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     alpha: float = 1.0,
-    clamp_to_ab: Optional[bool] = None,
+    clamp_to_ab: bool = False,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -33,9 +34,6 @@ def add_difference(
 
     if a.merge_space == original_b.merge_space:
         b = original_b
-
-    if clamp_to_ab is None:
-        clamp_to_ab = a.merge_space == b.merge_space
 
     if clamp_to_ab:
         if a.merge_space != b.merge_space:
@@ -225,8 +223,7 @@ def rotate(
         a, b,
         alignment=alignment,
         alpha=alpha,
-        cache=cache,
-    )
+    ).set_cache(cache)
 
     if c is not None:
         res = merge_methods.add_difference(

@@ -18,7 +18,17 @@ def deserialize_path(recipe: pathlib.Path) -> RecipeNode:
         raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
 
 
-def deserialize(recipe: List[str] | str) -> RecipeNode:
+def deserialize(recipe: str | List[str]) -> RecipeNode:
+    """
+    Recreate a recipe graph from its serialized `.mecha` format.
+
+    Args:
+        recipe (str or List[str]):
+            The textual representation (as a string or list of lines) of the recipe.
+
+    Returns:
+        A `RecipeNode` that can be further merged or manipulated.
+    """
     if not isinstance(recipe, list):
         recipe = recipe.split("\n")
 
@@ -126,6 +136,18 @@ def deserialize(recipe: List[str] | str) -> RecipeNode:
 
 
 def serialize(recipe: RecipeNode) -> str:
+    """
+    Convert a recipe graph into a string that captures its merge instructions.
+
+    This is the first step of persisting a recipe to disk in `.mecha` format.
+
+    Args:
+        recipe:
+            A `RecipeNode` describing the merge.
+
+    Returns:
+        A string representation of the recipe, suitable for writing to a .mecha file.
+    """
     serializer = SerializerVisitor()
     recipe.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
