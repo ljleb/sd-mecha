@@ -89,7 +89,7 @@ When the config of a state dict parameter is not the same as the target config, 
 
 ## Custom Blocks Config
 
-Block merging basics are covered in [Typical Use Cases > Blocks Merging (MBW)](../1-typical-use-cases#blocks-merging-mbw).
+Block merging basics are covered in [Typical Use Cases > Blocks Merging (MBW)](1-typical-use-cases.md#blocks-merging-mbw).
 
 To define a custom block config, two things need to be defined:
 

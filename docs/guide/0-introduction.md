@@ -61,4 +61,4 @@ Recipe graphs have a lifecycle that goes something like this:
 The library uses recipe graphs as the planning tool for all state dict operations.
 Planning state dict operations in advance allows to pick the best timing to load tensors from disk and to reuse already loaded tensors.
 
-Next: [Typical use cases](../1-typical-use-cases)
+Next: [Typical use cases](1-typical-use-cases.md)

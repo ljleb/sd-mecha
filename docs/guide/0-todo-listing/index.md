@@ -12,7 +12,7 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 ```math
-m_{out} = a(1 - \alpha) + b\alpha
+\theta_{out} = a(1 - \alpha) + b\alpha
 ```
 
 ### `sd_mecha.add_difference(a, b, *, alpha: float = 1.0)`
@@ -23,7 +23,7 @@ Input models: $a$, $b$
 Input hypers: $\alpha$
 
 ```math
-m_{out} = a + b\alpha
+\theta_{out} = a + b\alpha
 ```
 
 ### `sd_mecha.add_difference(a, b, c, *, alpha: float = 1.0, clip_to_ab: bool = True)`
@@ -31,7 +31,7 @@ m_{out} = a + b\alpha
 Add the delta $b - c$ to $a$ at a rate of $\alpha$.
 
 If `clip_to_ab` is `True`, then the result of add difference is clipped to $a$ and $b$.
-See `clip(a, *bounds, ...)` below for more info.
+See `sd_mecha.clamp(...)` for more info.
 
 Input models: $a$, $b$, $c$  
 Input hypers: $\alpha$
@@ -50,7 +50,7 @@ m_{out} = f_{clip}(a + \alpha(b - c))
 
 ### `sd_mecha.slerp(a, b, *, alpha: float = 0.5)`
 
-Circular interpolation between $a$ and $b$.
+Spherical interpolation between $a$ and $b$.
 
 Input models: $a$, $b$  
 Input hypers: $\alpha$

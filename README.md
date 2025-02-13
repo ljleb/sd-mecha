@@ -47,7 +47,7 @@ Make sure to install the appropriate release of [`torch`](https://pytorch.org/ge
 
 ## Usage
 
-For an in-depth exploration of how to use the library, and to decide whether it is appropriate for your purposes, see the [mecha guide](guide).
+For an in-depth exploration of how to use the library, and to decide whether it is appropriate for your purposes, see the [mecha guide](docs/guide).
 
 ### Merge models
 

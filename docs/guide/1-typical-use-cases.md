@@ -105,7 +105,7 @@ See [Convert Models](#convert-models) for an overview of `sd_mecha.convert`.
 3. `blocks = blocks | 1.0`: specifies that for any key that is missing a corresponding block, the fallback value is `1.0`.
 Note that this is optional if all block weights have been explicitly specified in the literal state dict.
 
-Defining custom blocks is a tad more involved, see [User-Defined Merge Methods > Custom Blocks Config](../2-user-defined-merge-methods#custom-blocks-config) for more info.
+Defining custom blocks is a tad more involved, see [User-Defined Merge Methods > Custom Blocks Config](2-user-defined-merge-methods.md#custom-blocks-config) for more info.
 
 ## Replace Model Components
 
@@ -128,5 +128,3 @@ Explanation:
 
 - `sd_mecha.pick_component(a, "vae")`: picks the `vae` component of model `a`. It discards all keys from other components.
 - `a_vae | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. `|` is a shorthand for `sd_mecha.fallback`.
-
-Next: [User-Defined Merge Methods](../2-user-defined-merge-methods)
