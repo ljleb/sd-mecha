@@ -254,7 +254,7 @@ class MergeMethod:
             else kwargs.pop(params.args[i]) if params.args[i] in kwargs
             else defaults.args[ensure_positive(i - first_default_arg)]
             for i in range(len(params.args))
-        ]
+        ] + list(args[len(params.args):])
 
         max_args = len(params.args) if not params.has_varargs() else float("inf")
         min_args = len(params.args) - len(defaults.args)
