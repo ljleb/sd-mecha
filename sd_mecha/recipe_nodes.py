@@ -5,6 +5,8 @@ import torch
 from .extensions import model_configs, merge_methods, merge_spaces
 from typing import Optional, Dict, Tuple
 
+from .extensions.merge_spaces import MergeSpace
+
 
 class RecipeNode(abc.ABC):
     @abc.abstractmethod
@@ -59,7 +61,7 @@ class RecipeNode(abc.ABC):
         if device is not None:
             device = str(device)
         if dtype is not None:
-            from sd_mecha.merge_methods import cast_dtype_map_reversed
+            from sd_mecha.extensions.builtin.merge_methods import cast_dtype_map_reversed
             dtype = cast_dtype_map_reversed[dtype]
         return merge_methods.resolve("cast")(self, device=device, dtype=dtype)
 
@@ -87,7 +89,7 @@ class LiteralRecipeNode(RecipeNode):
         return visitor.visit_literal(self, *args, **kwargs)
 
     @property
-    def merge_space(self) -> merge_spaces.MergeSpace:
+    def merge_space(self) -> MergeSpace:
         if isinstance(self.value, dict):
             first_value = next(iter(self.value.values()))
             if isinstance(first_value, RecipeNode):
@@ -118,7 +120,7 @@ class ModelRecipeNode(RecipeNode):
         path: pathlib.Path,
         *,
         model_config: Optional[str | model_configs.ModelConfig] = None,
-        merge_space: str = "weight",
+        merge_space: str | MergeSpace = "weight",
     ):
         if not isinstance(path, pathlib.Path):
             raise TypeError(f"The type of 'state_dict' must be Path, not {type(path).__name__}")

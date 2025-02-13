@@ -1,6 +1,6 @@
 import torch
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from .convert_vae_to_original import convert_vae
+from .convert_diffusers_sd_vae_to_original import convert_vae
 
 
 # hf to sd conversion src:
@@ -23,20 +23,20 @@ def convert_sd1_kohya_to_original(
         return kohya_sd[ldm_key]
 
 
-def convert_unet(diffusers_sd: StateDict, ldm_key: str) -> torch.Tensor:
-    diffusers_key = '.'.join(ldm_key.split(".")[2:])  # model.diffusion_model.
+def convert_unet(kohya_sd: StateDict, ldm_key: str) -> torch.Tensor:
+    kohya_key = '.'.join(ldm_key.split(".")[2:])  # model.diffusion_model.
 
     for sd_part, hf_part in unet_conversion_map_layer.items():
-        diffusers_key = diffusers_key.replace(sd_part, hf_part)
+        kohya_key = kohya_key.replace(sd_part, hf_part)
 
-    if "resnets" in diffusers_key:
+    if "resnets" in kohya_key:
         for sd_part, hf_part in unet_conversion_map_resnet.items():
-            diffusers_key = diffusers_key.replace(sd_part, hf_part)
+            kohya_key = kohya_key.replace(sd_part, hf_part)
 
-    diffusers_key = unet_conversion_map.get(diffusers_key, diffusers_key)
+    kohya_key = unet_conversion_map.get(kohya_key, kohya_key)
 
-    diffusers_key = f"unet.{diffusers_key}"
-    return diffusers_sd[diffusers_key]
+    kohya_key = f"unet.{kohya_key}"
+    return kohya_sd[kohya_key]
 
 
 unet_conversion_map = {
@@ -116,7 +116,7 @@ for j in range(2):
     unet_conversion_map_layer[sd_mid_res_prefix] = hf_mid_res_prefix
 
 
-def convert_clip_l(diffusers_sd: StateDict, ldm_key: str) -> torch.Tensor:
-    diffusers_key = '.'.join(ldm_key.split(".")[2:])  # cond_stage_model.transformer.
-    diffusers_key = f"text_encoder.{diffusers_key}"
-    return diffusers_sd[diffusers_key]
+def convert_clip_l(kohya_sd: StateDict, ldm_key: str) -> torch.Tensor:
+    kohya_key = '.'.join(ldm_key.split(".")[2:])  # cond_stage_model.transformer.
+    kohya_key = f"te.{kohya_key}"
+    return kohya_sd[kohya_key]

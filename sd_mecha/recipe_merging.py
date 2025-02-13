@@ -10,179 +10,235 @@ import sys
 import threading
 import typing
 import torch
-from .extensions import merge_methods, model_configs, model_formats
-from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT
+from .extensions import model_configs, model_formats
+from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
 from .extensions.model_configs import ModelConfig
-from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode
+from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, recipe_serializer
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
-from tqdm import tqdm
+from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
 from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
 from .typing_ import is_subclass
 
 
-class RecipeMerger:
-    def __init__(
-        self, *,
-        models_dir: Optional[pathlib.Path | str | List[pathlib.Path | str]] = None,
-        default_device: Optional[str] = "cpu",
-        default_dtype: Optional[torch.dtype] = torch.float64,
-        tqdm: type = tqdm,
-    ):
-        if models_dir is None:
-            models_dir = []
-        if not isinstance(models_dir, List):
-            models_dir = [models_dir]
-        for i in range(len(models_dir)):
-            if isinstance(models_dir[i], str):
-                models_dir[i] = pathlib.Path(models_dir[i])
-            if models_dir[i] is not None:
-                models_dir[i] = models_dir[i].absolute()
+def merge_and_save(
+    recipe: RecipeNodeOrValue,
+    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
+    fallback_model: Optional[RecipeNodeOrValue] = ...,
+    merge_device: Optional[str | torch.device] = ...,
+    merge_dtype: Optional[torch.dtype] = ...,
+    output_device: Optional[str | torch.device] = ...,
+    output_dtype: Optional[torch.dtype] = ...,
+    threads: Optional[int] = ...,
+    total_buffer_size: int = ...,
+    model_dirs: Iterable[pathlib.Path] = ...,
+    strict_weight_space: bool = ...,
+    check_finite: bool = ...,
+    tqdm: type = ...,
+) -> Optional[MutableMapping[str, torch.Tensor]]:
+    """
+    Merge a recipe graph into a final state dict and save it.
 
-        self.__base_dirs = models_dir
-        self.__default_device = default_device
-        self.__default_dtype = default_dtype
-        self.__tqdm = tqdm
+    This function streams each key from the underlying safetensors or dictionaries,
+    applies all instructions in the `recipe`, and writes the resulting data to `output`.
 
-    def convert(self, recipe: RecipeNode, config: str | ModelConfig):
-        from sd_mecha.conversion import convert
-        return convert(recipe, config, self.__base_dirs)
+    Args:
+        recipe:
+            A `RecipeNode`, python literal, or dictionary describing how to merge or transform multiple models.
+        output (optional):
+            Where to store the merged state dict. Can be a filesystem path (string or
+            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
+            If it is None or omitted, an empty dict is created and returned when the merge completes.
+        fallback_model (optional):
+            A secondary recipe or model to provide values for any keys missing from `recipe`.
+        merge_device (optional):
+            Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
+        merge_dtype (optional):
+            Torch dtype for intermediate merges (e.g., `torch.float32`, `torch.float64`).
+        output_device (optional):
+            Final output device (e.g., "cpu").
+        output_dtype (optional):
+            Final dtype for the saved model.
+        threads (optional):
+            Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
+        total_buffer_size (optional):
+            Total byte size of the buffers for all safetensors state dicts (input and output).
+        model_dirs (optional):
+            One or more directories to search for model files if `recipe` references relative paths.
+        strict_weight_space (optional):
+            If True, verifies that merges occur in "weight" space. If False, merges can happen
+            in other merge spaces (like "delta" or "param").
+        check_finite (optional):
+            If True, warns if any non-finite values appear in the final merged tensors.
+        tqdm (optional):
+            A custom progress-bar factory. By default, uses `tqdm.tqdm`.
 
-    def merge_and_save(
-        self,
-        recipe: merge_methods.RecipeNodeOrValue,
-        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = "merge.safetensors",
-        fallback_model: Optional[merge_methods.RecipeNodeOrValue] = None,
-        save_device: Optional[str | torch.device] = "cpu",
-        save_dtype: Optional[torch.dtype] = torch.float16,
-        threads: Optional[int] = None,
-        total_buffer_size: int = 2**28,
-        strict_weight_space: bool = True,
-        check_finite: bool = True,
-    ):
-        recipe = merge_methods.value_to_node(recipe)
-        if fallback_model is not None:
-            recipe = recipe | fallback_model
+    Returns:
+        None, or the in-memory dictionary if `output` is either a mutable mapping or None.
+    """
+    if output is ...:
+        output = None
+    if fallback_model is ...:
+        fallback_model = None
+    if merge_device is ...:
+        merge_device = "cpu"
+    if merge_dtype is ...:
+        merge_dtype = torch.float64
+    if output_device is ...:
+        output_device = "cpu"
+    if output_dtype is ...:
+        output_dtype = torch.float16
+    if threads is ...:
+        threads = None
+    if total_buffer_size is ...:
+        total_buffer_size = 2**28
+    if model_dirs is ...:
+        model_dirs = ()
+    else:
+        model_dirs = list(model_dirs)
+    if strict_weight_space is ...:
+        strict_weight_space = True
+    if check_finite is ...:
+        check_finite = True
+    if tqdm is ...:
+        tqdm = tqdm_original
 
-        if self.__default_device is not None or self.__default_dtype is not None:
-            recipe = recipe.accept(CastInputDicts(self.__default_device, self.__default_dtype))
+    recipe = value_to_node(recipe)
+    if fallback_model is not None:
+        recipe = recipe | fallback_model
 
-        if save_device is not None or save_dtype is not None:
-            recipe = recipe.to(device=save_device, dtype=save_dtype)
+    if merge_device is not None or merge_dtype is not None:
+        recipe = recipe.accept(CastInputDicts(merge_device, merge_dtype))
 
-        if threads is not None and (threads < 0 or not isinstance(threads, int)):
-            raise RuntimeError("threads should be a non-negative integer or None")
+    if output_device is not None or output_dtype is not None:
+        recipe = recipe.to(device=output_device, dtype=output_dtype)
 
-        total_files_open = (
-            recipe.accept(recipe_nodes.ModelsCountVisitor()) +
-            int(isinstance(output, (str, pathlib.Path)))
-        )
-        buffer_size_per_file = total_buffer_size // max(1, total_files_open)
-        if threads is None:
-            threads = min(max(total_files_open, 2), os.cpu_count(), 8)
+    if threads is not None and (threads < 0 or not isinstance(threads, int)):
+        raise RuntimeError("threads should be a non-negative integer or None")
 
-        with open_input_dicts(recipe, self.__base_dirs, buffer_size_per_file):
-            model_config = recipe.model_config
-            if strict_weight_space and recipe.merge_space != "weight":
-                raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
+    total_files_open = (
+        recipe.accept(recipe_nodes.ModelsCountVisitor()) +
+        int(isinstance(output, (str, pathlib.Path)))
+    )
+    buffer_size_per_file = total_buffer_size // max(1, total_files_open)
+    if threads is None:
+        threads = min(max(total_files_open, 2), os.cpu_count(), 8)
 
-            recipe_keys = model_config.keys
-            output = self.__normalize_output_to_dict(
+    if threads == 0:
+        thread_local_data = SimpleNamespace()
+        executor = ThisThreadExecutor()
+    else:
+        thread_local_data = threading.local()
+        executor = ThreadPoolExecutor(max_workers=threads)
+
+    with open_input_dicts(recipe, model_dirs, buffer_size_per_file):
+        model_config = recipe.model_config
+        if strict_weight_space and recipe.merge_space != "weight":
+            raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
+
+        buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
+        recipe_keys = model_config.keys
+        with (
+            executor,
+            tqdm(total=len(recipe_keys), desc="Merging recipe") as progress,
+            _get_output_dict(
                 output,
                 recipe_keys,
                 recipe_serializer.serialize(recipe),
-                buffer_size_per_file // max(1, threads),
-            )
-            if threads == 0:
-                thread_local_data = SimpleNamespace()
-                executor = ThisThreadExecutor()
-            else:
-                thread_local_data = threading.local()
-                executor = ThreadPoolExecutor(max_workers=threads)
+                model_dirs,
+                buffer_size_per_file_per_thread,
+            ) as output_dict,
+        ):
+            futures = []
+            for key in recipe_keys:
+                fn = recipe.accept
+                fn = _track_output(fn, output_dict, key, check_finite)
+                fn = _track_progress(fn, key, recipe_keys[key].shape, progress)
+                fn = _wrap_thread_context(fn, thread_local_data)
+                futures.append(executor.submit(fn, KeyMergeVisitor(key)))
 
-            progress = self.__tqdm(total=len(recipe_keys), desc="Merging recipe")
-            with executor:
-                futures = []
-                for key in recipe_keys:
-                    fn = recipe.accept
-                    fn = self.__track_output(fn, output, key, check_finite)
-                    fn = self.__track_progress(fn, key, recipe_keys[key].shape, progress)
-                    fn = self.__wrap_thread_context(fn, thread_local_data)
-                    futures.append(executor.submit(fn, KeyMergeVisitor(key)))
+            for future in as_completed(futures):
+                if future.exception() is not None:
+                    for future_to_cancel in futures:
+                        future_to_cancel.cancel()
+                    raise future.exception()
+                future.result()
 
-                for future in as_completed(futures):
-                    if future.exception() is not None:
-                        for future_to_cancel in futures:
-                            future_to_cancel.cancel()
-                        raise future.exception()
-                    future.result()
+            if isinstance(output_dict, MutableMapping):
+                return output_dict
 
-            progress.close()
-            if isinstance(output, OutSafetensorsDict):
-                output.close()
 
-    def __normalize_output_to_dict(
-        self,
-        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str,
-        merged_header: Mapping[str, TensorMetadata],
-        serialized_recipe: str,
-        buffer_size_per_thread: int,
-    ):
-        if isinstance(output, (str, pathlib.Path)):
-            if not isinstance(output, pathlib.Path):
-                output = pathlib.Path(output)
-            if not output.is_absolute():
-                for base_dir in self.__base_dirs:
-                    path_attempt = base_dir / output
-                    if path_attempt.exists():
-                        output = path_attempt
-                        break
-            logging.info(f"Saving to {output}")
+@contextlib.contextmanager
+def _get_output_dict(
+    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
+    merged_header: Mapping[str, TensorMetadata],
+    serialized_recipe: str,
+    model_dirs: Iterable[pathlib.Path],
+    buffer_size_per_thread: int,
+):
+    if isinstance(output, (str, pathlib.Path)):
+        if not isinstance(output, pathlib.Path):
+            output = pathlib.Path(output)
+        if not output.is_absolute():
+            for model_dir in model_dirs:
+                output = model_dir / output
+                break
+        logging.info(f"Saving to {output}")
 
-            output = OutSafetensorsDict(
-                output,
-                merged_header,
-                serialized_recipe,
-                buffer_size_per_thread,
-            )
-        return output
+        streamed_output = OutSafetensorsDict(
+            output,
+            merged_header,
+            serialized_recipe,
+            buffer_size_per_thread,
+        )
+        try:
+            yield streamed_output
+        finally:
+            streamed_output.close()
+    else:
+        if output is None:
+            output = {}
+        yield output
 
-    def __track_output(self, f, output, key, check_finite: bool):
-        @functools.wraps(f)
-        def track_output(*args, **kwargs):
-            try:
-                res = f(*args, **kwargs)
-                if check_finite and isinstance(res, torch.Tensor) and not res.isfinite().all():
-                    logging.warning(f"there are non finite values in key '{key}'")
-                output[key] = res
-            except StateDictKeyError as k:
-                logging.debug(f"skipping key {k}")
-        return track_output
 
-    def __track_progress(self, f, key, key_shape, progress):
-        @functools.wraps(f)
-        def track_progress(*args, **kwargs):
-            progress.set_postfix({"key": key} | ({"shape": list(key_shape)} if key_shape is not None else {}))
-            res = f(*args, **kwargs)
-            progress.update()
-            return res
-        return track_progress
+def _track_output(fn, output, key, check_finite: bool):
+    @functools.wraps(fn)
+    def track_output(*args, **kwargs):
+        try:
+            res = fn(*args, **kwargs)
+            if check_finite and isinstance(res, torch.Tensor) and not res.isfinite().all():
+                logging.warning(f"there are non finite values in key '{key}'")
+            output[key] = res
+        except StateDictKeyError as k:
+            logging.debug(f"skipping key {k}")
+    return track_output
 
-    def __wrap_thread_context(self, f, ctx):
-        @functools.wraps(f)
-        def thread_context(*args, **kwargs):
-            if torch.cuda.is_available():
-                if not hasattr(ctx, 'cuda_stream'):
-                    setattr(ctx, "cuda_stream", torch.cuda.Stream())
-                with torch.cuda.stream(ctx.cuda_stream):
-                    return f(*args, **kwargs)
-            else:
-                return f(*args, **kwargs)
 
-        return thread_context
+def _track_progress(fn, key, key_shape, progress):
+    @functools.wraps(fn)
+    def track_progress(*args, **kwargs):
+        progress.set_postfix({"key": key} | ({"shape": list(key_shape)} if key_shape is not None else {}))
+        res = fn(*args, **kwargs)
+        progress.update()
+        return res
+    return track_progress
+
+
+def _wrap_thread_context(fn, ctx):
+    @functools.wraps(fn)
+    def thread_context(*args, **kwargs):
+        if torch.cuda.is_available():
+            if not hasattr(ctx, 'cuda_stream'):
+                setattr(ctx, "cuda_stream", torch.cuda.Stream())
+            with torch.cuda.stream(ctx.cuda_stream):
+                return fn(*args, **kwargs)
+        else:
+            return fn(*args, **kwargs)
+
+    return thread_context
 
 
 class ThisThreadExecutor(nullcontext):
@@ -193,17 +249,25 @@ class ThisThreadExecutor(nullcontext):
 
 
 @contextlib.contextmanager
-def open_input_dicts(recipe: recipe_nodes.RecipeNode, base_dirs: Iterable[pathlib.Path] = (), buffer_size_per_dict: int = 2**28):
-    recipe.accept(LoadInputDictsVisitor(base_dirs, buffer_size_per_dict))
-    yield recipe
-    recipe.accept(CloseInputDictsVisitor())
-    gc.collect()
-    torch.cuda.empty_cache()
+def open_input_dicts(
+    recipe: recipe_nodes.RecipeNode,
+    model_dirs: Iterable[pathlib.Path] = (),
+    buffer_size_per_dict: int = 0,
+    empty_cuda_cache: bool = False,
+):
+    try:
+        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict))
+        yield recipe
+    finally:
+        recipe.accept(CloseInputDictsVisitor())
+        if empty_cuda_cache:
+            gc.collect()
+            torch.cuda.empty_cache()
 
 
 @dataclasses.dataclass
 class LoadInputDictsVisitor(RecipeVisitor):
-    base_dirs: Iterable[pathlib.Path]
+    model_dirs: Iterable[pathlib.Path]
     buffer_size_per_dict: int
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
@@ -233,7 +297,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         if not isinstance(path, pathlib.Path):
             path = pathlib.Path(path)
         if not path.is_absolute():
-            for base_dir in self.base_dirs:
+            for base_dir in self.model_dirs:
                 path_attempt = base_dir / path
                 if path_attempt.exists():
                     path = path_attempt
