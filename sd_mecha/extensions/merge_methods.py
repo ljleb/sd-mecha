@@ -15,7 +15,8 @@ from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic
 from ..typing_ import is_subclass
 
 
-T = TypeVar('T', torch.Tensor, *typing.get_args(NonDictLiteralValue))
+NonDictLiteralValueOrTensor = NonDictLiteralValue | torch.Tensor
+T = TypeVar('T', *typing.get_args(NonDictLiteralValueOrTensor))
 
 
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
@@ -32,7 +33,7 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
 @dataclasses.dataclass
 class ParameterData:
     interface: type | TypeVar
-    merge_space: Optional[AnyMergeSpace]
+    merge_space: Optional[MergeSpace | AnyMergeSpace]
     model_config: Optional[ModelConfig]
 
 
@@ -41,7 +42,29 @@ class ParameterType:
     data: ParameterData
 
 
-def Parameter(interface: type | TypeVar, merge_space: Optional[str | Iterable[str] | AnyMergeSpace] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+def Parameter(
+    interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLiteralValueOrTensor]] | TypeVar,
+    merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
+    model_config: Optional[ModelConfig | str] = None,
+) -> type[Any]:
+    """
+    Describe a parameter to a merge method with its type, optional merge space, and optional model config.
+
+    `Parameter` is used in function type hints to specify how `@merge_method` should handle each
+    argument. For example, `Parameter(Tensor, "weight")` means "this argument is a tensor
+    in weight space."
+
+    Args:
+        interface (type):
+            The Python or Torch type of this parameter.
+        merge_space (str or Iterable[str], optional):
+            Which merge space(s) are valid for this parameter (e.g., "weight", "delta").
+        model_config (str or ModelConfig, optional):
+            A specific model config or config identifier if it must match a certain architecture.
+
+    Returns:
+        A special type annotation object used by `@merge_method` to interpret function arguments.
+    """
     supported_types = [StateDict] + list(T.__constraints__)
     if type(None) in (typing.get_args(interface) or ()):
         interface = typing.get_args(interface)[0]
@@ -49,7 +72,7 @@ def Parameter(interface: type | TypeVar, merge_space: Optional[str | Iterable[st
     if not isinstance(interface, TypeVar) and not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
         raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
-    if isinstance(merge_space, str):
+    if isinstance(merge_space, (str, MergeSpace)):
         merge_space = (merge_space,)
     if isinstance(merge_space, Iterable):
         merge_space = {
@@ -70,19 +93,32 @@ class ReturnType:
     data: ParameterData
 
 
-def Return(interface: type | TypeVar, merge_space: Optional[str | MergeSpace | MergeSpaceSymbol] = None, model_config: Optional[str | ModelConfig] = None) -> type[Any]:
+def Return(
+    interface: type[NonDictLiteralValueOrTensor] | TypeVar,
+    merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
+    model_config: Optional[ModelConfig | str] = None,
+) -> type[Any]:
+    """
+    Describe the return type of a merge method, optionally including its merge space and model config.
+
+    Args:
+        interface (type):
+            The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
+        merge_space (MergeSpace, str or MergeSpaceSymbol, optional):
+            The single merge space valid for the return, or a symbol that depends on the input spaces.
+        model_config (ModelConfig or str, optional):
+            The model config that the returned tensor or dictionary should belong to.
+
+    Returns:
+        A type annotation object used by `@merge_method` for the return signature.
+    """
     if not isinstance(interface, TypeVar):
         supported_types = list(T.__constraints__)
         if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
             raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
 
-    if isinstance(merge_space, (str, MergeSpace)):
-        merge_space = (merge_space,)
-    if isinstance(merge_space, Iterable):
-        merge_space = {
-            merge_spaces.resolve(m) if isinstance(m, str) else m
-            for m in merge_space
-        }
+    if isinstance(merge_space, str):
+        merge_space = merge_spaces.resolve(merge_space)
 
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
@@ -118,7 +154,7 @@ class FunctionArgs(Generic[P]):
         if args_count is None:
             args_count = n_args + 1
 
-        return (args_count - n_args) * int(self.has_varargs())
+        return max(0, args_count - n_args) * int(self.has_varargs())
 
     def has_varargs(self):
         return self.vararg != FunctionArgs.EMPTY_VARARGS
@@ -128,8 +164,8 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, f: Callable, identifier: str):
-        self.__wrapped__ = f
+    def __init__(self, fn: Callable, identifier: str):
+        self.__wrapped__ = fn
         self.__f_spec = inspect.getfullargspec(self.__wrapped__)
         self.__f_hints = typing.get_type_hints(self.__wrapped__)
         self.identifier = identifier
@@ -201,17 +237,24 @@ class MergeMethod:
     def create_recipe(self, *args, **kwargs):
         params = self.get_param_names()
         defaults = self.get_default_args()
+        first_default_arg = len(params.args) - len(defaults.args)
 
         first_arg_as_kwarg = min(itertools.chain(
             (i for i, k in enumerate(kwargs) if k in params.args),
             (float('inf'),)
         ))
+
+        def ensure_positive(v: int):
+            if v < 0:
+                raise RuntimeError
+            return v
+
         args = [
             args[i] if i < first_arg_as_kwarg
             else kwargs.pop(params.args[i]) if params.args[i] in kwargs
-            else defaults.args[i]
+            else defaults.args[ensure_positive(i - first_default_arg)]
             for i in range(len(params.args))
-        ]
+        ] + list(args[len(params.args):])
 
         max_args = len(params.args) if not params.has_varargs() else float("inf")
         min_args = len(params.args) - len(defaults.args)
@@ -292,23 +335,27 @@ class MergeMethod:
             else:
                 resolved_input_spaces[merge_space_param] = merge_space_arg
 
-        merge_space_param = self.__get_return_data(self.__f_hints.get("return")).merge_space
+        merge_space_param: MergeSpace | MergeSpaceSymbol = self.__get_return_data(self.__f_hints.get("return")).merge_space
         if isinstance(merge_space_param, MergeSpaceSymbol):
             return resolved_input_spaces[merge_space_param]
         if merge_space_param is None:
             if self.default_merge_space in resolved_input_spaces:
                 return resolved_input_spaces[self.default_merge_space]
+            any_input_merge_space = next(iter(input_merge_spaces.values()))
+            if all(v == any_input_merge_space for v in input_merge_spaces.values()):
+                return any_input_merge_space
             raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
-        return next(iter(merge_space_param))  # get the only value
+        return merge_space_param
 
     def get_input_merge_spaces(self) -> FunctionArgs[AnyMergeSpace]:
         params = self.get_params()
         names = self.get_param_names()
         defaults = self.get_default_args()
 
-        def get_merge_space_or_default(merge_space, has_default):
+        def get_merge_space_or_default(param, has_default):
+            merge_space = param.merge_space
             if merge_space is None:
-                if has_default:
+                if has_default or is_subclass(param.interface, NonDictLiteralValue):
                     merge_space = {merge_spaces.resolve("param")}
                 else:
                     merge_space = self.default_merge_space
@@ -316,8 +363,8 @@ class MergeMethod:
 
         args_merge_spaces = []
         for i in range(len(names.args)):
-            merge_space = params.args[i].merge_space
-            merge_space = get_merge_space_or_default(merge_space, i >= len(names.args) - len(defaults.args))
+            param = params.args[i]
+            merge_space = get_merge_space_or_default(param, i >= len(names.args) - len(defaults.args))
             args_merge_spaces.append(merge_space)
 
         varargs_merge_space = FunctionArgs.EMPTY_VARARGS
@@ -328,8 +375,8 @@ class MergeMethod:
 
         kwargs_merge_spaces = {}
         for name in names.kwargs:
-            merge_space = params.kwargs[name].merge_space
-            merge_space = get_merge_space_or_default(merge_space, name in defaults.kwargs)
+            param = params.kwargs[name]
+            merge_space = get_merge_space_or_default(param, name in defaults.kwargs)
             kwargs_merge_spaces[name] = merge_space
 
         return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
@@ -419,7 +466,7 @@ class InferModelConfigVisitor(RecipeVisitor):
 
     def visit_literal(self, node: LiteralRecipeNode):
         if isinstance(node.value, dict) and node.model_config is None:
-            from sd_mecha.recipe_merger import infer_model_configs
+            from sd_mecha.recipe_merging import infer_model_configs
             possible_configs = infer_model_configs(node.value)
             if self.default_model_config in possible_configs:
                 model_config = self.default_model_config
@@ -451,14 +498,36 @@ F = TypeVar("F", bound=Callable)
 
 
 def merge_method(
-    f: Optional[F] = None, *,
+    fn: Optional[F] = None, *,
     identifier: Optional[str] = None,
     register: bool = True,
     is_conversion: bool = False,
-) -> F:
-    if f is None:
-        return lambda f: __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
-    return __recipe_impl(f, identifier=identifier, register=register, is_conversion=is_conversion)
+) -> MergeRecipeNode | Callable[[F], MergeRecipeNode]:
+    """
+    Decorator to define a custom merge method.
+
+    This converts the decorated function into a `MergeMethod` object that can be used in
+    recipe graphs. The type hints in the function signature determine which arguments are
+    considered "weight" or "param" merges, and so on.
+
+    Args:
+        fn (callable, optional):
+            The function to decorate. If omitted, the decorator can be used with named
+            arguments (e.g. `@merge_method(is_conversion=True)`).
+        identifier (str, optional):
+            An explicit name to register this method under. By default, uses the function’s name.
+        register (bool):
+            If True (default), registers the merge method globally so it can be accessed by `merge_methods.resolve()`.
+        is_conversion (bool):
+            If True, marks this merge method as a config-conversion function. That means `convert()`
+            will consider it as an implicit transition when converting between different model configs.
+
+    Returns:
+        A `MergeMethod` object or a decorator.
+    """
+    if fn is None:
+        return lambda fn: __recipe_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion)
+    return __recipe_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion)
 
 
 def __recipe_impl(
@@ -512,11 +581,34 @@ def get_all_converters() -> List[MergeMethod]:
 
 
 def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) -> RecipeNode:
+    """
+    Convert a literal or path into a `RecipeNode`, if it isn't one already.
+
+    This helper is primarily used internally when constructing recipe graphs. For instance,
+    if you pass a float to a merge method where a tensor is expected, `value_to_node` wraps
+    that float in a node that will automatically convert it into a tensor when broadcasting
+    over state dict keys.
+
+    Args:
+        node_or_value:
+            The input that should become a `RecipeNode`.
+        expected_type (type, optional):
+            The target type that the value should be converted to.
+
+    Returns:
+        A `RecipeNode` instance, if conversion is successful.
+    """
     if isinstance(node_or_value, RecipeNode):
         return node_or_value
 
     if not isinstance(node_or_value, RecipeNodeOrValue):
         raise TypeError(f"type of 'node_or_value' should be one of {typing.get_args(RecipeNodeOrValue)}, not {type(node_or_value)}")
+
+    if expected_type is None:
+        if isinstance(node_or_value, Mapping):
+            expected_type = next(iter(node_or_value.values()))
+        else:
+            expected_type = type(node_or_value)
 
     numeric = int | float
 

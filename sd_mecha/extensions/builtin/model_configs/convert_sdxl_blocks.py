@@ -17,7 +17,7 @@ T = TypeVar("T")
 # - https://github.com/vladmandic/automatic/blob/e22d0789bddd3894364b0d59a4c9b3e456e89079/modules/merging/merge_utils.py#L64
 @merge_method(is_conversion=True)
 def convert_sdxl_blocks_to_sgm(
-    blocks: Parameter(StateDict[T], model_config="sdxl_blocks-supermerger"),
+    blocks: Parameter(StateDict[T], model_config="sdxl-supermerger_blocks"),
     **kwargs,
 ) -> Return(T, model_config="sdxl-sgm"):
     sgm_key = kwargs["key"]

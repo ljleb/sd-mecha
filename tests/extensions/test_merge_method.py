@@ -19,9 +19,9 @@ def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A]):
 
     @merge_method(register=False)
     def compare_value(
-        actual: Parameter(t, model_config="sdxl_blocks-supermerger"),
+        actual: Parameter(t, model_config="sdxl-supermerger_blocks"),
         **kwargs,
-    ) -> Return(return_t, model_config="sdxl_blocks-supermerger"):
+    ) -> Return(return_t, model_config="sdxl-supermerger_blocks"):
         nonlocal expected
 
         try:
@@ -42,14 +42,14 @@ def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A]):
 
         return actual
 
-    merger = RecipeMerger(default_dtype=None, default_device=None)
-    merger.merge_and_save(
+    sd_mecha.merge_and_save(
         compare_value(actual_literal),
-        output={},
         strict_weight_space=False,
         threads=0,
-        save_device=None,
-        save_dtype=None,
+        merge_device=None,
+        merge_dtype=None,
+        output_device=None,
+        output_dtype=None,
     )
 
 
