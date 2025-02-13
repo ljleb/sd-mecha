@@ -58,15 +58,12 @@ Here's an example script that merges three models:
 import sd_mecha
 
 # create the merge plan
-model_a = sd_mecha.model("model_a.safetensors")
-model_b = sd_mecha.model("model_b.safetensors")
+model_a = sd_mecha.model("path/to/model_a.safetensors")
+model_b = sd_mecha.model("path/to/model_b.safetensors")
 recipe = sd_mecha.weighted_sum(model_a, model_b, alpha=0.5)
 
-# initialize merger
-merger = sd_mecha.RecipeMerger("/path/to/models")
-
 # merge!
-merger.merge_and_save(recipe, "output.safetensors")
+sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
 ```
 
 See the [examples](/examples) directory for more examples.
