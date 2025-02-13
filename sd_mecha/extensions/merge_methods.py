@@ -237,15 +237,22 @@ class MergeMethod:
     def create_recipe(self, *args, **kwargs):
         params = self.get_param_names()
         defaults = self.get_default_args()
+        first_default_arg = len(params.args) - len(defaults.args)
 
         first_arg_as_kwarg = min(itertools.chain(
             (i for i, k in enumerate(kwargs) if k in params.args),
             (float('inf'),)
         ))
+
+        def ensure_positive(v: int):
+            if v < 0:
+                raise RuntimeError
+            return v
+
         args = [
             args[i] if i < first_arg_as_kwarg
             else kwargs.pop(params.args[i]) if params.args[i] in kwargs
-            else defaults.args[i]
+            else defaults.args[ensure_positive(i - first_default_arg)]
             for i in range(len(params.args))
         ]
 

@@ -184,10 +184,8 @@ def _get_output_dict(
             output = pathlib.Path(output)
         if not output.is_absolute():
             for model_dir in model_dirs:
-                path_attempt = model_dir / output
-                if path_attempt.exists():
-                    output = path_attempt
-                    break
+                output = model_dir / output
+                break
         logging.info(f"Saving to {output}")
 
         streamed_output = OutSafetensorsDict(
