@@ -31,7 +31,7 @@ def weighted_sum(
     return weighted_sum_impl(a[key], b[key], alpha)
 
 
-def weighted_sum_impl(a: Tensor | np.array, b: Tensor | np.array, alpha: Tensor | np.array) -> Tensor | np.array:
+def weighted_sum_impl(a: Tensor | np.ndarray, b: Tensor | np.ndarray, alpha: Tensor | np.ndarray) -> Tensor | np.ndarray:
     return (1-alpha)*a + alpha*b
 
 
