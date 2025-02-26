@@ -38,9 +38,6 @@ from .merge_method_wrappers import (
 )
 from .helpers import model, literal, serialize_and_save, Defaults, set_log_level
 from . import recipe_nodes, extensions
-import torch
-# greedy load linalg module, see https://github.com/pytorch/pytorch/issues/90613
-torch.linalg.inv(torch.ones((1, 1), device="cuda" if torch.cuda.is_available() else "cpu"))
 
 
 def _load_builtin_extensions():
