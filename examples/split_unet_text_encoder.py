@@ -15,7 +15,7 @@ unet_recipe = sd_mecha.weighted_sum(
 
 recipe = sd_mecha.pick_component(unet_recipe, "diffuser") | text_encoder_recipe
 
-merger = sd_mecha.RecipeMerger(
+merger = sd_mecha.Defaults(
     model_dirs=r"E:\sd\models\Stable-diffusion",
 )
 

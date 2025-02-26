@@ -6,7 +6,7 @@ recipe = sd_mecha.weighted_sum(
     sd_mecha.model("ghostmix_v20Bakedvae.safetensors"),
     sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors"),
 )
-merger = sd_mecha.RecipeMerger(models_dir=r"E:\sd\models\Stable-diffusion")
+merger = sd_mecha.Defaults(models_dir=r"E:\sd\models\Stable-diffusion")
 
 state_dict = {}
 merger.merge_and_save(recipe, output=state_dict)

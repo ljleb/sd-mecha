@@ -1,8 +1,9 @@
+import contextlib
 import logging
 import pathlib
 import torch
 from .extensions.model_configs import ModelConfig
-from .recipe_merging import merge_and_save
+from .recipe_merging import merge_and_save, open_input_dicts
 from .conversion import convert
 from .recipe_serializer import serialize
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
@@ -82,16 +83,9 @@ def set_log_level(level: str = "INFO"):
     logging.basicConfig(format="%(levelname)s: %(message)s", level=level)
 
 
-class RecipeMerger:
+class Defaults:
     """
-    A stateful object that wraps around typical tasks, allowing you to specify
-    global defaults like merge device or buffer sizes once.
-
-    Methods:
-        convert(recipe, config):
-            Convert a recipe from one config to another using `sd_mecha.convert`.
-        merge_and_save(recipe, output, ...):
-            Merge a recipe and save to disk or memory, using the defaults set in this instance.
+    Convenience wrapper around common recipe operations with custom default values.
     """
 
     def __init__(
@@ -108,8 +102,6 @@ class RecipeMerger:
         tqdm: type = ...,
     ):
         """
-        Initialize a `RecipeMerger` with default settings for merges and conversions.
-
         Args:
             merge_device (optional):
                 Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
