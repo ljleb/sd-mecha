@@ -706,7 +706,9 @@ def find_della_dropout(delta, probability, della_eps, generator):
         delta_i = (rank_per_element / ne - ((ne + 1) / (ne * 2))) * della_eps 
     else:
         delta_i = 0.0
-    return torch.bernoulli(p_min + delta_i, generator=generator)
+
+    #250228: It throw error. Strange.
+    return torch.bernoulli(torch.clamp(torch.nan_to_num(p_min + delta_i, nan=1e-20), min=1e-20, max=1), generator=generator)
 
 def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
     if np.isclose(overlap, round(overlap)):
