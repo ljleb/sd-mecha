@@ -158,10 +158,10 @@ def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None
 
     if isinstance(output, str):
         output = pathlib.Path(output)
-    output = output.absolute()
-
-    logging.info(f"Saving recipe to {output}")
-    output.write_text(serialized)
+    if output is not None:
+        output = output.absolute()
+        logging.info(f"Saving recipe to {output}")
+        output.write_text(serialized)
 
     return serialized
 
