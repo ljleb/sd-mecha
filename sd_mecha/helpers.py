@@ -138,7 +138,6 @@ class Defaults:
     def merge(
         self,
         recipe: RecipeNodeOrValue,
-        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
         fallback_model: Optional[RecipeNodeOrValue] = ...,
         merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
@@ -150,6 +149,8 @@ class Defaults:
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
         tqdm: type = ...,
+        *,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
     ) -> Optional[MutableMapping[str, torch.Tensor]]:
         if merge_device is ...:
             merge_device = self.__merge_device
@@ -173,7 +174,6 @@ class Defaults:
 
         return merge(
             recipe,
-            output,
             fallback_model,
             merge_device,
             merge_dtype,
@@ -185,6 +185,7 @@ class Defaults:
             strict_weight_space,
             check_finite,
             tqdm,
+            output=output,
         )
 
     @staticmethod

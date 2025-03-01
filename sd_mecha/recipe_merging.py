@@ -26,7 +26,6 @@ from .typing_ import is_subclass
 
 def merge(
     recipe: RecipeNodeOrValue,
-    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
     fallback_model: Optional[RecipeNodeOrValue] = ...,
     merge_device: Optional[str | torch.device] = ...,
     merge_dtype: Optional[torch.dtype] = ...,
@@ -38,6 +37,8 @@ def merge(
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
     tqdm: type = ...,
+    *,
+    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
     Merge a recipe graph into a final state dict and save it.
@@ -48,10 +49,6 @@ def merge(
     Args:
         recipe:
             A `RecipeNode`, python literal, or dictionary describing how to merge or transform multiple models.
-        output (optional):
-            Where to store the merged state dict. Can be a filesystem path (string or
-            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
-            If it is None or omitted, an empty dict is created and returned when the merge completes.
         fallback_model (optional):
             A secondary recipe or model to provide values for any keys missing from `recipe`.
         merge_device (optional):
@@ -75,6 +72,10 @@ def merge(
             If True, warns if any non-finite values appear in the final merged tensors.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
+        output (optional):
+            Where to store the merged state dict. Can be a filesystem path (string or
+            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
+            If it is None or omitted, an empty dict is created and returned when the merge completes.
 
     Returns:
         None, or the in-memory dictionary if `output` is either a mutable mapping or None.
