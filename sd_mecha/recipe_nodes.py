@@ -3,9 +3,8 @@ import itertools
 import pathlib
 import torch
 from .extensions import model_configs, merge_methods, merge_spaces
-from typing import Optional, Dict, Tuple
-
 from .extensions.merge_spaces import MergeSpace
+from typing import Optional, Dict, Tuple
 
 
 class RecipeNode(abc.ABC):
