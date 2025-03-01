@@ -41,7 +41,7 @@ def merge(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
-    Merge a recipe graph into a final state dict and save it.
+    Merge a recipe graph into a final state dict and optionally save it to a file.
 
     This function streams each key from the underlying safetensors or dictionaries,
     applies all instructions in the `recipe`, and writes the resulting data to `output`.
@@ -78,7 +78,7 @@ def merge(
             If it is None or omitted, an empty dict is created and returned when the merge completes.
 
     Returns:
-        None, or the in-memory dictionary if `output` is either a mutable mapping or None.
+        None, or the in-memory dictionary if `output` is either a MutableMapping or None.
     """
     if output is ...:
         output = None
