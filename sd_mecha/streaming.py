@@ -375,20 +375,24 @@ def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
 
 
 DTYPE_MAPPING = {
-    'F64': (torch.float64, 8),
-    'I64': (torch.int64, 8),
-    'U64': (torch.uint64, 8),
-    'F32': (torch.float32, 4),
-    'I32': (torch.int32, 4),
-    'U32': (torch.uint32, 4),
-    'F16': (torch.float16, 2),
-    'BF16': (torch.bfloat16, 2),
-    'I16': (torch.int16, 2),
-    'U16': (torch.uint16, 2),
-    'I8': (torch.int8, 1),
-    'U8': (torch.uint8, 1),
+    "F64": (torch.float64, 8),
+    "I64": (torch.int64, 8),
+    "F32": (torch.float32, 4),
+    "I32": (torch.int32, 4),
+    "F16": (torch.float16, 2),
+    "BF16": (torch.bfloat16, 2),
+    "I16": (torch.int16, 2),
+    "I8": (torch.int8, 1),
     "F8_E4M3": (torch.float8_e4m3fn, 1),
     "F8_E5M2": (torch.float8_e5m2, 1),
     "BOOL": (torch.bool, 1),
 }
+if hasattr(torch, "uint8"):
+    DTYPE_MAPPING |= {
+        "U64": (torch.uint64, 8),
+        "U32": (torch.uint32, 4),
+        "U16": (torch.uint16, 2),
+        "U8": (torch.uint8, 1),
+    }
+
 DTYPE_REVERSE_MAPPING = {v: (k, b) for k, (v, b) in DTYPE_MAPPING.items()}
