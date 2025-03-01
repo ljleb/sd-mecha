@@ -13,7 +13,7 @@ import torch
 from .extensions import model_configs, model_formats
 from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
 from .extensions.model_configs import ModelConfig
-from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue
+from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, recipe_serializer
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
@@ -147,7 +147,7 @@ def merge_and_save(
             _get_output_dict(
                 output,
                 recipe_keys,
-                recipe_serializer.serialize(recipe),
+                recipe,
                 model_dirs,
                 buffer_size_per_file_per_thread,
             ) as output_dict,
@@ -183,7 +183,7 @@ def fix_torch_threading(device):
 def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
     merged_header: Mapping[str, TensorMetadata],
-    serialized_recipe: str,
+    recipe: RecipeNode,
     model_dirs: Iterable[pathlib.Path],
     buffer_size_per_thread: int,
 ):
@@ -196,6 +196,11 @@ def _get_output_dict(
                 break
         logging.info(f"Saving to {output}")
 
+        try:
+            serialized_recipe = recipe_serializer.serialize(recipe)
+        except TypeError:
+            logging.warning("The recipe graph could not be serialized. The output state dict will not contain the recipe.")
+            serialized_recipe = None
         streamed_output = OutSafetensorsDict(
             output,
             merged_header,
@@ -373,11 +378,11 @@ class KeyMergeVisitor(RecipeVisitor):
                 value = value[self.key]
             except KeyError as e:
                 raise StateDictKeyError(str(e)) from e
-        if isinstance(value, str | int | float | bool | type(None)):
+        if isinstance(value, NonDictLiteralValue):
             return value
         if isinstance(value, RecipeNode):
             return value.accept(self)
-        raise RuntimeError(f"Unexpected literal node value of type {type(value)}")
+        raise TypeError(f"Unexpected literal node value of type {type(value)}")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
         try:

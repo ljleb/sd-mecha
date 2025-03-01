@@ -196,14 +196,14 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
         self,
         file_path: pathlib.Path,
         header: Mapping[str, TensorMetadata],
-        mecha_recipe: str,
+        mecha_recipe: Optional[str],
         minimum_buffer_size: int,
     ):
         self.thread_states = {}
         self.lock = threading.Lock()
 
         self.header = {
-            "__metadata__": {"mecha_recipe": mecha_recipe}
+            "__metadata__": {"mecha_recipe": mecha_recipe} if mecha_recipe is not None else {}
         }
         self.file = file_path.open("wb", buffering=0)
         self.file_path = file_path

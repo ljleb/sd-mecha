@@ -66,7 +66,7 @@ class RecipeNode(abc.ABC):
         return merge_methods.resolve("cast")(self, device=device, dtype=dtype)
 
 
-NonDictLiteralValue = str | int | float | bool | type(None)
+NonDictLiteralValue = str | int | float | bool | torch.Tensor | type(None)
 LiteralValue = NonDictLiteralValue | dict
 RecipeNodeOrValue = RecipeNode | LiteralValue | pathlib.Path
 

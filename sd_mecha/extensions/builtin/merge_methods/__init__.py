@@ -858,6 +858,12 @@ def pick_component(
     component: Parameter(str, "param"),
     **kwargs,
 ) -> Return(T):
+    if component not in a.model_config.components:
+        raise ValueError(
+            f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
+            f"Valid components: {tuple(a.model_config.components)}"
+        )
+
     key = kwargs["key"]
     if key in a.model_config.components[component].keys:
         return a[key]

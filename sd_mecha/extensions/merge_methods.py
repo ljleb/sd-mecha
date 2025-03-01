@@ -15,8 +15,7 @@ from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic
 from ..typing_ import is_subclass
 
 
-NonDictLiteralValueOrTensor = NonDictLiteralValue | torch.Tensor
-T = TypeVar('T', *typing.get_args(NonDictLiteralValueOrTensor))
+T = TypeVar('T', *typing.get_args(NonDictLiteralValue))
 
 
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
@@ -43,7 +42,7 @@ class ParameterType:
 
 
 def Parameter(
-    interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLiteralValueOrTensor]] | TypeVar,
+    interface: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
@@ -94,7 +93,7 @@ class ReturnType:
 
 
 def Return(
-    interface: type[NonDictLiteralValueOrTensor] | TypeVar,
+    interface: type[NonDictLiteralValue] | TypeVar,
     merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
