@@ -13,10 +13,5 @@ unet_recipe = sd_mecha.weighted_sum(
     sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors"),
 )
 
-config = unet_recipe.model_config
-recipe = sd_mecha.weighted_sum(
-    text_encoder_recipe,
-    unet_recipe,
-    alpha=sd_mecha.convert({"BASE": 0}, "sd1-ldm") | 1
-)
-sd_mecha.serialize_and_save(recipe, "recipes/test_split_unet_text_encoder.mecha")
+recipe = sd_mecha.pick_component(unet_recipe, "diffuser") | text_encoder_recipe
+sd_mecha.serialize(recipe, output="recipes/test_split_unet_text_encoder.mecha")

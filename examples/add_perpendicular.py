@@ -8,8 +8,4 @@ recipe = sd_mecha.add_perpendicular(
     sd_mecha.model("pure/v1-5-pruned.safetensors"),
 )
 
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-)
-
-merger.merge_and_save(recipe)
+sd_mecha.merge(recipe, output="result.safetensors")

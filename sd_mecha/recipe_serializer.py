@@ -1,3 +1,4 @@
+import logging
 import pathlib
 from typing import List, Optional, Hashable
 from .extensions import merge_methods
@@ -135,7 +136,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
     return results[-1]
 
 
-def serialize(recipe: RecipeNode) -> str:
+def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None) -> str:
     """
     Convert a recipe graph into a string that captures its merge instructions.
 
@@ -144,6 +145,8 @@ def serialize(recipe: RecipeNode) -> str:
     Args:
         recipe:
             A `RecipeNode` describing the merge.
+        output:
+            Path to the output file to save.
 
     Returns:
         A string representation of the recipe, suitable for writing to a .mecha file.
@@ -151,8 +154,16 @@ def serialize(recipe: RecipeNode) -> str:
     serializer = SerializerVisitor()
     recipe.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
-    body = "\n".join([version_header] + serializer.instructions)
-    return body
+    serialized = "\n".join([version_header] + serializer.instructions)
+
+    if isinstance(output, str):
+        output = pathlib.Path(output)
+    if output is not None:
+        output = output.absolute()
+        logging.info(f"Saving recipe to {output}")
+        output.write_text(serialized)
+
+    return serialized
 
 
 def get_version_header(version: str):
@@ -175,7 +186,8 @@ class SerializerVisitor(RecipeVisitor):
     def visit_model(self, node: ModelRecipeNode) -> str:
         path = self.__serialize_value(str(node.path))
         config = self.__serialize_value(getattr(node.model_config, "identifier", None))
-        line = f"model {path} model_config={config}"
+        merge_space = self.__serialize_value(node.merge_space.identifier)
+        line = f"model {path} model_config={config} merge_space={merge_space}"
         return self.__add_instruction(line)
 
     def visit_merge(self, node: MergeRecipeNode) -> str:

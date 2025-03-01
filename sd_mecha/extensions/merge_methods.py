@@ -6,7 +6,7 @@ import inspect
 import pathlib
 import torch
 import typing
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor, NonDictLiteralValue, RecipeNodeOrValue
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor, NonDictLiteralValue, RecipeNodeOrValue, PythonLiteralValue
 from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
@@ -15,8 +15,7 @@ from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic
 from ..typing_ import is_subclass
 
 
-NonDictLiteralValueOrTensor = NonDictLiteralValue | torch.Tensor
-T = TypeVar('T', *typing.get_args(NonDictLiteralValueOrTensor))
+T = TypeVar('T', *typing.get_args(NonDictLiteralValue))
 
 
 class StateDict(Mapping[str, T], Generic[T], abc.ABC):
@@ -43,7 +42,7 @@ class ParameterType:
 
 
 def Parameter(
-    interface: type[NonDictLiteralValueOrTensor | StateDict[NonDictLiteralValueOrTensor]] | TypeVar,
+    interface: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
@@ -94,7 +93,7 @@ class ReturnType:
 
 
 def Return(
-    interface: type[NonDictLiteralValueOrTensor] | TypeVar,
+    interface: type[NonDictLiteralValue] | TypeVar,
     merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
@@ -343,6 +342,10 @@ class MergeMethod:
                 return resolved_input_spaces[self.default_merge_space]
             any_input_merge_space = next(iter(input_merge_spaces.values()))
             if all(v == any_input_merge_space for v in input_merge_spaces.values()):
+                if isinstance(any_input_merge_space, set):
+                    if len(any_input_merge_space) != 1:
+                        raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
+                    any_input_merge_space = next(iter(any_input_merge_space))
                 return any_input_merge_space
             raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
         return merge_space_param
@@ -355,7 +358,7 @@ class MergeMethod:
         def get_merge_space_or_default(param, has_default):
             merge_space = param.merge_space
             if merge_space is None:
-                if has_default or is_subclass(param.interface, NonDictLiteralValue):
+                if has_default or is_subclass(param.interface, PythonLiteralValue):
                     merge_space = {merge_spaces.resolve("param")}
                 else:
                     merge_space = self.default_merge_space

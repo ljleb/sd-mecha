@@ -2,38 +2,11 @@ import logging
 import pathlib
 import torch
 from .extensions.model_configs import ModelConfig
-from .recipe_merging import merge_and_save
+from .recipe_merging import merge
 from .conversion import convert
-from .recipe_serializer import serialize
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
 from .extensions.merge_methods import NonDictLiteralValue
 from typing import Optional, List, MutableMapping, Iterable
-
-
-def serialize_and_save(
-    recipe: RecipeNode,
-    output_path: pathlib.Path | str,
-):
-    """
-    Serialize a recipe to `.mecha` format and save it to the specified file.
-
-    Args:
-        recipe:
-            A recipe node or dictionary describing the merge instructions.
-        output_path (str or Path):
-            A filesystem path (filename) where the `.mecha` file will be written.
-    """
-    serialized = serialize(recipe)
-
-    if not isinstance(output_path, pathlib.Path):
-        output_path = pathlib.Path(output_path)
-    if not output_path.suffix:
-        output_path = output_path.with_suffix(".mecha")
-    output_path = output_path.absolute()
-
-    logging.info(f"Saving recipe to {output_path}")
-    with open(output_path, "w") as f:
-        f.write(serialized)
 
 
 def model(path: str | pathlib.Path, config: Optional[ModelConfig | str] = None, merge_space: str = "weight") -> ModelRecipeNode:
@@ -82,16 +55,9 @@ def set_log_level(level: str = "INFO"):
     logging.basicConfig(format="%(levelname)s: %(message)s", level=level)
 
 
-class RecipeMerger:
+class Defaults:
     """
-    A stateful object that wraps around typical tasks, allowing you to specify
-    global defaults like merge device or buffer sizes once.
-
-    Methods:
-        convert(recipe, config):
-            Convert a recipe from one config to another using `sd_mecha.convert`.
-        merge_and_save(recipe, output, ...):
-            Merge a recipe and save to disk or memory, using the defaults set in this instance.
+    Convenience wrapper around common recipe operations with custom default values.
     """
 
     def __init__(
@@ -108,8 +74,6 @@ class RecipeMerger:
         tqdm: type = ...,
     ):
         """
-        Initialize a `RecipeMerger` with default settings for merges and conversions.
-
         Args:
             merge_device (optional):
                 Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
@@ -171,10 +135,9 @@ class RecipeMerger:
         model_dirs = self._model_dirs_to_pathlib_list(model_dirs)
         return convert(recipe, config, model_dirs)
 
-    def merge_and_save(
+    def merge(
         self,
         recipe: RecipeNodeOrValue,
-        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
         fallback_model: Optional[RecipeNodeOrValue] = ...,
         merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
@@ -186,6 +149,8 @@ class RecipeMerger:
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
         tqdm: type = ...,
+        *,
+        output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
     ) -> Optional[MutableMapping[str, torch.Tensor]]:
         if merge_device is ...:
             merge_device = self.__merge_device
@@ -207,9 +172,8 @@ class RecipeMerger:
         if check_finite is ...:
             check_finite = self.__check_finite
 
-        return merge_and_save(
+        return merge(
             recipe,
-            output,
             fallback_model,
             merge_device,
             merge_dtype,
@@ -221,6 +185,7 @@ class RecipeMerger:
             strict_weight_space,
             check_finite,
             tqdm,
+            output=output,
         )
 
     @staticmethod

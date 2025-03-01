@@ -13,7 +13,7 @@ import torch
 from .extensions import model_configs, model_formats
 from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
 from .extensions.model_configs import ModelConfig
-from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue
+from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, recipe_serializer
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
@@ -24,9 +24,8 @@ from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dic
 from .typing_ import is_subclass
 
 
-def merge_and_save(
+def merge(
     recipe: RecipeNodeOrValue,
-    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
     fallback_model: Optional[RecipeNodeOrValue] = ...,
     merge_device: Optional[str | torch.device] = ...,
     merge_dtype: Optional[torch.dtype] = ...,
@@ -38,9 +37,11 @@ def merge_and_save(
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
     tqdm: type = ...,
+    *,
+    output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
-    Merge a recipe graph into a final state dict and save it.
+    Merge a recipe graph into a final state dict and optionally save it to a file.
 
     This function streams each key from the underlying safetensors or dictionaries,
     applies all instructions in the `recipe`, and writes the resulting data to `output`.
@@ -48,10 +49,6 @@ def merge_and_save(
     Args:
         recipe:
             A `RecipeNode`, python literal, or dictionary describing how to merge or transform multiple models.
-        output (optional):
-            Where to store the merged state dict. Can be a filesystem path (string or
-            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
-            If it is None or omitted, an empty dict is created and returned when the merge completes.
         fallback_model (optional):
             A secondary recipe or model to provide values for any keys missing from `recipe`.
         merge_device (optional):
@@ -75,9 +72,13 @@ def merge_and_save(
             If True, warns if any non-finite values appear in the final merged tensors.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
+        output (optional):
+            Where to store the merged state dict. Can be a filesystem path (string or
+            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
+            If it is None or omitted, an empty dict is created and returned when the merge completes.
 
     Returns:
-        None, or the in-memory dictionary if `output` is either a mutable mapping or None.
+        None, or the in-memory dictionary if `output` is either a MutableMapping or None.
     """
     if output is ...:
         output = None
@@ -147,11 +148,12 @@ def merge_and_save(
             _get_output_dict(
                 output,
                 recipe_keys,
-                recipe_serializer.serialize(recipe),
+                recipe,
                 model_dirs,
                 buffer_size_per_file_per_thread,
             ) as output_dict,
         ):
+            fix_torch_threading(merge_device)
             futures = []
             for key in recipe_keys:
                 fn = recipe.accept
@@ -171,11 +173,18 @@ def merge_and_save(
                 return output_dict
 
 
+def fix_torch_threading(device):
+    # this greedy loads the torch.linalg module
+    # avoids a hard error caused by threads>1 with some torch ops
+    # see https://github.com/pytorch/pytorch/issues/90613
+    torch.linalg.inv(torch.ones((1, 1), device=device))
+
+
 @contextlib.contextmanager
 def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
     merged_header: Mapping[str, TensorMetadata],
-    serialized_recipe: str,
+    recipe: RecipeNode,
     model_dirs: Iterable[pathlib.Path],
     buffer_size_per_thread: int,
 ):
@@ -188,6 +197,11 @@ def _get_output_dict(
                 break
         logging.info(f"Saving to {output}")
 
+        try:
+            serialized_recipe = recipe_serializer.serialize(recipe)
+        except TypeError:
+            logging.warning("The recipe graph could not be serialized. The output state dict will not contain the recipe.")
+            serialized_recipe = None
         streamed_output = OutSafetensorsDict(
             output,
             merged_header,
@@ -365,11 +379,11 @@ class KeyMergeVisitor(RecipeVisitor):
                 value = value[self.key]
             except KeyError as e:
                 raise StateDictKeyError(str(e)) from e
-        if isinstance(value, str | int | float | bool | type(None)):
+        if isinstance(value, NonDictLiteralValue):
             return value
         if isinstance(value, RecipeNode):
             return value.accept(self)
-        raise RuntimeError(f"Unexpected literal node value of type {type(value)}")
+        raise TypeError(f"Unexpected literal node value of type {type(value)}")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
         try:

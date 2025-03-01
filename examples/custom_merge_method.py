@@ -41,9 +41,5 @@ recipe = custom_sum(
     beta=0.1,
 )
 
-# create the merger object. `models_dir` is the path to the models on disk (it can also be a list of paths)
-# this information is used when serializing recipes to make the model paths relative
-merger = sd_mecha.RecipeMerger(models_dir=r"E:\sd\models\Stable-diffusion")
-
 # perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output="basic_merge.safetensors")
+sd_mecha.merge(recipe, output="custom_merge.safetensors")

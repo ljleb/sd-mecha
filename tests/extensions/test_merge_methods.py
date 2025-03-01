@@ -4,17 +4,16 @@ import typing
 import pytest
 import safetensors.torch
 import torch
-from typing import TypeVar, Mapping
-
 import sd_mecha
-from sd_mecha import RecipeMerger, merge_method, Parameter, Return, StateDict, StateDictKeyError
+from typing import TypeVar, Mapping
+from sd_mecha import merge_method, Parameter, Return, StateDict, StateDictKeyError
 
 
 A = TypeVar("A")
 B = TypeVar("B")
 
 
-def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A]):
+def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A] | TypeVar):
     return_t = next(iter(typing.get_args(t))) if typing.get_args(t) else t
 
     @merge_method(register=False)
@@ -42,7 +41,7 @@ def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A]):
 
         return actual
 
-    sd_mecha.merge_and_save(
+    sd_mecha.merge(
         compare_value(actual_literal),
         strict_weight_space=False,
         threads=0,
@@ -79,6 +78,12 @@ def test_value_to_node__float_dict_to_tensor_dict():
 
 def test_value_to_node__int_dict_to_tensor_dict():
     actual = {"IN00": int(1), "IN01": int(2)}
+    expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
+    assert_equal_in_merge_method(expected, actual, StateDict[torch.Tensor])
+
+
+def test_value_to_node__tensor_dict_to_tensor_dict():
+    actual = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
     expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
     assert_equal_in_merge_method(expected, actual, StateDict[torch.Tensor])
 
@@ -147,12 +152,16 @@ def test_value_to_node__int_to_type_var_dict():
     assert_equal_in_merge_method(expected, actual, StateDict[T])
 
 
-# tensor inputs are not yet supported for serialization reasons
-def test_value_to_node__tensor_to_tensor():
+def test_value_to_node__tensor_to_float():
     actual = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
-    expected = {"IN00": torch.tensor(1.0), "IN01": torch.tensor(2.0)}
-    with pytest.raises(TypeError):
-        assert_equal_in_merge_method(expected, actual, torch.Tensor)
+    expected = {"IN00": float(1.0), "IN01": float(2.0)}
+    assert_equal_in_merge_method(expected, actual, float)
+
+
+def test_value_to_node__tensor_to_int():
+    actual = {"IN00": torch.tensor(1), "IN01": torch.tensor(2)}
+    expected = {"IN00": int(1), "IN01": int(2)}
+    assert_equal_in_merge_method(expected, actual, int)
 
 
 def test_value_to_node__path_to_type_var():

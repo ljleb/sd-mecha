@@ -19,7 +19,7 @@ class WriteOnlyMapping(Protocol[K, V]):
         ...
 
 
-def is_subclass(source: type, target: type):
+def is_subclass(source: type | UnionType, target: type | UnionType):
     source_origin = typing.get_origin(source) or source
     target_origin = typing.get_origin(target) or target
     if isinstance(source_origin, TypeVar):

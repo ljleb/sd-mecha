@@ -1,4 +1,4 @@
-from .recipe_merging import merge_and_save, open_input_dicts, infer_model_configs
+from .recipe_merging import merge, open_input_dicts, infer_model_configs
 from .recipe_serializer import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
 from .extensions.merge_methods import merge_method, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
@@ -36,7 +36,7 @@ from .merge_method_wrappers import (
     ties_with_dare,
     n_model_stock,
 )
-from .helpers import model, literal, serialize_and_save, RecipeMerger, set_log_level
+from .helpers import model, literal, Defaults, set_log_level
 from . import recipe_nodes, extensions
 
 

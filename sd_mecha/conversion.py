@@ -6,27 +6,31 @@ from .extensions.merge_methods import value_to_node
 from .extensions.model_configs import ModelConfig
 from .extensions import merge_methods
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
-from sd_mecha.recipe_merging import open_input_dicts
+from sd_mecha.recipe_merging import open_input_dicts, infer_model_configs
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, model_dirs: Iterable[pathlib.Path] = ()):
     """
-    Convert a recipe or model from one model config to another.
+    Convert a recipe from one model config to another.
 
-    This searches for a chain of conversion methods that transform `recipe`’s underlying
+    This searches for a chain of registered conversion functions that transform `recipe`’s underlying
     config into the target config, then composes them. For example, you might need to
     convert a LoRA adapter into the base model’s format.
 
     Args:
         recipe:
             A `RecipeNode` or dictionary representing the input model or partial recipe.
-        config (str or ModelConfig or RecipeNode):
-            The desired output config, or a node referencing that config.
+        config (str, ModelConfig or RecipeNode):
+            The desired output config, or a recipe node that has the desired config.
         model_dirs (Iterable[Path], optional):
-            Directories to resolve relative model paths, if needed.
+            Directories to resolve relative model paths.
 
     Returns:
-        A new recipe node describing the entire conversion path. If no path is found, raises `ValueError`.
+        A new recipe node describing the entire conversion.
+
+    Raises:
+        ValueError:
+            If no conversion path is found.
     """
     all_converters = merge_methods.get_all_converters()
     converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
@@ -46,7 +50,6 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
     tgt_config = config if isinstance(config, str) else config.identifier
 
     if isinstance(recipe, Mapping):
-        from sd_mecha.recipe_merging import infer_model_configs
         possible_configs = infer_model_configs(recipe)
         for possible_config in possible_configs:
             res = create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)

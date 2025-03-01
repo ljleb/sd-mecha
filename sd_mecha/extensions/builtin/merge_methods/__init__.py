@@ -31,7 +31,7 @@ def weighted_sum(
     return weighted_sum_impl(a[key], b[key], alpha)
 
 
-def weighted_sum_impl(a: Tensor | np.array, b: Tensor | np.array, alpha: Tensor | np.array) -> Tensor | np.array:
+def weighted_sum_impl(a: Tensor | np.ndarray, b: Tensor | np.ndarray, alpha: Tensor | np.ndarray) -> Tensor | np.ndarray:
     return (1-alpha)*a + alpha*b
 
 
@@ -832,20 +832,23 @@ def cast(
 cast_dtype_map = {
     "float64": torch.float64,
     "int64": torch.int64,
-    "uint64": torch.uint64,
     "float32": torch.float32,
     "int32": torch.int32,
-    "uint32": torch.uint32,
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
     "int16": torch.int16,
-    "uint16": torch.uint16,
     "float8_e4m3fn": torch.float8_e4m3fn,
     "float8_e5m2": torch.float8_e5m2,
     "int8": torch.int8,
-    "uint8": torch.uint8,
     "bool": torch.bool,
 }
+if hasattr(torch, "uint8"):
+    cast_dtype_map |= {
+        "uint64": torch.uint64,
+        "uint32": torch.uint32,
+        "uint16": torch.uint16,
+        "uint8": torch.uint8,
+    }
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 
@@ -855,6 +858,12 @@ def pick_component(
     component: Parameter(str, "param"),
     **kwargs,
 ) -> Return(T):
+    if component not in a.model_config.components:
+        raise ValueError(
+            f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
+            f"Valid components: {tuple(a.model_config.components)}"
+        )
+
     key = kwargs["key"]
     if key in a.model_config.components[component].keys:
         return a[key]
