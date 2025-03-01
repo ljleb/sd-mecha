@@ -7,8 +7,4 @@ recipe = sd_mecha.rotate(
     sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors"),
 )
 
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-)
-
-merger.merge_and_save(recipe)
+sd = sd_mecha.merge(recipe)

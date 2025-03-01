@@ -183,7 +183,9 @@ _model_configs_registry_aux: Dict[str, ModelConfig] = {}
 
 
 def serialize(obj):
-    if dataclasses.is_dataclass(obj):
+    if isinstance(obj, ModelComponent):
+        return serialize(obj.keys)
+    elif dataclasses.is_dataclass(obj):
         return {
             field.metadata.get("serial_name", field.name): serialize(getattr(obj, field.name))
             for field in dataclasses.fields(obj)

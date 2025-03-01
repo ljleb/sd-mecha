@@ -1,0 +1,1679 @@
+identifier: sd3-comfyui
+components:
+  vae:
+    first_stage_model.decoder.conv_in.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.conv_in.weight: {shape: [512, 16, 3, 3], dtype: float32}
+    first_stage_model.decoder.conv_out.bias: {shape: [3], dtype: float32}
+    first_stage_model.decoder.conv_out.weight: {shape: [3, 128, 3, 3], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.k.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.k.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.norm.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.norm.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.proj_out.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.proj_out.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.q.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.q.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.v.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.attn_1.v.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.decoder.mid.block_1.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_1.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.mid.block_1.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_1.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.mid.block_1.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_1.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_1.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_1.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_2.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_2.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.mid.block_2.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_2.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.mid.block_2.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_2.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_2.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.mid.block_2.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.norm_out.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.norm_out.weight: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.conv1.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.conv1.weight: {shape: [128, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.conv2.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.conv2.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.nin_shortcut.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.nin_shortcut.weight: {shape: [128, 256, 1, 1], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.norm1.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.norm1.weight: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.norm2.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.0.norm2.weight: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.conv1.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.conv1.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.conv2.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.conv2.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.norm1.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.norm1.weight: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.norm2.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.1.norm2.weight: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.conv1.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.conv1.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.conv2.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.conv2.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.norm1.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.norm1.weight: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.norm2.bias: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.0.block.2.norm2.weight: {shape: [128], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.conv1.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.conv1.weight: {shape: [256, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.conv2.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.conv2.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.nin_shortcut.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.nin_shortcut.weight: {shape: [256, 512, 1, 1], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.norm2.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.0.norm2.weight: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.conv1.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.conv1.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.conv2.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.conv2.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.norm1.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.norm1.weight: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.norm2.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.1.norm2.weight: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.conv1.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.conv1.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.conv2.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.conv2.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.norm1.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.norm1.weight: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.norm2.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.block.2.norm2.weight: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.upsample.conv.bias: {shape: [256], dtype: float32}
+    first_stage_model.decoder.up.1.upsample.conv.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.0.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.1.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.block.2.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.upsample.conv.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.2.upsample.conv.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.0.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.1.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.block.2.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.upsample.conv.bias: {shape: [512], dtype: float32}
+    first_stage_model.decoder.up.3.upsample.conv.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.conv_in.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.conv_in.weight: {shape: [128, 3, 3, 3], dtype: float32}
+    first_stage_model.encoder.conv_out.bias: {shape: [32], dtype: float32}
+    first_stage_model.encoder.conv_out.weight: {shape: [32, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.conv1.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.conv1.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.conv2.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.conv2.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.norm1.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.norm1.weight: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.norm2.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.0.norm2.weight: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.conv1.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.conv1.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.conv2.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.conv2.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.norm1.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.norm1.weight: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.norm2.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.block.1.norm2.weight: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.downsample.conv.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.0.downsample.conv.weight: {shape: [128, 128, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.conv1.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.conv1.weight: {shape: [256, 128, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.conv2.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.conv2.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.nin_shortcut.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.nin_shortcut.weight: {shape: [256, 128, 1, 1], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.norm1.bias: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.norm1.weight: {shape: [128], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.norm2.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.0.norm2.weight: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.conv1.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.conv1.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.conv2.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.conv2.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.norm1.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.norm1.weight: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.norm2.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.block.1.norm2.weight: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.downsample.conv.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.1.downsample.conv.weight: {shape: [256, 256, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.conv1.weight: {shape: [512, 256, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.nin_shortcut.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.nin_shortcut.weight: {shape: [512, 256, 1, 1], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.norm1.bias: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.norm1.weight: {shape: [256], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.0.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.block.1.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.downsample.conv.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.2.downsample.conv.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.0.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.down.3.block.1.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.k.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.k.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.norm.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.norm.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.proj_out.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.proj_out.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.q.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.q.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.v.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.attn_1.v.weight: {shape: [512, 512, 1, 1], dtype: float32}
+    first_stage_model.encoder.mid.block_1.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_1.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.mid.block_1.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_1.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.mid.block_1.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_1.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_1.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_1.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_2.conv1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_2.conv1.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.mid.block_2.conv2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_2.conv2.weight: {shape: [512, 512, 3, 3], dtype: float32}
+    first_stage_model.encoder.mid.block_2.norm1.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_2.norm1.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_2.norm2.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.mid.block_2.norm2.weight: {shape: [512], dtype: float32}
+    first_stage_model.encoder.norm_out.bias: {shape: [512], dtype: float32}
+    first_stage_model.encoder.norm_out.weight: {shape: [512], dtype: float32}
+  diffuser:
+    model.diffusion_model.context_embedder.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.context_embedder.weight: {shape: [1536, 4096], dtype: float32}
+    model.diffusion_model.final_layer.adaLN_modulation.1.bias: {shape: [3072], dtype: float32}
+    model.diffusion_model.final_layer.adaLN_modulation.1.weight: {shape: [3072, 1536], dtype: float32}
+    model.diffusion_model.final_layer.linear.bias: {shape: [64], dtype: float32}
+    model.diffusion_model.final_layer.linear.weight: {shape: [64, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.0.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.1.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.10.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.11.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.12.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.13.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.14.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.15.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.16.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.17.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.18.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.19.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.2.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.20.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.21.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.22.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.23.context_block.adaLN_modulation.1.bias: {shape: [3072], dtype: float32}
+    model.diffusion_model.joint_blocks.23.context_block.adaLN_modulation.1.weight: {shape: [3072, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.23.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.23.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.3.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.4.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.5.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.6.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.7.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.8.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.context_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.adaLN_modulation.1.bias: {shape: [9216], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.adaLN_modulation.1.weight: {shape: [9216, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.attn.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.attn.proj.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.attn.qkv.bias: {shape: [4608], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.attn.qkv.weight: {shape: [4608, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.mlp.fc1.bias: {shape: [6144], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.mlp.fc1.weight: {shape: [6144, 1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.mlp.fc2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.joint_blocks.9.x_block.mlp.fc2.weight: {shape: [1536, 6144], dtype: float32}
+    model.diffusion_model.pos_embed: {shape: [1, 36864, 1536], dtype: float32}
+    model.diffusion_model.t_embedder.mlp.0.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.t_embedder.mlp.0.weight: {shape: [1536, 256], dtype: float32}
+    model.diffusion_model.t_embedder.mlp.2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.t_embedder.mlp.2.weight: {shape: [1536, 1536], dtype: float32}
+    model.diffusion_model.x_embedder.proj.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.x_embedder.proj.weight: {shape: [1536, 16, 2, 2], dtype: float32}
+    model.diffusion_model.y_embedder.mlp.0.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.y_embedder.mlp.0.weight: {shape: [1536, 2048], dtype: float32}
+    model.diffusion_model.y_embedder.mlp.2.bias: {shape: [1536], dtype: float32}
+    model.diffusion_model.y_embedder.mlp.2.weight: {shape: [1536, 1536], dtype: float32}
+    model.model_sampling.sigmas: {shape: [1000], dtype: float32}
+  clip_g:
+    text_encoders.clip_g.logit_scale: {shape: [], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.embeddings.position_embedding.weight: {shape: [77, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.embeddings.token_embedding.weight: {shape: [49408, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.0.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.1.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.10.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.11.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.12.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.13.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.14.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.15.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.16.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.17.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.18.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.19.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.2.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.20.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.21.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.22.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.23.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.24.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.25.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.26.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.27.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.28.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.29.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.3.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.30.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.31.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.4.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.5.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.6.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.7.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.8.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.layer_norm1.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.layer_norm1.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.layer_norm2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.layer_norm2.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.mlp.fc1.bias: {shape: [5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.mlp.fc1.weight: {shape: [5120, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.mlp.fc2.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.mlp.fc2.weight: {shape: [1280, 5120], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.k_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.k_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.out_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.q_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.q_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.v_proj.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.encoder.layers.9.self_attn.v_proj.weight: {shape: [1280, 1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.final_layer_norm.bias: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_model.final_layer_norm.weight: {shape: [1280], dtype: float32}
+    text_encoders.clip_g.transformer.text_projection.weight: {shape: [1280, 1280], dtype: float32}
+  clip_l:
+    text_encoders.clip_l.logit_scale: {shape: [], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.embeddings.position_embedding.weight: {shape: [77, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.embeddings.token_embedding.weight: {shape: [49408, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.0.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.1.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.10.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.11.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.2.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.3.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.4.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.5.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.6.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.7.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.8.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.layer_norm1.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.layer_norm1.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.layer_norm2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.layer_norm2.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.mlp.fc1.bias: {shape: [3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.mlp.fc2.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.k_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.out_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.q_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.v_proj.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.encoder.layers.9.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.final_layer_norm.bias: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_model.final_layer_norm.weight: {shape: [768], dtype: float32}
+    text_encoders.clip_l.transformer.text_projection.weight: {shape: [768, 768], dtype: float32}
+  t5xxl:
+    text_encoders.t5xxl.logit_scale: {shape: [], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight: {shape: [32, 64], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.0.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.1.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.10.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.11.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.12.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.13.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.14.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.15.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.16.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.17.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.18.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.19.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.2.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.20.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.21.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.22.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.23.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.3.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.4.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.5.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.6.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.7.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.8.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.0.SelfAttention.k.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.0.SelfAttention.o.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.0.SelfAttention.q.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.0.SelfAttention.v.weight: {shape: [4096, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.0.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.1.DenseReluDense.wi_0.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.1.DenseReluDense.wi_1.weight: {shape: [10240, 4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.1.DenseReluDense.wo.weight: {shape: [4096, 10240], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.block.9.layer.1.layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.encoder.final_layer_norm.weight: {shape: [4096], dtype: float32}
+    text_encoders.t5xxl.transformer.shared.weight: {shape: [32128, 4096], dtype: float32}

@@ -1,9 +1,9 @@
-from .recipe_merger import RecipeMerger
+from .recipe_merging import merge, open_input_dicts, infer_model_configs
 from .recipe_serializer import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
 from .extensions.merge_methods import merge_method, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
 from .conversion import convert
-from .merge_methods import (
+from sd_mecha.extensions.builtin.merge_methods import (
     weighted_sum,
     slerp,
     n_average,
@@ -22,6 +22,7 @@ from .merge_methods import (
     clamp,
     model_stock,
     fallback,
+    pick_component,
 )
 from .merge_method_wrappers import (
     add_difference,
@@ -35,8 +36,8 @@ from .merge_method_wrappers import (
     ties_with_dare,
     n_model_stock,
 )
-from .helpers import model, literal, set_log_level, serialize_and_save
-from . import recipe_nodes, merge_methods, extensions
+from .helpers import model, literal, Defaults, set_log_level
+from . import recipe_nodes, extensions
 
 
 def _load_builtin_extensions():

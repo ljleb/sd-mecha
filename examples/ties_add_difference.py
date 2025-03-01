@@ -13,10 +13,4 @@ models = [
 ]
 
 recipe = sd_mecha.add_difference_ties(sd_mecha.model("pure/v1-5-pruned.safetensors"), *models, alpha=0.5)
-
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-    default_device="cpu",
-)
-
-merger.merge_and_save(recipe)
+sd = sd_mecha.merge(recipe, output_device="cpu")

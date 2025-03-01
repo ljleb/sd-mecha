@@ -7,13 +7,12 @@
 import sd_mecha
 
 # create the merge plan
-recipe = sd_mecha.weighted_sum("/path/to/model_a.safetensors", "/path/to/model_b.safetensors", alpha=0.5)
-
-# initialize merge engine
-merger = sd_mecha.RecipeMerger()
+a = sd_mecha.model("path/to/model_a.safetensors")
+b = sd_mecha.model("path/to/model_b.safetensors")
+recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 
 # merge!
-merger.merge_and_save(recipe)
+sd_mecha.merge(recipe, "path/to/model_out.safetensors")
 ```
 
 sd-mecha is a general memory-efficient model merging library. It can merge *any* model:
@@ -34,6 +33,7 @@ sd-mecha is a general memory-efficient model merging library. It can merge *any*
   - Stable Diffusion 1.5
   - Stable Diffusion XL
   - Stable Diffusion 3
+  - FLUX Schnell/Dev
 - Merge LyCORIS networks together and to checkpoints
 - Block-wise hyperparameters for precise control of blocks (aka MBW)
 
@@ -50,74 +50,61 @@ Make sure to install the appropriate release of [`torch`](https://pytorch.org/ge
 ### Merge models
 
 To merge models, mecha uses recipes.
-A recipe is a list of instructions that describes the exact steps needed to obtain the final merged model.
+A recipe is a list of instructions that describes the exact steps needed to derive a state dict from inputs.
 
-#### Using python
-
-Here's an example script that merges three Stable Diffusion 1.5 models:
+Here's an example script that merges three models:
 
 ```python
 import sd_mecha
 
-# create a simple weighted sum recipe
-# all builtin merge methods are direct properties of the `sd_mecha` package for convenience
-recipe = sd_mecha.weighted_sum(
-    sd_mecha.weighted_sum(
-        "ghostmix_v20Bakedvae.safetensors",
-        "deliberate_v2.safetensors",
-        alpha=0.5,
-    ),
-    "dreamshaper_332BakedVaeClipFix.safetensors",
-    alpha=0.33,
-)
+# create the merge plan
+model_a = sd_mecha.model("path/to/model_a.safetensors")
+model_b = sd_mecha.model("path/to/model_b.safetensors")
+recipe = sd_mecha.weighted_sum(model_a, model_b, alpha=0.5)
 
-# merger contains default parameters
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-)
-
-# perform the entire merge plan and save to output path
-merger.merge_and_save(recipe, output="basic_merge.safetensors")
+# merge!
+sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
 ```
 
 See the [examples](/examples) directory for more examples.
 
 ### Get Model-Specific Information
 
-To specify block weights, we need to know the name of the blocks.
+The library uses a "model config" to designate any specific set of keys of a certain shape.
 
-This information can be discovered using the `extensions.model_configs` submodule.
-
-Mecha has builtin support for Stable Diffusion 1.X, Stable Diffusion XL and Stable Diffusion 3:
+It is possible to list all available model configs through the `sd_mecha.extensions.model_configs` module:
 
 ```python
-from sd_mecha.extensions.model_configs import get_all
+from sd_mecha.extensions import model_configs
 
-all_configs = get_all()
+all_configs = model_configs.get_all()
 
 print([config.identifier for config in all_configs])
 # ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
 ```
 
-To view the available components of a model:
+A *component* of a model config is a subset of keys of the config that belong to the same logical group.
+For example, all keys starting with "first_stage_model." in Stable Diffusion models belong to the component "vae".
+
+It is possible to query the different components of a model config:
 
 ```python
 from sd_mecha.extensions import model_configs
 
 config = model_configs.resolve("sd1-ldm")
 for component_id, component in config.components.items():
-      # block_keys contains the state dict keys that the block controls
+      # component.keys contains the state dict keys that the component owns
       print(f"{component_id}")
 
 # this prints:
 #   clip_l
 #   vae
-#   diffusers
+#   diffuser
 ```
 
 ## Motivation
 
-Keeping track of full merge recipes has always been annoying.
+Keeping track of full merge recipes has always been a problem for me.
 I needed something that allows to store merge recipes in a readable format while also being executable.
 I also needed something that allows to fully merge an entire tree of models without having to save intermediate models to disk.
 
