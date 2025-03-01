@@ -8,5 +8,4 @@ with open(recipe_path) as f:
     recipe = sd_mecha.deserialize(f.readlines())
 
 
-merger = sd_mecha.Defaults(models_dir=r"E:\sd\models\Stable-diffusion")
-merger.merge_and_save(recipe)
+sd = sd_mecha.merge(recipe)

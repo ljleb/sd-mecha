@@ -7,5 +7,4 @@ recipe = sd_mecha.dropout(
     sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors"),
     probability=0.9, alpha=0.5, seed=0,
 )
-merger = sd_mecha.Defaults(models_dir=r"E:\sd\models\Stable-diffusion")
-merger.merge_and_save(recipe)
+sd = sd_mecha.merge(recipe)

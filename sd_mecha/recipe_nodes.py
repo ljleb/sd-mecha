@@ -80,28 +80,27 @@ class LiteralRecipeNode(RecipeNode):
         model_config: Optional[str | model_configs.ModelConfig] = None,
     ):
         self.value = value
-        self.__model_config = model_config
+        self.__model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
+        self.__merge_space = merge_spaces.resolve("param")
         if isinstance(self.value, dict):
             first_value = next(iter(self.value.values()))
-            if self.model_config is not None and isinstance(first_value, RecipeNode) and first_value.model_config != self.model_config:
-                raise ValueError(f"The outer model config ({self.model_config}) should be the same as the inner model config ({first_value.model_config})")
+            if isinstance(first_value, RecipeNode):
+                self.__model_config = first_value.model_config if model_config is None else self.__model_config
+                if not all(v.model_config == self.__model_config for v in self.value.values()):
+                    raise ValueError(f"All model configs should be the same, expected {self.__model_config} but got {set(v.model_config for v in self.value.values())}")
+                if not all(v.merge_space == first_value.merge_space for v in self.value.values()):
+                    raise ValueError(f"All merge spaces should be the same, but got multiple: {set(v.merge_space for v in self.value.values())}")
+                self.__merge_space = first_value.merge_space
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_literal(self, *args, **kwargs)
 
     @property
     def merge_space(self) -> MergeSpace:
-        if isinstance(self.value, dict):
-            first_value = next(iter(self.value.values()))
-            if isinstance(first_value, RecipeNode):
-                return first_value.merge_space
-
-        return merge_spaces.resolve("param")
+        return self.__merge_space
 
     @property
     def model_config(self) -> Optional[model_configs.ModelConfig]:
-        if isinstance(self.__model_config, str):
-            return model_configs.resolve(self.__model_config)
         return self.__model_config
 
     @model_config.setter
@@ -128,20 +127,18 @@ class ModelRecipeNode(RecipeNode):
 
         self.path = path
         self.state_dict = None
-        self.__model_config = model_config
-        self.__merge_space = merge_space
+        self.__model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
+        self.__merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_model(self, *args, **kwargs)
 
     @property
     def merge_space(self) -> merge_spaces.MergeSpace:
-        return merge_spaces.resolve(self.__merge_space)
+        return self.__merge_space
 
     @property
     def model_config(self) -> Optional[model_configs.ModelConfig]:
-        if isinstance(self.__model_config, str):
-            return model_configs.resolve(self.__model_config)
         return self.__model_config
 
     @model_config.setter
@@ -170,10 +167,7 @@ class MergeRecipeNode(RecipeNode):
         self.__validate_args()
 
     def __validate_args(self):
-        if self.merge_method.get_return_merge_space(
-            [arg.merge_space for arg in self.args],
-            {k: v.merge_space for k, v in self.kwargs.items()}
-        ) is None:
+        if not isinstance(self.merge_space, MergeSpace):
             raise RuntimeError(f"Could not infer merge space from arguments for method {self.merge_method.identifier}")
 
     def accept(self, visitor, *args, **kwargs):

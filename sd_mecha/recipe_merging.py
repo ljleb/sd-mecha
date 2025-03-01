@@ -24,7 +24,7 @@ from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dic
 from .typing_ import is_subclass
 
 
-def merge_and_save(
+def merge(
     recipe: RecipeNodeOrValue,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
     fallback_model: Optional[RecipeNodeOrValue] = ...,

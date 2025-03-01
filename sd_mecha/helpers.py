@@ -1,40 +1,12 @@
-import contextlib
 import logging
 import pathlib
 import torch
 from .extensions.model_configs import ModelConfig
-from .recipe_merging import merge_and_save, open_input_dicts
+from .recipe_merging import merge
 from .conversion import convert
-from .recipe_serializer import serialize
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
 from .extensions.merge_methods import NonDictLiteralValue
 from typing import Optional, List, MutableMapping, Iterable
-
-
-def serialize_and_save(
-    recipe: RecipeNode,
-    output_path: pathlib.Path | str,
-):
-    """
-    Serialize a recipe to `.mecha` format and save it to the specified file.
-
-    Args:
-        recipe:
-            A recipe node or dictionary describing the merge instructions.
-        output_path (str or Path):
-            A filesystem path (filename) where the `.mecha` file will be written.
-    """
-    serialized = serialize(recipe)
-
-    if not isinstance(output_path, pathlib.Path):
-        output_path = pathlib.Path(output_path)
-    if not output_path.suffix:
-        output_path = output_path.with_suffix(".mecha")
-    output_path = output_path.absolute()
-
-    logging.info(f"Saving recipe to {output_path}")
-    with open(output_path, "w") as f:
-        f.write(serialized)
 
 
 def model(path: str | pathlib.Path, config: Optional[ModelConfig | str] = None, merge_space: str = "weight") -> ModelRecipeNode:
@@ -163,7 +135,7 @@ class Defaults:
         model_dirs = self._model_dirs_to_pathlib_list(model_dirs)
         return convert(recipe, config, model_dirs)
 
-    def merge_and_save(
+    def merge(
         self,
         recipe: RecipeNodeOrValue,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
@@ -199,7 +171,7 @@ class Defaults:
         if check_finite is ...:
             check_finite = self.__check_finite
 
-        return merge_and_save(
+        return merge(
             recipe,
             output,
             fallback_model,

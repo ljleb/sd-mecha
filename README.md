@@ -12,7 +12,7 @@ b = sd_mecha.model("path/to/model_b.safetensors")
 recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 
 # merge!
-sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
+sd_mecha.merge(recipe, "path/to/model_out.safetensors")
 ```
 
 sd-mecha is a general memory-efficient model merging library. It can merge *any* model:
@@ -63,7 +63,7 @@ model_b = sd_mecha.model("path/to/model_b.safetensors")
 recipe = sd_mecha.weighted_sum(model_a, model_b, alpha=0.5)
 
 # merge!
-sd_mecha.merge_and_save(recipe, "path/to/model_out.safetensors")
+sd_mecha.merge(recipe, "path/to/model_out.safetensors")
 ```
 
 See the [examples](/examples) directory for more examples.
