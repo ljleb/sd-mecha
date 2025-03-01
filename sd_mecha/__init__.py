@@ -36,7 +36,7 @@ from .merge_method_wrappers import (
     ties_with_dare,
     n_model_stock,
 )
-from .helpers import model, literal, serialize_and_save, Defaults, set_log_level
+from .helpers import model, literal, Defaults, set_log_level
 from . import recipe_nodes, extensions
 
 
