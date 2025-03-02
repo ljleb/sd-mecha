@@ -1,6 +1,6 @@
 import torch
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from .convert_diffusers_sd_vae_to_original import convert_vae
+from .convert_huggingface_sd_vae_to_original import convert_vae
 
 
 # hf to sd conversion src:
