@@ -91,6 +91,19 @@ class LiteralRecipeNode(RecipeNode):
                 if not all(v.merge_space == first_value.merge_space for v in self.value.values()):
                     raise ValueError(f"All merge spaces should be the same, but got multiple: {set(v.merge_space for v in self.value.values())}")
                 self.__merge_space = first_value.merge_space
+            elif isinstance(first_value, torch.Tensor):
+                self.__merge_space = merge_spaces.resolve("weight")
+
+        # todo: merge space is arbitrary here, can be either param, weight or delta
+        #   we can determine whether value is in param space with:
+        #       not isinstance(value, Tensor) or
+        #       (
+        #           model_config.keys[k].shape == value[k].shape and
+        #           model_config.keys[k].dtype.is_floating_point == model_config.keys[k].dtype.is_floating_point
+        #       )
+        #   however we cannot automatically distinguish between weight and delta space
+        #   so it still needs to be a parameter of the constructor here
+        #   we can default to weight space if value is inferred not to be param space as per the above condition
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_literal(self, *args, **kwargs)
@@ -119,7 +132,7 @@ class ModelRecipeNode(RecipeNode):
         self,
         path: pathlib.Path,
         *,
-        model_config: Optional[str | model_configs.ModelConfig] = model_configs.INFER,
+        model_config: Optional[str | model_configs.ModelConfig] = None,
         merge_space: str | MergeSpace = "weight",
     ):
         if not isinstance(path, pathlib.Path):

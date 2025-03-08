@@ -288,19 +288,20 @@ class LoadInputDictsVisitor(RecipeVisitor):
     param_config: Optional[ModelConfig] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
-        metadata = {}
-        if isinstance(node.value, Mapping):
-            structural_metadata_empty = not self.structural_metadata
-            for k, v in node.value.items():
-                if isinstance(v, RecipeNode):
-                    v.accept(self)
-                elif structural_metadata_empty:
-                    if isinstance(v, torch.Tensor) and metadata.get(k, torch.empty([0])).shape.numel() < v.shape.numel():
-                        metadata[k] = TensorMetadata(v.shape, v.dtype)
-                    elif k not in metadata:
-                        metadata[k] = TensorMetadata(None, None)
+        if not isinstance(node.value, Mapping):
+            return
 
-            node.model_config = self.__determine_model_config(metadata, node.model_config)
+        metadata = {}
+        for k, v in node.value.items():
+            if isinstance(v, RecipeNode):
+                v.accept(self)
+                metadata[k] = v.model_config.keys.get(k, TensorMetadata(None, None))
+            elif isinstance(v, torch.Tensor):
+                metadata[k] = TensorMetadata(v.shape, v.dtype)
+            elif k not in metadata:
+                metadata[k] = TensorMetadata(None, None)
+
+        node.model_config = self.__determine_model_config(metadata, node.model_config)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)
@@ -360,7 +361,10 @@ class LoadInputDictsVisitor(RecipeVisitor):
                 for k in list(self.structural_metadata):
                     if k not in metadata:
                         del self.structural_metadata[k]
-                    elif metadata[k].shape.numel() > self.structural_metadata[k].shape.numel():
+                    elif (
+                        self.structural_metadata[k].shape is None or
+                        metadata[k].shape is not None and metadata[k].shape.numel() > self.structural_metadata[k].shape.numel()
+                    ):
                         self.structural_metadata[k] = metadata[k]
             config = StructuralModelConfig(self.structural_metadata)
 

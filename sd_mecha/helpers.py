@@ -1,31 +1,31 @@
 import logging
 import pathlib
 import torch
-
-from .extensions import model_configs
 from .extensions.model_configs import ModelConfig
 from .merging import merge
 from .conversion import convert
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
 from .extensions.merge_methods import NonDictLiteralValue
-from typing import Optional, List, MutableMapping, Iterable
+from typing import Optional, List, MutableMapping, Iterable, Mapping
 
 
-def model(path: str | pathlib.Path, config: Optional[ModelConfig | str] = model_configs.INFER, merge_space: str = "weight") -> ModelRecipeNode:
+def model(path: str | pathlib.Path | Mapping[str, torch.Tensor], config: Optional[ModelConfig | str] = None, merge_space: str = "weight") -> RecipeNode:
     """
     Create a `ModelRecipeNode` referring to a safetensors file or directory of a diffusers model.
 
     Args:
         path (str or Path):
-            Path to a `.safetensors` file (or directory in certain formats).
+            Path to a `.safetensors` file or an already loaded state dict.
         config (str, optional):
-            A model config identifier if known, or None to let `sd_mecha` infer it.
+            The model config, or None to infer it.
         merge_space (str):
             The merge space in which the model is expected to be ("weight" by default).
 
     Returns:
         ModelRecipeNode: A node that can be used in recipe graphs.
     """
+    if isinstance(path, Mapping):
+        return LiteralRecipeNode(path, model_config=config)
     if isinstance(path, str):
         path = pathlib.Path(path)
     return ModelRecipeNode(path, model_config=config, merge_space=merge_space)
