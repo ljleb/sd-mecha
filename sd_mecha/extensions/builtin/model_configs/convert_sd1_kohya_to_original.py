@@ -40,7 +40,7 @@ def convert_unet(kohya_sd: StateDict, ldm_key: str) -> torch.Tensor:
 
 
 unet_conversion_map = {
-    # (stable-diffusion: HF Diffusers)
+    # (original: huggingface)
     "time_embed.0.weight": "time_embedding.linear_1.weight",
     "time_embed.0.bias": "time_embedding.linear_1.bias",
     "time_embed.2.weight": "time_embedding.linear_2.weight",
@@ -55,7 +55,7 @@ unet_conversion_map = {
 
 
 unet_conversion_map_resnet = {
-    # (stable-diffusion, HF Diffusers)
+    # (original, huggingface)
     "in_layers.0": "norm1",
     "in_layers.2": "conv1",
     "out_layers.0": "norm2",

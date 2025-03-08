@@ -20,7 +20,7 @@ StateDictKey = str
 
 @dataclasses.dataclass
 class ModelComponent:
-    __keys: Mapping[StateDictKey, TensorMetadata]
+    __keys: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(metadata={"serial_name": "keys"})
 
     def __post_init__(self):
         keys = OrderedDict()
@@ -39,7 +39,8 @@ class ModelComponent:
 @runtime_checkable
 class ModelConfig(Protocol):
     def eq(self, other):
-        return self.identifier == getattr(other, "identifier", None)
+        other_identifier = getattr(other, "identifier", None)
+        return self.identifier == other_identifier
 
     def __repr__(self):
         return f"<model config '{self.identifier}'>"
@@ -72,6 +73,7 @@ class ModelConfig(Protocol):
 class ModelConfigImpl(ModelConfig):
     __identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
     __components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
+    __keys_cache: Mapping[str, TensorMetadata] = None
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
@@ -106,11 +108,13 @@ class ModelConfigImpl(ModelConfig):
 
     @property
     def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            (k, v)
-            for component in self.components.values()
-            for k, v in component.keys.items()
-        )
+        if self.__keys_cache is None:
+            self.__keys_cache = OrderedDict(
+                (k, v)
+                for component in self.components.values()
+                for k, v in component.keys.items()
+            )
+        return self.__keys_cache
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):
@@ -159,6 +163,55 @@ def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
         method = attribute.__func__.__get__(self, self.__class__)
         return method
     return attribute
+
+
+class StructuralModelConfig(ModelConfig):
+    def __init__(self, metadata: Mapping[StateDictKey, TensorMetadata]):
+        self.metadata = metadata
+
+    @property
+    def identifier(self) -> str:
+        return "structural"
+
+    def get_architecture_identifier(self) -> str:
+        return self.identifier
+
+    def get_implementation_identifier(self) -> str:
+        return ""
+
+    @property
+    def components(self) -> Mapping[str, ModelComponent]:
+        return {"keys": ModelComponent(self.keys)}
+
+    @property
+    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return self.metadata
+
+
+class InferModelConfig(ModelConfig):
+    def eq(self, other):
+        raise RuntimeError("the config has not yet been inferred")
+
+    @property
+    def identifier(self) -> str:
+        return "infer"
+
+    def get_architecture_identifier(self) -> str:
+        return self.identifier
+
+    def get_implementation_identifier(self) -> str:
+        return ""
+
+    @property
+    def components(self) -> Mapping[str, ModelComponent]:
+        raise RuntimeError("the config has not yet been inferred")
+
+    @property
+    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
+        raise RuntimeError("the config has not yet been inferred")
+
+
+INFER = InferModelConfig()
 
 
 class YamlModelConfig(LazyModelConfigBase):
@@ -256,6 +309,9 @@ def resolve(identifier: str) -> ModelConfig:
         return _model_configs_registry_aux[identifier]
     except KeyError:
         pass
+
+    if identifier == INFER.identifier:
+        return INFER
 
     suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry_base.keys())
     postfix = ""

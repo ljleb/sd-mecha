@@ -1,15 +1,17 @@
 import logging
 import pathlib
 import torch
+
+from .extensions import model_configs
 from .extensions.model_configs import ModelConfig
-from .recipe_merging import merge
+from .merging import merge
 from .conversion import convert
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
 from .extensions.merge_methods import NonDictLiteralValue
 from typing import Optional, List, MutableMapping, Iterable
 
 
-def model(path: str | pathlib.Path, config: Optional[ModelConfig | str] = None, merge_space: str = "weight") -> ModelRecipeNode:
+def model(path: str | pathlib.Path, config: Optional[ModelConfig | str] = model_configs.INFER, merge_space: str = "weight") -> ModelRecipeNode:
     """
     Create a `ModelRecipeNode` referring to a safetensors file or directory of a diffusers model.
 

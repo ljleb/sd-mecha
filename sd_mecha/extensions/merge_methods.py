@@ -6,7 +6,7 @@ import inspect
 import pathlib
 import torch
 import typing
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, RecipeVisitor, NonDictLiteralValue, RecipeNodeOrValue, PythonLiteralValue
+from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, NonDictLiteralValue, RecipeNodeOrValue, PythonLiteralValue
 from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
@@ -143,7 +143,7 @@ class FunctionArgs(Generic[P]):
         }
         return args_dict | vararg_dict | self.kwargs
 
-    def args_varags(self, args_count=None) -> List[P]:
+    def args_varargs(self, args_count=None) -> List[P]:
         varargs_count = self._get_varargs_count(args_count)
         varargs = [self.vararg]*varargs_count
         return self.args + varargs
@@ -195,7 +195,7 @@ class MergeMethod:
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
         input_configs_are_explicit = all(config is not None for config in input_configs.as_dict().values())
-        if input_configs_are_explicit and self.get_return_config(input_configs.args_varags(), input_configs.kwargs) is None:
+        if input_configs_are_explicit and self.get_return_config(input_configs.args_varargs(), input_configs.kwargs) is None:
             raise TypeError("Cannot infer the model config to return from the input model configs")
 
         return_data = self.__get_return_data(self.__f_hints.get("return"))  # validates return type annotation
@@ -259,7 +259,7 @@ class MergeMethod:
         min_args = len(params.args) - len(defaults.args)
         n_args = len(args)
         if not (min_args <= n_args <= max_args):
-            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {n_args} arguments")
+            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {n_args}")
 
         for k in kwargs:
             if k not in params.kwargs:
@@ -269,27 +269,13 @@ class MergeMethod:
             if k not in itertools.chain(kwargs.keys(), defaults.kwargs.keys()):
                 raise TypeError(f"Missing keyword-argument '{k}'")
 
-        default_args = defaults.args[n_args - min_args:]
-        input_configs = self.get_input_configs()
-        input_configs_dict = input_configs.as_dict(n_args)
-        default_config = self.get_return_config(input_configs.args_varags(n_args), input_configs.kwargs)
-        input_merge_spaces_dict = self.get_input_merge_spaces().as_dict(n_args)
-
-        def arg_to_node(k: int | str, arg: Any, expected_type: type):
-            nonlocal default_config
-            merge_space = input_merge_spaces_dict[k]
-            config = input_configs_dict[k]
-            if config is None:
-                config = default_config
-            return value_to_node(arg, expected_type).accept(InferModelConfigVisitor(config, merge_space))
-
         input_types = self.get_input_types()
         args = tuple(
-            arg_to_node(i, arg, input_types.args[i] if i < len(input_types.args) else input_types.vararg)
-            for i, (arg, k) in enumerate(zip(itertools.chain(args, default_args), params.args_varags(n_args)))
+            value_to_node(arg, arg_type)
+            for arg, k, arg_type in zip(args, params.args_varargs(n_args), input_types.args_varargs(n_args))
         )
         kwargs = {
-            k: arg_to_node(k, arg, input_types.kwargs[k])
+            k: value_to_node(arg, input_types.kwargs[k])
             for k, arg in (defaults.kwargs | kwargs).items()
         }
 
@@ -317,7 +303,7 @@ class MergeMethod:
         arg_tuples = enumerate(merge_space_args)
         kwarg_tuples = ((k, v) for k, v in merge_space_kwargs.items())
         for idx, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
-            name = names.args_varags(n_args)[idx] if isinstance(idx, int) else idx
+            name = names.args_varargs(n_args)[idx] if isinstance(idx, int) else idx
             merge_space_param = input_merge_spaces[idx]
             is_symbol = isinstance(merge_space_param, MergeSpaceSymbol)
             valid_merge_spaces = merge_space_param.merge_spaces if is_symbol else merge_space_param
@@ -462,41 +448,6 @@ class MergeMethod:
         return self.identifier
 
 
-@dataclasses.dataclass
-class InferModelConfigVisitor(RecipeVisitor):
-    default_model_config: ModelConfig
-    param_merge_space: type
-
-    def visit_literal(self, node: LiteralRecipeNode):
-        if isinstance(node.value, dict) and node.model_config is None:
-            from sd_mecha.recipe_merging import infer_model_configs
-            possible_configs = infer_model_configs(node.value)
-            if self.default_model_config in possible_configs:
-                model_config = self.default_model_config
-            elif self.default_model_config is None and len(possible_configs) == 1:
-                model_config = next(iter(possible_configs))
-            else:
-                raise ValueError("Cannot implicitly infer the model config of a dict literal (did you forget to use 'sd_mecha.convert'?)")
-        else:
-            model_config = node.model_config if node.model_config is not None else self.default_model_config
-        return LiteralRecipeNode(node.value, model_config=model_config)
-
-    def visit_model(self, node: ModelRecipeNode):
-        node_merge_space = node.merge_space
-        param_merge_spaces = merge_spaces.get_identifiers(self.param_merge_space)
-        # allow to infer merge space 'param' for i.e. approximated fisher diagonal
-        if len(param_merge_spaces) == 1 and param_merge_spaces[0] in ["weight", "param"]:
-            node_merge_space = param_merge_spaces[0]
-        return ModelRecipeNode(
-            node.path if node.state_dict is None else node.state_dict,
-            model_config=node.model_config,
-            merge_space=node_merge_space,
-        )
-
-    def visit_merge(self, node: MergeRecipeNode):
-        return node
-
-
 F = TypeVar("F", bound=Callable)
 
 
@@ -555,10 +506,10 @@ def __recipe_impl(
 
 def validate_config_conversion(merge_method: MergeMethod):
     params = merge_method.get_param_names()
-    args_varargs = params.args if params.args else params.args_varags()
+    args_varargs = params.args if params.args else params.args_varargs()
     assert len(args_varargs) == 1, f"the merge method should be able to take exactly 1 positional argument"
     configs = merge_method.get_input_configs()
-    input_config = configs.args if configs.args else configs.args_varags()[0]
+    input_config = configs.args if configs.args else configs.args_varargs()[0]
     assert input_config is not None, f"the input ModelConfig['identifier...'] is missing. It should be appended to the type annotation of `{args_varargs[0]}`"
     return merge_method
 

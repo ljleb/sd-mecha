@@ -84,7 +84,8 @@ class LiteralRecipeNode(RecipeNode):
         if isinstance(self.value, dict):
             first_value = next(iter(self.value.values()))
             if isinstance(first_value, RecipeNode):
-                self.__model_config = first_value.model_config if model_config is None else self.__model_config
+                if model_config is None:
+                    self.__model_config = first_value.model_config
                 if not all(v.model_config == self.__model_config for v in self.value.values()):
                     raise ValueError(f"All model configs should be the same, expected {self.__model_config} but got {set(v.model_config for v in self.value.values())}")
                 if not all(v.merge_space == first_value.merge_space for v in self.value.values()):
@@ -118,7 +119,7 @@ class ModelRecipeNode(RecipeNode):
         self,
         path: pathlib.Path,
         *,
-        model_config: Optional[str | model_configs.ModelConfig] = None,
+        model_config: Optional[str | model_configs.ModelConfig] = model_configs.INFER,
         merge_space: str | MergeSpace = "weight",
     ):
         if not isinstance(path, pathlib.Path):

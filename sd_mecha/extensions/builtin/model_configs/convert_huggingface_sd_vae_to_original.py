@@ -2,28 +2,28 @@ import torch
 from sd_mecha.extensions.merge_methods import StateDict
 
 
-def convert_vae(diffusers_sd: StateDict[torch.Tensor], ldm_key: str) -> torch.Tensor:
-    diffusers_key = '.'.join(ldm_key.split(".")[1:])
+def convert_vae(huggingface_sd: StateDict[torch.Tensor], ldm_key: str) -> torch.Tensor:
+    huggingface_key = '.'.join(ldm_key.split(".")[1:])
 
     needs_reshape = False
     for sd_weight_name, fake_weight_name in vae_extra_conversion_map.items():
-        if f"mid.attn_1.{sd_weight_name}.weight" in diffusers_key or f"mid.attn_1.{sd_weight_name}.bias" in diffusers_key:
+        if f"mid.attn_1.{sd_weight_name}.weight" in huggingface_key or f"mid.attn_1.{sd_weight_name}.bias" in huggingface_key:
             needs_reshape = True
-            diffusers_key = diffusers_key.replace(sd_weight_name, fake_weight_name)
+            huggingface_key = huggingface_key.replace(sd_weight_name, fake_weight_name)
 
     for weight_name in vae_extra_conversion_map.values():
-        if f"mid.attn_1.{weight_name}.weight" in diffusers_key:
+        if f"mid.attn_1.{weight_name}.weight" in huggingface_key:
             needs_reshape = True
 
-    if "attentions" in diffusers_key:
+    if "attentions" in huggingface_key:
         for sd_part, hf_part in vae_conversion_map_attn.items():
-            diffusers_key = diffusers_key.replace(sd_part, hf_part)
+            huggingface_key = huggingface_key.replace(sd_part, hf_part)
 
     for sd_part, hf_part in vae_conversion_map.items():
-        diffusers_key = diffusers_key.replace(sd_part, hf_part)
+        huggingface_key = huggingface_key.replace(sd_part, hf_part)
 
-    diffusers_key = f"vae.{diffusers_key}"
-    res = diffusers_sd[diffusers_key]
+    huggingface_key = f"vae.{huggingface_key}"
+    res = huggingface_sd[huggingface_key]
     if needs_reshape:
         res = reshape_weight_for_sd(res)
     return res
@@ -38,7 +38,7 @@ def reshape_weight_for_sd(w):
 
 
 vae_conversion_map = {
-    # (stable-diffusion, HF Diffusers)
+    # (original, huggingface)
     "nin_shortcut": "conv_shortcut",
     "norm_out": "conv_norm_out",
     "mid.attn_1.": "mid_block.attentions.0.",
@@ -74,7 +74,7 @@ for i in range(2):
 
 
 vae_conversion_map_attn = {
-    # (stable-diffusion, HF Diffusers)
+    # (original, huggingface)
     "norm.": "group_norm.",
     "q.": "query.",
     "k.": "key.",
@@ -85,7 +85,7 @@ vae_conversion_map_attn = {
 
 # This is probably not the most ideal solution, but it does work.
 vae_extra_conversion_map = {
-    # (stable-diffusion, HF Diffusers)
+    # (original, huggingface)
     "q": "to_q",
     "k": "to_k",
     "v": "to_v",
