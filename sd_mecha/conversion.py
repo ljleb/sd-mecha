@@ -51,7 +51,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
 
     if isinstance(recipe, Mapping):
         possible_configs = infer_model_configs(recipe)
-        for possible_config in possible_configs:
+        for possible_config in (cfg for s in possible_configs for cfg in s):
             res = create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
             if res is not None:
                 return res

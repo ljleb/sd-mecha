@@ -99,9 +99,11 @@ class LiteralRecipeNode(RecipeNode):
         #       not isinstance(value, Tensor) or
         #       (
         #           model_config.keys[k].shape == value[k].shape and
-        #           model_config.keys[k].dtype.is_floating_point == model_config.keys[k].dtype.is_floating_point
+        #           model_config.keys[k].dtype.is_floating_point == value[k].dtype.is_floating_point  # <- this cannot actually be used
         #       )
-        #   however we cannot automatically distinguish between weight and delta space
+        #   weighted sum / add difference alpha though?
+        #   this doesn't really work in general. there are some cases like when the type doesn't match that do work
+        #   also we cannot automatically distinguish between weight space and delta space
         #   so it still needs to be a parameter of the constructor here
         #   we can default to weight space if value is inferred not to be param space as per the above condition
 

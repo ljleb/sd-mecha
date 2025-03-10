@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
-from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar
+from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar
 from .typing_ import is_subclass
 
 
@@ -347,12 +347,12 @@ class LoadInputDictsVisitor(RecipeVisitor):
         config = config_hint
         if config is None or config.identifier == model_configs.INFER.identifier:
             inferred_model_configs = infer_model_configs(metadata)
-            if self.param_config in inferred_model_configs:
+            if any(self.param_config in cfgs for cfgs in inferred_model_configs):
                 config = self.param_config
-            elif len(inferred_model_configs) == 1:
-                config = next(iter(inferred_model_configs))
-            else:
-                config = None
+            elif len(inferred_model_configs[0]) == 1:
+                config = next(iter(inferred_model_configs[0]))
+            elif config is not None:  # config is INFER, structural is not allowed
+                raise RuntimeError("could not infer the model config of the current recipe node")
 
         if config is None:
             if not self.structural_metadata:
@@ -375,7 +375,7 @@ def is_config_stub(config: Optional[model_configs.ModelConfig]) -> bool:
     return getattr(config, "identifier", None) in (None, model_configs.INFER.identifier)
 
 
-def infer_model_configs(state_dict: Iterable[str]) -> List[ModelConfig]:
+def infer_model_configs(state_dict: Iterable[str]) -> List[Set[ModelConfig]]:
     state_dict_set = set(state_dict)
     configs_affinity = {}
     for model_config in model_configs.get_all():
@@ -387,7 +387,10 @@ def infer_model_configs(state_dict: Iterable[str]) -> List[ModelConfig]:
         if len(matched_keys) == len(state_dict_set) and len(matched_keys) >= len(model_config.keys) * 0.9:
             break
 
-    best_configs = sorted(configs_affinity, key=configs_affinity.get, reverse=True)
+    best_configs = sorted((
+        {c for c, n in configs_affinity.items() if n == affinity}
+        for affinity in set(configs_affinity.values())
+    ), key=lambda s: configs_affinity[next(iter(s))], reverse=True)
     return best_configs
 
 
