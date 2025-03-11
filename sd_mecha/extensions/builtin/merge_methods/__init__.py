@@ -6,6 +6,7 @@ from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power
+from .ema import exchange_ema
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
 
@@ -869,3 +870,22 @@ def pick_component(
         return a[key]
     else:
         raise StateDictKeyError(key)
+
+
+@merge_method
+def omit_component(
+    a: Parameter(StateDict[T]),
+    component: Parameter(str, "param"),
+    **kwargs,
+) -> Return(T):
+    if component not in a.model_config.components:
+        raise ValueError(
+            f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
+            f"Valid components: {tuple(a.model_config.components)}"
+        )
+
+    key = kwargs["key"]
+    if key in a.model_config.components[component].keys:
+        raise StateDictKeyError(key)
+    else:
+        return a[key]
