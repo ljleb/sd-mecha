@@ -391,7 +391,7 @@ class KeyMergeVisitor(RecipeVisitor):
     def __visit_sd(self, state_dict, model_config):
         try:
             aliases = model_config.aliases[self.key]
-            keys = (self.key, *aliases)
+            keys = [self.key, *aliases]
         except KeyError as e:
             raise StateDictKeyError(self.key) from e
 
