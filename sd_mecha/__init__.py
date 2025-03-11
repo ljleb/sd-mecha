@@ -23,6 +23,8 @@ from sd_mecha.extensions.builtin.merge_methods import (
     model_stock,
     fallback,
     pick_component,
+    omit_component,
+    exchange_ema,
 )
 from .merge_method_wrappers import (
     add_difference,

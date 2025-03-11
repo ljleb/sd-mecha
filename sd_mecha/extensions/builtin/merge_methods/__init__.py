@@ -6,6 +6,7 @@ from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power, torch_svd_lowrank
+from .ema import exchange_ema
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
 

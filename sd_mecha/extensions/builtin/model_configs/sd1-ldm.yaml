@@ -1134,3 +1134,705 @@ components:
     model.diffusion_model.time_embed.0.weight: {shape: [1280, 320], dtype: float32}
     model.diffusion_model.time_embed.2.bias: {shape: [1280], dtype: float32}
     model.diffusion_model.time_embed.2.weight: {shape: [1280, 1280], dtype: float32}
+  ema:
+    model_ema.decay: {shape: [], dtype: float32}
+    model_ema.num_updates: {shape: [], dtype: int32}
+    model_ema.diffusion_modelinput_blocks00bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks00weight: {shape: [320, 4, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100in_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100in_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100in_layers2weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks100out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10emb_layers1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10emb_layers1weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10in_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10in_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10in_layers2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10in_layers2weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10out_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10out_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10out_layers3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks10out_layers3weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110in_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110in_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110in_layers2weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks110out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11normbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11normweight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11proj_inbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11proj_inweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11proj_outbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11proj_outweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn1to_kweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn1to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn1to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn1to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn1to_vweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn2to_kweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn2to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn2to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn2to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0attn2to_vweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0ffnet0projbias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0ffnet0projweight: {shape: [2560, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0ffnet2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0ffnet2weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0norm1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0norm1weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0norm2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0norm2weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0norm3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks11transformer_blocks0norm3weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20emb_layers1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20emb_layers1weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20in_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20in_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20in_layers2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20in_layers2weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20out_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20out_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20out_layers3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks20out_layers3weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21normbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21normweight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21proj_inbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21proj_inweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21proj_outbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21proj_outweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn1to_kweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn1to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn1to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn1to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn1to_vweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn2to_kweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn2to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn2to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn2to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0attn2to_vweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0ffnet0projbias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0ffnet0projweight: {shape: [2560, 320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0ffnet2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0ffnet2weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0norm1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0norm1weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0norm2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0norm2weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0norm3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks21transformer_blocks0norm3weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks30opbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks30opweight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40emb_layers1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40emb_layers1weight: {shape: [640, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40in_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40in_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40in_layers2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40in_layers2weight: {shape: [640, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40out_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40out_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40out_layers3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40out_layers3weight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40skip_connectionbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks40skip_connectionweight: {shape: [640, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41normbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41normweight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41proj_inbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41proj_inweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41proj_outbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41proj_outweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn1to_kweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn1to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn1to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn1to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn1to_vweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn2to_kweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn2to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn2to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn2to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0attn2to_vweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0ffnet0projbias: {shape: [5120], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0ffnet0projweight: {shape: [5120, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0ffnet2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0ffnet2weight: {shape: [640, 2560], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0norm1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0norm1weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0norm2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0norm2weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0norm3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks41transformer_blocks0norm3weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50emb_layers1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50emb_layers1weight: {shape: [640, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50in_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50in_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50in_layers2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50in_layers2weight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50out_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50out_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50out_layers3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks50out_layers3weight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51normbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51normweight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51proj_inbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51proj_inweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51proj_outbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51proj_outweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn1to_kweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn1to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn1to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn1to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn1to_vweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn2to_kweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn2to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn2to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn2to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0attn2to_vweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0ffnet0projbias: {shape: [5120], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0ffnet0projweight: {shape: [5120, 640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0ffnet2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0ffnet2weight: {shape: [640, 2560], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0norm1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0norm1weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0norm2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0norm2weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0norm3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks51transformer_blocks0norm3weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks60opbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks60opweight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70in_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70in_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70in_layers2weight: {shape: [1280, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks70skip_connectionweight: {shape: [1280, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71normbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71normweight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71proj_inbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71proj_inweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71proj_outbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71proj_outweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn1to_kweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn1to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn1to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn1to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn1to_vweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn2to_kweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn2to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn2to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn2to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0attn2to_vweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0ffnet0projbias: {shape: [10240], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0ffnet0projweight: {shape: [10240, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0ffnet2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0ffnet2weight: {shape: [1280, 5120], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0norm1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0norm1weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0norm2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0norm2weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0norm3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks71transformer_blocks0norm3weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80in_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80in_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80in_layers2weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks80out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81normbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81normweight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81proj_inbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81proj_inweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81proj_outbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81proj_outweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn1to_kweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn1to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn1to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn1to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn1to_vweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn2to_kweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn2to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn2to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn2to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0attn2to_vweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0ffnet0projbias: {shape: [10240], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0ffnet0projweight: {shape: [10240, 1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0ffnet2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0ffnet2weight: {shape: [1280, 5120], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0norm1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0norm1weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0norm2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0norm2weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0norm3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks81transformer_blocks0norm3weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks90opbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelinput_blocks90opweight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0in_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0in_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0in_layers2weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block0out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1normbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1normweight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1proj_inbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1proj_inweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1proj_outbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1proj_outweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn1to_kweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn1to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn1to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn1to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn1to_vweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn2to_kweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn2to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn2to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn2to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0attn2to_vweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0ffnet0projbias: {shape: [10240], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0ffnet0projweight: {shape: [10240, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0ffnet2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0ffnet2weight: {shape: [1280, 5120], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0norm1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0norm1weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0norm2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0norm2weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0norm3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block1transformer_blocks0norm3weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2in_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2in_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2in_layers2weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modelmiddle_block2out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modelout0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelout0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modelout2bias: {shape: [4], dtype: float32}
+    model_ema.diffusion_modelout2weight: {shape: [4, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00in_layers0bias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00in_layers0weight: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00in_layers2weight: {shape: [1280, 2560, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks00skip_connectionweight: {shape: [1280, 2560, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100emb_layers1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100emb_layers1weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100in_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100in_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100in_layers2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100in_layers2weight: {shape: [320, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100out_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100out_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100out_layers3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100out_layers3weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100skip_connectionbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks100skip_connectionweight: {shape: [320, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101normbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101normweight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101proj_inbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101proj_inweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101proj_outbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101proj_outweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn1to_kweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn1to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn1to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn1to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn1to_vweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn2to_kweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn2to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn2to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn2to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0attn2to_vweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0ffnet0projbias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0ffnet0projweight: {shape: [2560, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0ffnet2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0ffnet2weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0norm1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0norm1weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0norm2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0norm2weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0norm3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks101transformer_blocks0norm3weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10in_layers0bias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10in_layers0weight: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10in_layers2weight: {shape: [1280, 2560, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks10skip_connectionweight: {shape: [1280, 2560, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110emb_layers1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110emb_layers1weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110in_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110in_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110in_layers2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110in_layers2weight: {shape: [320, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110out_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110out_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110out_layers3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110out_layers3weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110skip_connectionbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks110skip_connectionweight: {shape: [320, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111normbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111normweight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111proj_inbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111proj_inweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111proj_outbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111proj_outweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn1to_kweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn1to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn1to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn1to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn1to_vweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn2to_kweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn2to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn2to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn2to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0attn2to_vweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0ffnet0projbias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0ffnet0projweight: {shape: [2560, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0ffnet2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0ffnet2weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0norm1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0norm1weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0norm2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0norm2weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0norm3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks111transformer_blocks0norm3weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20in_layers0bias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20in_layers0weight: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20in_layers2weight: {shape: [1280, 2560, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks20skip_connectionweight: {shape: [1280, 2560, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks21convbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks21convweight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30in_layers0bias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30in_layers0weight: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30in_layers2weight: {shape: [1280, 2560, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks30skip_connectionweight: {shape: [1280, 2560, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31normbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31normweight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31proj_inbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31proj_inweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31proj_outbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31proj_outweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn1to_kweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn1to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn1to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn1to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn1to_vweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn2to_kweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn2to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn2to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn2to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0attn2to_vweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0ffnet0projbias: {shape: [10240], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0ffnet0projweight: {shape: [10240, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0ffnet2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0ffnet2weight: {shape: [1280, 5120], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0norm1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0norm1weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0norm2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0norm2weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0norm3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks31transformer_blocks0norm3weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40in_layers0bias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40in_layers0weight: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40in_layers2weight: {shape: [1280, 2560, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks40skip_connectionweight: {shape: [1280, 2560, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41normbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41normweight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41proj_inbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41proj_inweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41proj_outbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41proj_outweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn1to_kweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn1to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn1to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn1to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn1to_vweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn2to_kweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn2to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn2to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn2to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0attn2to_vweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0ffnet0projbias: {shape: [10240], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0ffnet0projweight: {shape: [10240, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0ffnet2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0ffnet2weight: {shape: [1280, 5120], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0norm1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0norm1weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0norm2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0norm2weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0norm3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks41transformer_blocks0norm3weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50emb_layers1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50emb_layers1weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50in_layers0bias: {shape: [1920], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50in_layers0weight: {shape: [1920], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50in_layers2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50in_layers2weight: {shape: [1280, 1920, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50out_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50out_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50out_layers3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50out_layers3weight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50skip_connectionbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks50skip_connectionweight: {shape: [1280, 1920, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51normbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51normweight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51proj_inbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51proj_inweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51proj_outbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51proj_outweight: {shape: [1280, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn1to_kweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn1to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn1to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn1to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn1to_vweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn2to_kweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn2to_out0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn2to_out0weight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn2to_qweight: {shape: [1280, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0attn2to_vweight: {shape: [1280, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0ffnet0projbias: {shape: [10240], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0ffnet0projweight: {shape: [10240, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0ffnet2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0ffnet2weight: {shape: [1280, 5120], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0norm1bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0norm1weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0norm2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0norm2weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0norm3bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks51transformer_blocks0norm3weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks52convbias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks52convweight: {shape: [1280, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60emb_layers1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60emb_layers1weight: {shape: [640, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60in_layers0bias: {shape: [1920], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60in_layers0weight: {shape: [1920], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60in_layers2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60in_layers2weight: {shape: [640, 1920, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60out_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60out_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60out_layers3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60out_layers3weight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60skip_connectionbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks60skip_connectionweight: {shape: [640, 1920, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61normbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61normweight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61proj_inbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61proj_inweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61proj_outbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61proj_outweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn1to_kweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn1to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn1to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn1to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn1to_vweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn2to_kweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn2to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn2to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn2to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0attn2to_vweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0ffnet0projbias: {shape: [5120], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0ffnet0projweight: {shape: [5120, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0ffnet2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0ffnet2weight: {shape: [640, 2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0norm1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0norm1weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0norm2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0norm2weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0norm3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks61transformer_blocks0norm3weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70emb_layers1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70emb_layers1weight: {shape: [640, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70in_layers0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70in_layers0weight: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70in_layers2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70in_layers2weight: {shape: [640, 1280, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70out_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70out_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70out_layers3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70out_layers3weight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70skip_connectionbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks70skip_connectionweight: {shape: [640, 1280, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71normbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71normweight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71proj_inbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71proj_inweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71proj_outbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71proj_outweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn1to_kweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn1to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn1to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn1to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn1to_vweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn2to_kweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn2to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn2to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn2to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0attn2to_vweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0ffnet0projbias: {shape: [5120], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0ffnet0projweight: {shape: [5120, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0ffnet2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0ffnet2weight: {shape: [640, 2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0norm1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0norm1weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0norm2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0norm2weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0norm3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks71transformer_blocks0norm3weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80emb_layers1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80emb_layers1weight: {shape: [640, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80in_layers0bias: {shape: [960], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80in_layers0weight: {shape: [960], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80in_layers2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80in_layers2weight: {shape: [640, 960, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80out_layers0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80out_layers0weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80out_layers3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80out_layers3weight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80skip_connectionbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks80skip_connectionweight: {shape: [640, 960, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81normbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81normweight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81proj_inbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81proj_inweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81proj_outbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81proj_outweight: {shape: [640, 640, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn1to_kweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn1to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn1to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn1to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn1to_vweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn2to_kweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn2to_out0bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn2to_out0weight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn2to_qweight: {shape: [640, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0attn2to_vweight: {shape: [640, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0ffnet0projbias: {shape: [5120], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0ffnet0projweight: {shape: [5120, 640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0ffnet2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0ffnet2weight: {shape: [640, 2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0norm1bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0norm1weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0norm2bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0norm2weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0norm3bias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks81transformer_blocks0norm3weight: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks82convbias: {shape: [640], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks82convweight: {shape: [640, 640, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90emb_layers1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90emb_layers1weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90in_layers0bias: {shape: [960], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90in_layers0weight: {shape: [960], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90in_layers2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90in_layers2weight: {shape: [320, 960, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90out_layers0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90out_layers0weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90out_layers3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90out_layers3weight: {shape: [320, 320, 3, 3], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90skip_connectionbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks90skip_connectionweight: {shape: [320, 960, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91normbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91normweight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91proj_inbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91proj_inweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91proj_outbias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91proj_outweight: {shape: [320, 320, 1, 1], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn1to_kweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn1to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn1to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn1to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn1to_vweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn2to_kweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn2to_out0bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn2to_out0weight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn2to_qweight: {shape: [320, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0attn2to_vweight: {shape: [320, 768], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0ffnet0projbias: {shape: [2560], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0ffnet0projweight: {shape: [2560, 320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0ffnet2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0ffnet2weight: {shape: [320, 1280], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0norm1bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0norm1weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0norm2bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0norm2weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0norm3bias: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeloutput_blocks91transformer_blocks0norm3weight: {shape: [320], dtype: float32}
+    model_ema.diffusion_modeltime_embed0bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeltime_embed0weight: {shape: [1280, 320], dtype: float32}
+    model_ema.diffusion_modeltime_embed2bias: {shape: [1280], dtype: float32}
+    model_ema.diffusion_modeltime_embed2weight: {shape: [1280, 1280], dtype: float32}
+  scheduler:
+    alphas_cumprod: {shape: [1000], dtype: float32}
+    alphas_cumprod_prev: {shape: [1000], dtype: float32}
+    betas: {shape: [1000], dtype: float32}
+    log_one_minus_alphas_cumprod: {shape: [1000], dtype: float32}
+    posterior_log_variance_clipped: {shape: [1000], dtype: float32}
+    posterior_mean_coef1: {shape: [1000], dtype: float32}
+    posterior_mean_coef2: {shape: [1000], dtype: float32}
+    posterior_variance: {shape: [1000], dtype: float32}
+    sqrt_alphas_cumprod: {shape: [1000], dtype: float32}
+    sqrt_one_minus_alphas_cumprod: {shape: [1000], dtype: float32}
+    sqrt_recip_alphas_cumprod: {shape: [1000], dtype: float32}
+    sqrt_recipm1_alphas_cumprod: {shape: [1000], dtype: float32}
