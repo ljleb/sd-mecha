@@ -1134,7 +1134,7 @@ components:
     model.diffusion_model.time_embed.0.weight: {shape: [1280, 320], dtype: float32}
     model.diffusion_model.time_embed.2.bias: {shape: [1280], dtype: float32}
     model.diffusion_model.time_embed.2.weight: {shape: [1280, 1280], dtype: float32}
-  diffuser_ema:
+  ema:
     model_ema.decay: {shape: [], dtype: float32}
     model_ema.num_updates: {shape: [], dtype: int32}
     model_ema.diffusion_modelinput_blocks00bias: {shape: [320], dtype: float32}
