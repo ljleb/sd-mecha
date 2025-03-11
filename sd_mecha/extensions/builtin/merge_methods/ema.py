@@ -16,7 +16,7 @@ def exchange_ema(
         return model[ema_key]
     else:
         for input_key in input_keys:
-            if f"{SD1_EMA_PREFIX}.{input_key[len('model'):].replace('.', '')}" == target_key:
+            if exchange_fn(input_key) == target_key:
                 return model[input_key]
         return model[target_key]
 
