@@ -141,13 +141,13 @@ def merge(
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        recipe_keys = model_config.keys
+        recipe_metadata = model_config.metadata
         with (
             executor,
-            tqdm(total=len(recipe_keys), desc="Merging recipe") as progress,
+            tqdm(total=len(recipe_metadata), desc="Merging recipe") as progress,
             _get_output_dict(
                 output,
-                recipe_keys,
+                recipe_metadata,
                 recipe,
                 model_dirs,
                 buffer_size_per_file_per_thread,
@@ -155,10 +155,10 @@ def merge(
         ):
             fix_torch_threading(merge_device)
             futures = []
-            for key in recipe_keys:
+            for key in recipe_metadata:
                 fn = recipe.accept
                 fn = _track_output(fn, output_dict, key, check_finite)
-                fn = _track_progress(fn, key, recipe_keys[key].shape, progress)
+                fn = _track_progress(fn, key, recipe_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 futures.append(executor.submit(fn, KeyMergeVisitor(key)))
 
@@ -337,8 +337,11 @@ class LoadInputDictsVisitor(RecipeVisitor):
 def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path] = None) -> List[ModelConfig]:
     state_dict_set = set(state_dict)
     configs_affinity = {}
+
     for model_config in model_configs.get_all():
-        matched_keys = state_dict_set.intersection(model_config.keys)
+        config_keys = set(model_config.keys) | set(alias for aliases in model_config.aliases.values() for alias in aliases)
+        matched_keys = state_dict_set.intersection(config_keys)
+
         # heuristic: accept config only if we match more than 90% of the keys of the state dict
         if len(matched_keys) >= len(state_dict_set) * 0.9:
             configs_affinity[model_config] = len(matched_keys)
@@ -375,10 +378,7 @@ class KeyMergeVisitor(RecipeVisitor):
     def visit_literal(self, node: LiteralRecipeNode):
         value = node.value
         if isinstance(node.value, Mapping):
-            try:
-                value = value[self.key]
-            except KeyError as e:
-                raise StateDictKeyError(str(e)) from e
+            value = self.__visit_sd(node.value, node.model_config)
         if isinstance(value, NonDictLiteralValue):
             return value
         if isinstance(value, RecipeNode):
@@ -386,10 +386,21 @@ class KeyMergeVisitor(RecipeVisitor):
         raise TypeError(f"Unexpected literal node value of type {type(value)}")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
+        return self.__visit_sd(node.state_dict, node.model_config)
+
+    def __visit_sd(self, state_dict, model_config):
         try:
-            return node.state_dict[self.key]
+            aliases = model_config.aliases[self.key]
+            keys = (self.key, *aliases)
         except KeyError as e:
-            raise StateDictKeyError(str(e)) from e
+            raise StateDictKeyError(self.key) from e
+
+        for i, key in enumerate(keys):
+            try:
+                return state_dict[key]
+            except KeyError as e:
+                if i == len(keys) - 1:
+                    raise StateDictKeyError(self.key) from e
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         merged_args, merged_kwargs = self.__visit_deeper_first(node.args, node.kwargs, node.merge_method)

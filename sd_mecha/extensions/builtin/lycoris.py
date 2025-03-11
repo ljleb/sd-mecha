@@ -3,8 +3,8 @@ import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha.extensions import model_configs
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from sd_mecha.extensions.model_configs import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase
-from sd_mecha.streaming import TensorMetadata, StateDictKeyError
+from sd_mecha.extensions.model_configs import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase, KeyMetadata
+from sd_mecha.streaming import StateDictKeyError
 
 
 def _register_all_lycoris_configs():
@@ -78,20 +78,20 @@ class LycorisModelConfig(LazyModelConfigBase):
         }
         return ModelConfigImpl(identifier, components)
 
-    def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, TensorMetadata]:
-        return _to_lycoris_keys({key: TensorMetadata(None, None)}, self.algorithms, self.prefix)
+    def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, KeyMetadata]:
+        return _to_lycoris_keys({key: KeyMetadata(None, None)}, self.algorithms, self.prefix)
 
 
 def _to_lycoris_keys(
-    keys: Mapping[StateDictKey, TensorMetadata],
+    keys: Mapping[StateDictKey, KeyMetadata],
     algorithms: Iterable[str],
     prefix: str,
-) -> Dict[StateDictKey, TensorMetadata]:
+) -> Dict[StateDictKey, KeyMetadata]:
     lycoris_keys = {}
 
     for algorithm in algorithms:
         for key, meta in keys.items():
-            if key.endswith("bias"):
+            if key.endswith("bias") or not getattr(meta.metadata.dtype, "is_floating_point", True):
                 continue
 
             key = key.split('.')
@@ -101,7 +101,7 @@ def _to_lycoris_keys(
 
             for suffix in lycoris_algorithms[algorithm]:
                 lycoris_key = f"{prefix}_{key}.{suffix}"
-                lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=None)
+                lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=[])
 
     return lycoris_keys
 
