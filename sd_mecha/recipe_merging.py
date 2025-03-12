@@ -121,7 +121,7 @@ def merge(
     if omit_extra_keys is ...:
         omit_extra_keys = True
     if omit_ema is ...:
-        omit_ema = True
+        omit_ema = omit_extra_keys
     if check_mandatory_keys is ...:
         check_mandatory_keys = True
     if tqdm is ...:
