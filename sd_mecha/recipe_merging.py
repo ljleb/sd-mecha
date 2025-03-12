@@ -81,7 +81,7 @@ def merge(
         omit_extra_keys (optional):
             If True, warns about and removes unrecognized keys from the output model.
         omit_ema (optional):
-            If true, omits ema keys from the output model.
+            If true, omits ema keys from the output model. Defaults to omit_extra_keys
         check_mandatory_keys (optional):
             If True and an input model is missing non-optional keys, raises RuntimeError.
         tqdm (optional):
