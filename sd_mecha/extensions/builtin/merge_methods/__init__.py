@@ -858,6 +858,20 @@ cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 
 @merge_method
+def get_dtype(
+    a: Parameter(Tensor),
+) -> Return(str):
+    return cast_dtype_map[a.dtype]
+
+
+@merge_method
+def get_device(
+    a: Parameter(Tensor),
+) -> Return(str):
+    return str(a.device)
+
+
+@merge_method
 def pick_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
