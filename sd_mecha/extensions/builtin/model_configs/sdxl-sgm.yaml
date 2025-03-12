@@ -839,8 +839,8 @@ components:
     first_stage_model.quant_conv.bias: {shape: [8], dtype: float32}
     first_stage_model.quant_conv.weight: {shape: [8, 8, 1, 1], dtype: float32}
   diffuser:
-    edm_vpred.sigma_max: {shape: [], dtype: float32}
-    edm_vpred.sigma_min: {shape: [], dtype: float32}
+    edm_vpred.sigma_max: {shape: [], dtype: float32, optional: true}
+    edm_vpred.sigma_min: {shape: [], dtype: float32, optional: true}
     model.diffusion_model.input_blocks.0.0.bias: {shape: [320], dtype: float32}
     model.diffusion_model.input_blocks.0.0.weight: {shape: [320, 4, 3, 3], dtype: float32}
     model.diffusion_model.input_blocks.1.0.emb_layers.1.bias: {shape: [320], dtype: float32}
@@ -2521,5 +2521,5 @@ components:
     model.diffusion_model.time_embed.0.weight: {shape: [1280, 320], dtype: float32}
     model.diffusion_model.time_embed.2.bias: {shape: [1280], dtype: float32}
     model.diffusion_model.time_embed.2.weight: {shape: [1280, 1280], dtype: float32}
-    v_pred: {shape: [0], dtype: int64}
-    ztsnr: {shape: [0], dtype: int64}
+    v_pred: {shape: [0], dtype: int64, optional: true}
+    ztsnr: {shape: [0], dtype: int64, optional: true}
