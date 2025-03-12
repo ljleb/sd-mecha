@@ -200,8 +200,8 @@ class Defaults:
             strict_weight_space=strict_weight_space,
             check_finite=check_finite,
             omit_extra_keys=omit_extra_keys,
-            check_mandatory_keys=check_mandatory_keys,
             omit_ema=omit_ema,
+            check_mandatory_keys=check_mandatory_keys,
             tqdm=tqdm,
             output=output,
         )
