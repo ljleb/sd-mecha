@@ -155,19 +155,22 @@ def merge(
         executor = ThreadPoolExecutor(max_workers=threads)
 
     with open_input_dicts(recipe, model_dirs, buffer_size_per_file, strip_extra_keys, check_mandatory_keys):
-        if omit_components is ...:
-            if "ema" in recipe.model_config.components:
-                omit_components = ("ema",)
-            else:
-                omit_components = ()
-        recipe = functools.reduce(sd_mecha.omit_component, omit_components, recipe)
-
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
         recipe_metadata = recipe.model_config.metadata
         if not strip_extra_keys:
             recipe, recipe_metadata = copy_extra_keys(recipe)
+
+        if omit_components is ...:
+            if "ema" in recipe.model_config.components:
+                omit_components = ("ema",)
+            else:
+                omit_components = ()
+        for component in omit_components:
+            for key in recipe.model_config.components[component].keys:
+                if key in recipe_metadata:
+                    del recipe_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
 
