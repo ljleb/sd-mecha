@@ -487,11 +487,14 @@ class InferModelConfigVisitor(RecipeVisitor):
         # allow to infer merge space 'param' for i.e. approximated fisher diagonal
         if len(param_merge_spaces) == 1 and param_merge_spaces[0] in ["weight", "param"]:
             node_merge_space = param_merge_spaces[0]
-        return ModelRecipeNode(
-            node.path if node.state_dict is None else node.state_dict,
+        res = ModelRecipeNode(
+            node.path,
             model_config=node.model_config,
             merge_space=node_merge_space,
         )
+        if node.state_dict is not None:
+            res.state_dict = node.state_dict
+        return res
 
     def visit_merge(self, node: MergeRecipeNode):
         return node

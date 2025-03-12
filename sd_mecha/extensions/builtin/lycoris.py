@@ -101,7 +101,7 @@ def _to_lycoris_keys(
 
             for suffix in lycoris_algorithms[algorithm]:
                 lycoris_key = f"{prefix}_{key}.{suffix}"
-                lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=[])
+                lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=[], optional=True)
 
     return lycoris_keys
 

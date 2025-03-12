@@ -4,6 +4,7 @@ import functools
 import gc
 import itertools
 import logging
+import operator
 import os
 import pathlib
 import sys
@@ -26,6 +27,7 @@ from .typing_ import is_subclass
 
 def merge(
     recipe: RecipeNodeOrValue,
+    *,
     fallback_model: Optional[RecipeNodeOrValue] = ...,
     merge_device: Optional[str | torch.device] = ...,
     merge_dtype: Optional[torch.dtype] = ...,
@@ -36,8 +38,9 @@ def merge(
     model_dirs: Iterable[pathlib.Path] = ...,
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
+    strip_extra_keys: bool = ...,
+    check_mandatory_keys: bool = ...,
     tqdm: type = ...,
-    *,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
@@ -69,7 +72,11 @@ def merge(
             If True, verifies that merges occur in "weight" space. If False, merges can happen
             in other merge spaces (like "delta" or "param").
         check_finite (optional):
-            If True, warns if any non-finite values appear in the final merged tensors.
+            If True, warns if any non-finite values appear in the output model.
+        strip_extra_keys (optional):
+            If True, warns about and removes unrecognized keys from the output model.
+        check_mandatory_keys (optional):
+            If True and an input model is missing non-optional keys, raises RuntimeError.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
         output (optional):
@@ -104,6 +111,10 @@ def merge(
         strict_weight_space = True
     if check_finite is ...:
         check_finite = True
+    if strip_extra_keys is ...:
+        strip_extra_keys = True
+    if check_mandatory_keys is ...:
+        check_mandatory_keys = True
     if tqdm is ...:
         tqdm = tqdm_original
 
@@ -135,13 +146,17 @@ def merge(
         thread_local_data = threading.local()
         executor = ThreadPoolExecutor(max_workers=threads)
 
-    with open_input_dicts(recipe, model_dirs, buffer_size_per_file):
-        model_config = recipe.model_config
+    with open_input_dicts(recipe, model_dirs, buffer_size_per_file, strip_extra_keys, check_mandatory_keys):
+        recipe_config = recipe.model_config
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
+        recipe_metadata = recipe_config.metadata
+        if not strip_extra_keys:
+            recipe, recipe_metadata = wrap_extra_keys_recipe(recipe)
+
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        recipe_metadata = model_config.metadata
+
         with (
             executor,
             tqdm(total=len(recipe_metadata), desc="Merging recipe") as progress,
@@ -178,6 +193,38 @@ def fix_torch_threading(device):
     # avoids a hard error caused by threads>1 with some torch ops
     # see https://github.com/pytorch/pytorch/issues/90613
     torch.linalg.inv(torch.ones((1, 1), device=device))
+
+
+def wrap_extra_keys_recipe(recipe: RecipeNode):
+    config = recipe.model_config
+    metadata = config.metadata
+    aliases = {k_alias: k for k, v in config.aliases.items() for k_alias in v}
+
+    forwardable_nodes_visitor = ForwardableNodesVisitor(config)
+    recipe.accept(forwardable_nodes_visitor)
+    forwardable_nodes = forwardable_nodes_visitor.forwardable_nodes
+
+    recipe = functools.reduce(operator.or_, [sd[0] for sd in forwardable_nodes], recipe)
+    metadata = {aliases.get(k, k): v for sd in forwardable_nodes for k, v in sd[1].items()} | metadata
+
+    return recipe, metadata
+
+
+@dataclasses.dataclass
+class ForwardableNodesVisitor(RecipeVisitor):
+    target_config: ModelConfig
+    forwardable_nodes: List[Tuple[RecipeNode, Mapping[str, TensorMetadata]]] = dataclasses.field(default_factory=list)
+
+    def visit_literal(self, node: LiteralRecipeNode):
+        return
+
+    def visit_model(self, node: ModelRecipeNode):
+        if node.model_config == self.target_config and not any(node in n[0] for n in self.forwardable_nodes):
+            self.forwardable_nodes.append((node, dict(node.state_dict.metadata())))
+
+    def visit_merge(self, node: MergeRecipeNode):
+        for arg in (*node.args, *node.kwargs.values()):
+            arg.accept(self)
 
 
 @contextlib.contextmanager
@@ -267,10 +314,12 @@ def open_input_dicts(
     recipe: recipe_nodes.RecipeNode,
     model_dirs: Iterable[pathlib.Path] = (),
     buffer_size_per_dict: int = 0,
+    strip_extra_keys: bool = True,
+    check_mandatory_keys: bool = True,
     empty_cuda_cache: bool = False,
 ):
     try:
-        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict))
+        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict, strip_extra_keys, check_mandatory_keys))
         yield recipe
     finally:
         recipe.accept(CloseInputDictsVisitor())
@@ -283,6 +332,8 @@ def open_input_dicts(
 class LoadInputDictsVisitor(RecipeVisitor):
     model_dirs: Iterable[pathlib.Path]
     buffer_size_per_dict: int
+    strip_extra_keys: bool
+    check_mandatory_keys: bool
     dicts_cache: Dict[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode):
@@ -293,11 +344,13 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
             if node.model_config is None:
                 node.model_config = infer_model_configs(node.value)[0]
+            check_model_config(node.value, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, "memory")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)
         if node.model_config is None:
             node.model_config = infer_model_configs(node.state_dict, node_path)[0]
+        check_model_config(node.state_dict, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, str(node.path))
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         for model in itertools.chain(node.args, node.kwargs.values()):
@@ -354,6 +407,33 @@ def infer_model_configs(state_dict: Iterable[str], path: Optional[pathlib.Path] 
         raise ValueError(f"No configuration was found for the given state dict{' ' + str(path) if path is not None else ''}")
 
     return best_configs
+
+
+def check_model_config(state_dict: Iterable[str], config: ModelConfig, strip_extra_keys: bool, check_mandatory_keys: bool, state_dict_origin: str):
+    state_dict_keys = set(state_dict)
+
+    if strip_extra_keys:
+        config_keys = set(k_alias for k, v in config.keys.items() for k_alias in [k, *v.aliases])
+        extra_keys = state_dict_keys - config_keys
+        if extra_keys:
+            logging.warning(f"Found extra keys in state dict {state_dict_origin}: {extra_keys}")
+
+    if check_mandatory_keys:
+        missing_keys = set()
+        for k, v in config.keys.items():
+            if v.optional:
+                continue
+
+            for k_alias in v.aliases:
+                if k_alias in state_dict_keys:
+                    k = k_alias
+                    break
+
+            if k not in state_dict_keys:
+                missing_keys.add(k)
+
+        if missing_keys:
+            raise RuntimeError(f"State dict {state_dict_origin} is missing non-optional keys: {missing_keys}")
 
 
 @dataclasses.dataclass

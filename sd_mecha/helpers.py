@@ -71,6 +71,8 @@ class Defaults:
         total_buffer_size: int = ...,
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
+        strip_extra_keys: bool = ...,
+        check_mandatory_keys: bool = ...,
         tqdm: type = ...,
     ):
         """
@@ -106,6 +108,8 @@ class Defaults:
         self.__total_buffer_size = total_buffer_size
         self.__strict_weight_space = strict_weight_space
         self.__check_finite = check_finite
+        self.__strip_extra_keys = strip_extra_keys
+        self.__check_mandatory_keys = check_mandatory_keys
         self.__tqdm = tqdm
 
     def convert(
@@ -138,6 +142,7 @@ class Defaults:
     def merge(
         self,
         recipe: RecipeNodeOrValue,
+        *,
         fallback_model: Optional[RecipeNodeOrValue] = ...,
         merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
@@ -148,8 +153,9 @@ class Defaults:
         model_dirs: pathlib.Path | str | Iterable[pathlib.Path | str] = ...,
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
+        strip_extra_keys: bool = ...,
+        check_mandatory_keys: bool = ...,
         tqdm: type = ...,
-        *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
     ) -> Optional[MutableMapping[str, torch.Tensor]]:
         if merge_device is ...:
@@ -171,6 +177,10 @@ class Defaults:
             strict_weight_space = self.__strict_weight_space
         if check_finite is ...:
             check_finite = self.__check_finite
+        if strip_extra_keys is ...:
+            strip_extra_keys = self.__strip_extra_keys
+        if check_mandatory_keys is ...:
+            check_mandatory_keys = self.__check_mandatory_keys
 
         return merge(
             recipe,
@@ -184,6 +194,8 @@ class Defaults:
             model_dirs,
             strict_weight_space,
             check_finite,
+            strip_extra_keys,
+            check_mandatory_keys,
             tqdm,
             output=output,
         )

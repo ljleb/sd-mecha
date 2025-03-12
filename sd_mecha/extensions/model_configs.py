@@ -22,27 +22,12 @@ StateDictKey = str
 class KeyMetadata:
     shape: Optional[List[int]]
     dtype: Optional[str]
-    __aliases: List[str] = dataclasses.field(default_factory=list, metadata={"serial_name": "aliases", "exclude": lambda p: bool(p)})
+    aliases: Iterable[str] = dataclasses.field(default_factory=list, metadata={"exclude": lambda p: bool(p)})
+    optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
 
     @property
     def metadata(self) -> TensorMetadata:
         return TensorMetadata(self.shape, self.dtype)
-
-    @property
-    def aliases(self) -> Iterable[StateDictKey]:
-        return self.__aliases
-
-
-def KeyMetadata__init__patch(self, *args, **kwargs):
-    for field in dataclasses.fields(KeyMetadata):
-        if "serial_name" in field.metadata and field.metadata["serial_name"] in kwargs:
-            kwargs[field.name] = kwargs.pop(field.metadata["serial_name"])
-
-    KeyMetadata__init__(self, *args, **kwargs)
-
-
-KeyMetadata__init__ = KeyMetadata.__init__
-KeyMetadata.__init__ = KeyMetadata__init__patch
 
 
 @dataclasses.dataclass
