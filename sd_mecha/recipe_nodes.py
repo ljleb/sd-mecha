@@ -56,10 +56,10 @@ class RecipeNode(abc.ABC):
         other = merge_methods.value_to_node(other)
         return other | self
 
-    def to(self, *, device: Optional[str | torch.device] = None, dtype: Optional[torch.dtype] = None):
-        if device is not None:
+    def to(self, *, device: Optional[str | torch.device | "RecipeNode"] = None, dtype: Optional[str | torch.dtype | "RecipeNode"] = None):
+        if isinstance(device, torch.device):
             device = str(device)
-        if dtype is not None:
+        if isinstance(dtype, torch.dtype):
             from sd_mecha.extensions.builtin.merge_methods import cast_dtype_map_reversed
             dtype = cast_dtype_map_reversed[dtype]
         return merge_methods.resolve("cast")(self, device=device, dtype=dtype)
