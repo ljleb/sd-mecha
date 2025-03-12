@@ -861,7 +861,7 @@ cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 def get_dtype(
     a: Parameter(Tensor),
 ) -> Return(str, "param"):
-    return cast_dtype_map[a.dtype]
+    return cast_dtype_map_reversed[a.dtype]
 
 
 @merge_method
