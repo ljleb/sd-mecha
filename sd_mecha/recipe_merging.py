@@ -208,7 +208,6 @@ def copy_extra_keys(recipe: RecipeNode):
 
     new_recipe = functools.reduce(operator.or_, [n[0] for n in forwardable_nodes], recipe)
     new_metadata = OrderedDict((aliases.get(k, k), v) for n in forwardable_nodes for k, v in n[1].items()) | metadata
-    new_metadata = OrderedDict(sorted(new_metadata.items(), key=lambda t: t[0]))
     return new_recipe, new_metadata
 
 
