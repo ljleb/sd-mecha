@@ -42,9 +42,9 @@ def merge(
     model_dirs: Iterable[pathlib.Path] = ...,
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
-    strip_extra_keys: bool = ...,
+    omit_extra_keys: bool = ...,
+    omit_ema: bool = ...,
     check_mandatory_keys: bool = ...,
-    omit_components: Iterable[str] = ...,
     tqdm: type = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
@@ -78,12 +78,12 @@ def merge(
             in other merge spaces (like "delta" or "param").
         check_finite (optional):
             If True, warns if any non-finite values appear in the output model.
-        strip_extra_keys (optional):
+        omit_extra_keys (optional):
             If True, warns about and removes unrecognized keys from the output model.
+        omit_ema (optional):
+            If true, omits ema keys from the output model.
         check_mandatory_keys (optional):
             If True and an input model is missing non-optional keys, raises RuntimeError.
-        omit_components (optional):
-            An iterable of components from the output config to omit. Defaults to omitting ema if the config has ema.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
         output (optional):
@@ -118,8 +118,10 @@ def merge(
         strict_weight_space = True
     if check_finite is ...:
         check_finite = True
-    if strip_extra_keys is ...:
-        strip_extra_keys = True
+    if omit_extra_keys is ...:
+        omit_extra_keys = True
+    if omit_ema is ...:
+        omit_ema = True
     if check_mandatory_keys is ...:
         check_mandatory_keys = True
     if tqdm is ...:
@@ -154,21 +156,16 @@ def merge(
         thread_local_data = threading.local()
         executor = ThreadPoolExecutor(max_workers=threads)
 
-    with open_input_dicts(recipe, model_dirs, buffer_size_per_file, strip_extra_keys, check_mandatory_keys):
+    with open_input_dicts(recipe, model_dirs, buffer_size_per_file, omit_extra_keys, check_mandatory_keys):
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
         recipe_metadata = recipe.model_config.metadata
-        if not strip_extra_keys:
+        if not omit_extra_keys:
             recipe, recipe_metadata = copy_extra_keys(recipe)
 
-        if omit_components is ...:
-            if "ema" in recipe.model_config.components:
-                omit_components = ("ema",)
-            else:
-                omit_components = ()
-        for component in omit_components:
-            for key in recipe.model_config.components[component].keys:
+        if omit_ema and "ema" in recipe.model_config.components:
+            for key in recipe.model_config.components["ema"].keys:
                 if key in recipe_metadata:
                     del recipe_metadata[key]
 
@@ -330,12 +327,12 @@ def open_input_dicts(
     recipe: recipe_nodes.RecipeNode,
     model_dirs: Iterable[pathlib.Path] = (),
     buffer_size_per_dict: int = 0,
-    strip_extra_keys: bool = True,
+    omit_extra_keys: bool = True,
     check_mandatory_keys: bool = True,
     empty_cuda_cache: bool = False,
 ):
     try:
-        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict, strip_extra_keys, check_mandatory_keys))
+        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict, omit_extra_keys, check_mandatory_keys))
         yield recipe
     finally:
         recipe.accept(CloseInputDictsVisitor())
