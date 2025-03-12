@@ -4,7 +4,7 @@ import pathlib
 import torch
 from .extensions import model_configs, merge_methods, merge_spaces
 from .extensions.merge_spaces import MergeSpace
-from typing import Optional, Dict, Tuple
+from typing import Optional, Dict, Tuple, Union
 
 
 class RecipeNode(abc.ABC):
@@ -56,7 +56,7 @@ class RecipeNode(abc.ABC):
         other = merge_methods.value_to_node(other)
         return other | self
 
-    def to(self, *, device: Optional[str | torch.device | "RecipeNode"] = None, dtype: Optional[str | torch.dtype | "RecipeNode"] = None):
+    def to(self, *, device: Optional[Union[str, torch.device, "RecipeNode"]] = None, dtype: Optional[Union[str, torch.dtype, "RecipeNode"]] = None):
         if isinstance(device, torch.device):
             device = str(device)
         if isinstance(dtype, torch.dtype):
