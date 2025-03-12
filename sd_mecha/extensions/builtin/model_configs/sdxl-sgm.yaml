@@ -2,7 +2,7 @@ identifier: sdxl-sgm
 components:
   clip_l:
     conditioner.embedders.0.transformer.text_model.embeddings.position_embedding.weight: {shape: [77, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64}
+    conditioner.embedders.0.transformer.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64, optional: true}
     conditioner.embedders.0.transformer.text_model.embeddings.token_embedding.weight: {shape: [49408, 768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.0.layer_norm1.bias: {shape: [768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.0.layer_norm1.weight: {shape: [768], dtype: float32}

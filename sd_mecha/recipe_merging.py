@@ -198,16 +198,15 @@ def fix_torch_threading(device):
 def wrap_extra_keys_recipe(recipe: RecipeNode):
     config = recipe.model_config
     metadata = config.metadata
-    aliases = {k_alias: k for k, v in config.aliases.items() for k_alias in v}
+    aliases = {k_alias: k for k, k_aliases in config.aliases.items() for k_alias in k_aliases}
 
     forwardable_nodes_visitor = ForwardableNodesVisitor(config)
     recipe.accept(forwardable_nodes_visitor)
     forwardable_nodes = forwardable_nodes_visitor.forwardable_nodes
 
-    recipe = functools.reduce(operator.or_, [sd[0] for sd in forwardable_nodes], recipe)
-    metadata = {aliases.get(k, k): v for sd in forwardable_nodes for k, v in sd[1].items()} | metadata
-
-    return recipe, metadata
+    new_recipe = functools.reduce(operator.or_, [n[0] for n in forwardable_nodes], recipe)
+    new_metadata = {aliases.get(k, k): v for n in forwardable_nodes for k, v in n[1].items()} | metadata
+    return new_recipe, new_metadata
 
 
 @dataclasses.dataclass
