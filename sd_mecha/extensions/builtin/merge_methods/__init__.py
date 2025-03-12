@@ -67,12 +67,16 @@ def slerp(
 
 @merge_method
 def add_difference(
-    a: Parameter(Tensor),
-    b: Parameter(Tensor, "delta"),
+    a: Parameter(StateDict[Tensor]),
+    b: Parameter(StateDict[Tensor], "delta"),
     *,
     alpha: Parameter(Tensor) = 1.0,
+    **kwargs,
 ) -> Return(Tensor):
-    return a + alpha * b
+    key = kwargs["key"]
+    b_val = b[key]  # try to load b from memory first in case it fails to merge before a
+    a_val = a[key]
+    return a_val + alpha * b_val
 
 
 @merge_method

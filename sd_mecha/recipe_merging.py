@@ -10,6 +10,8 @@ import pathlib
 import sys
 import threading
 import typing
+from collections import OrderedDict
+
 import torch
 from .extensions import model_configs, model_formats
 from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
@@ -119,6 +121,7 @@ def merge(
         tqdm = tqdm_original
 
     recipe = value_to_node(recipe)
+    original_recipe = recipe
     if fallback_model is not None:
         recipe = recipe | fallback_model
 
@@ -147,13 +150,12 @@ def merge(
         executor = ThreadPoolExecutor(max_workers=threads)
 
     with open_input_dicts(recipe, model_dirs, buffer_size_per_file, strip_extra_keys, check_mandatory_keys):
-        recipe_config = recipe.model_config
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
-        recipe_metadata = recipe_config.metadata
+        recipe_metadata = recipe.model_config.metadata
         if not strip_extra_keys:
-            recipe, recipe_metadata = wrap_extra_keys_recipe(recipe)
+            recipe, recipe_metadata = copy_extra_keys(recipe)
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
 
@@ -163,7 +165,7 @@ def merge(
             _get_output_dict(
                 output,
                 recipe_metadata,
-                recipe,
+                original_recipe,
                 model_dirs,
                 buffer_size_per_file_per_thread,
             ) as output_dict,
@@ -195,7 +197,7 @@ def fix_torch_threading(device):
     torch.linalg.inv(torch.ones((1, 1), device=device))
 
 
-def wrap_extra_keys_recipe(recipe: RecipeNode):
+def copy_extra_keys(recipe: RecipeNode):
     config = recipe.model_config
     metadata = config.metadata
     aliases = {k_alias: k for k, k_aliases in config.aliases.items() for k_alias in k_aliases}
@@ -205,7 +207,8 @@ def wrap_extra_keys_recipe(recipe: RecipeNode):
     forwardable_nodes = forwardable_nodes_visitor.forwardable_nodes
 
     new_recipe = functools.reduce(operator.or_, [n[0] for n in forwardable_nodes], recipe)
-    new_metadata = {aliases.get(k, k): v for n in forwardable_nodes for k, v in n[1].items()} | metadata
+    new_metadata = OrderedDict((aliases.get(k, k), v) for n in forwardable_nodes for k, v in n[1].items()) | metadata
+    new_metadata = OrderedDict(sorted(new_metadata.items(), key=lambda t: t[0]))
     return new_recipe, new_metadata
 
 
@@ -219,7 +222,7 @@ class ForwardableNodesVisitor(RecipeVisitor):
 
     def visit_model(self, node: ModelRecipeNode):
         if node.model_config == self.target_config and not any(node in n[0] for n in self.forwardable_nodes):
-            self.forwardable_nodes.append((node, dict(node.state_dict.metadata())))
+            self.forwardable_nodes.append((node, OrderedDict(node.state_dict.metadata())))
 
     def visit_merge(self, node: MergeRecipeNode):
         for arg in (*node.args, *node.kwargs.values()):
@@ -438,7 +441,9 @@ def check_model_config(state_dict: Iterable[str], config: ModelConfig, strip_ext
 @dataclasses.dataclass
 class CloseInputDictsVisitor(RecipeVisitor):
     def visit_literal(self, node: LiteralRecipeNode):
-        pass
+        if isinstance(node.value, dict) and isinstance(next(iter(node.value.values())), RecipeNode):
+            for v in node.value.values():
+                v.accept(self)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         if node.state_dict is not None:
@@ -446,7 +451,7 @@ class CloseInputDictsVisitor(RecipeVisitor):
         node.state_dict = None
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in itertools.chain(node.args, node.kwargs.values()):
+        for model in (*node.args, *node.kwargs.values()):
             model.accept(self)
 
 
@@ -468,11 +473,8 @@ class KeyMergeVisitor(RecipeVisitor):
         return self.__visit_sd(node.state_dict, node.model_config)
 
     def __visit_sd(self, state_dict, model_config):
-        try:
-            aliases = model_config.aliases[self.key]
-            keys = [self.key, *aliases]
-        except KeyError as e:
-            raise StateDictKeyError(self.key) from e
+        aliases = model_config.aliases.get(self.key, [])
+        keys = [self.key, *aliases]
 
         for i, key in enumerate(keys):
             try:
