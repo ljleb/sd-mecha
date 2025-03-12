@@ -13,6 +13,8 @@ import typing
 from collections import OrderedDict
 
 import torch
+
+import sd_mecha
 from .extensions import model_configs, model_formats
 from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
 from .extensions.model_configs import ModelConfig
@@ -42,6 +44,7 @@ def merge(
     check_finite: bool = ...,
     strip_extra_keys: bool = ...,
     check_mandatory_keys: bool = ...,
+    omit_components: Iterable[str] = ...,
     tqdm: type = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
@@ -79,6 +82,8 @@ def merge(
             If True, warns about and removes unrecognized keys from the output model.
         check_mandatory_keys (optional):
             If True and an input model is missing non-optional keys, raises RuntimeError.
+        omit_components (optional):
+            An iterable of components from the output config to omit. Defaults to omitting ema if the config has ema.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
         output (optional):
@@ -150,6 +155,13 @@ def merge(
         executor = ThreadPoolExecutor(max_workers=threads)
 
     with open_input_dicts(recipe, model_dirs, buffer_size_per_file, strip_extra_keys, check_mandatory_keys):
+        if omit_components is ...:
+            if "ema" in recipe.model_config.components:
+                omit_components = ("ema",)
+            else:
+                omit_components = ()
+        recipe = functools.reduce(sd_mecha.omit_component, omit_components, recipe)
+
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
 
