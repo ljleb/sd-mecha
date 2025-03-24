@@ -238,9 +238,9 @@ class MergeMethod:
         defaults = self.get_default_args()
         first_default_arg = len(params.args) - len(defaults.args)
 
-        first_arg_as_kwarg = min(itertools.chain(
-            (i for i, k in enumerate(kwargs) if k in params.args),
-            (float('inf'),)
+        first_arg_as_kwarg = min((
+            *(params.args.index(k) for k in kwargs if k in params.args),
+            float('inf'),
         ))
 
         def ensure_positive(v: int):
@@ -248,28 +248,28 @@ class MergeMethod:
                 raise RuntimeError
             return v
 
+        max_args = len(params.args) if not params.has_varargs() else float("inf")
+        min_args = len(params.args) - len(defaults.args)
+        n_args = len(args) + len([kwargs[k] for k in params.args if k in kwargs])
+        if not (min_args <= n_args <= max_args):
+            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {n_args} arguments")
+
         args = [
-            args[i] if i < first_arg_as_kwarg
+            args[i] if i < min(first_arg_as_kwarg, len(args))
             else kwargs.pop(params.args[i]) if params.args[i] in kwargs
             else defaults.args[ensure_positive(i - first_default_arg)]
             for i in range(len(params.args))
         ] + list(args[len(params.args):])
-
-        max_args = len(params.args) if not params.has_varargs() else float("inf")
-        min_args = len(params.args) - len(defaults.args)
-        n_args = len(args)
-        if not (min_args <= n_args <= max_args):
-            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {n_args} arguments")
 
         for k in kwargs:
             if k not in params.kwargs:
                 raise TypeError(f"Unexpected keyword-argument '{k}'")
 
         for k in params.kwargs:
-            if k not in itertools.chain(kwargs.keys(), defaults.kwargs.keys()):
+            if k not in (*kwargs.keys(), *defaults.kwargs.keys()):
                 raise TypeError(f"Missing keyword-argument '{k}'")
 
-        default_args = defaults.args[n_args - min_args:]
+        # default_args = defaults.args[n_args - min_args:]
         input_configs = self.get_input_configs()
         input_configs_dict = input_configs.as_dict(n_args)
         default_config = self.get_return_config(input_configs.args_varags(n_args), input_configs.kwargs)
@@ -286,7 +286,7 @@ class MergeMethod:
         input_types = self.get_input_types()
         args = tuple(
             arg_to_node(i, arg, input_types.args[i] if i < len(input_types.args) else input_types.vararg)
-            for i, (arg, k) in enumerate(zip(itertools.chain(args, default_args), params.args_varags(n_args)))
+            for i, (arg, k) in enumerate(zip(args, params.args_varags(n_args)))
         )
         kwargs = {
             k: arg_to_node(k, arg, input_types.kwargs[k])

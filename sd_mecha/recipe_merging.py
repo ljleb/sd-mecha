@@ -44,6 +44,7 @@ def merge(
     check_finite: bool = ...,
     omit_extra_keys: bool = ...,
     omit_ema: bool = ...,
+    alias_extra_keys: bool = ...,
     check_mandatory_keys: bool = ...,
     tqdm: type = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
@@ -81,7 +82,9 @@ def merge(
         omit_extra_keys (optional):
             If True, warns about and removes unrecognized keys from the output model.
         omit_ema (optional):
-            If true, omits ema keys from the output model. Defaults to omit_extra_keys.
+            If True, omits ema keys from the output model. Defaults to omit_extra_keys.
+        alias_extra_keys (optional):
+            If True, renames extra alias keys to their canonical counterpart. Defaults to True.
         check_mandatory_keys (optional):
             If True and an input model is missing non-optional keys, raises RuntimeError.
         tqdm (optional):
@@ -122,6 +125,8 @@ def merge(
         omit_extra_keys = True
     if omit_ema is ...:
         omit_ema = omit_extra_keys
+    if alias_extra_keys is ...:
+        alias_extra_keys = True
     if check_mandatory_keys is ...:
         check_mandatory_keys = True
     if tqdm is ...:
@@ -162,7 +167,7 @@ def merge(
 
         recipe_metadata = recipe.model_config.metadata
         if not omit_extra_keys:
-            recipe, recipe_metadata = copy_extra_keys(recipe)
+            recipe, recipe_metadata = copy_extra_keys(recipe, alias_extra_keys)
 
         if omit_ema and "ema" in recipe.model_config.components:
             for key in recipe.model_config.components["ema"].keys:
@@ -209,7 +214,7 @@ def fix_torch_threading(device):
     torch.linalg.inv(torch.ones((1, 1), device=device))
 
 
-def copy_extra_keys(recipe: RecipeNode):
+def copy_extra_keys(recipe: RecipeNode, alias_extra_keys: bool):
     config = recipe.model_config
     metadata = config.metadata
     aliases = {k_alias: k for k, k_aliases in config.aliases.items() for k_alias in k_aliases}
@@ -219,7 +224,7 @@ def copy_extra_keys(recipe: RecipeNode):
     forwardable_nodes = forwardable_nodes_visitor.forwardable_nodes
 
     new_recipe = functools.reduce(operator.or_, [n[0] for n in forwardable_nodes], recipe)
-    new_metadata = OrderedDict((aliases.get(k, k), v) for n in forwardable_nodes for k, v in n[1].items()) | metadata
+    new_metadata = OrderedDict((aliases.get(k, k) if alias_extra_keys else k, v) for n in forwardable_nodes for k, v in n[1].items()) | metadata
     return new_recipe, new_metadata
 
 
