@@ -84,7 +84,7 @@ def merge(
         omit_ema (optional):
             If True, omits ema keys from the output model. Defaults to omit_extra_keys.
         alias_extra_keys (optional):
-            If True, renames extra alias keys to their canonical counterpart. Defaults to True.
+            If True, renames extra alias keys to their canonical counterpart. Defaults to True. Needs omit_extra_keys=False.
         check_mandatory_keys (optional):
             If True and an input model is missing non-optional keys, raises RuntimeError.
         tqdm (optional):
@@ -97,6 +97,7 @@ def merge(
     Returns:
         None, or the in-memory dictionary if `output` is either a MutableMapping or None.
     """
+
     if output is ...:
         output = None
     if fallback_model is ...:
@@ -131,6 +132,9 @@ def merge(
         check_mandatory_keys = True
     if tqdm is ...:
         tqdm = tqdm_original
+
+    if not alias_extra_keys and omit_extra_keys:
+        raise ValueError("Setting `alias_extra_keys` to False requires `omit_extra_keys` to be False")
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
