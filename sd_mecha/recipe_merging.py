@@ -10,6 +10,7 @@ import pathlib
 import sys
 import threading
 import typing
+import warnings
 from collections import OrderedDict
 
 import torch
@@ -134,7 +135,7 @@ def merge(
         tqdm = tqdm_original
 
     if not alias_extra_keys and omit_extra_keys:
-        raise ValueError("Setting `alias_extra_keys` to False requires `omit_extra_keys` to be False")
+        logging.warning("Setting `alias_extra_keys` to False requires `omit_extra_keys` to be False")
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
