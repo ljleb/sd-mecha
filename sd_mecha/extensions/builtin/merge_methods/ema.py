@@ -22,8 +22,5 @@ def exchange_ema(
 
 
 to_ema_key_fns = {
-    "sd1-ldm": lambda k: f"{SD1_EMA_PREFIX}.{k[len('model'):].replace('.', '')}"
+    "sd1-ldm": lambda k: f"model_ema.{k[len('model.'):].replace('.', '')}"
 }
-
-
-SD1_EMA_PREFIX = "model_ema"

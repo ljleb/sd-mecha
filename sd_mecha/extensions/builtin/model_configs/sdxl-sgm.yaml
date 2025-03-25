@@ -2,7 +2,7 @@ identifier: sdxl-sgm
 components:
   clip_l:
     conditioner.embedders.0.transformer.text_model.embeddings.position_embedding.weight: {shape: [77, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64}
+    conditioner.embedders.0.transformer.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64, optional: true}
     conditioner.embedders.0.transformer.text_model.embeddings.token_embedding.weight: {shape: [49408, 768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.0.layer_norm1.bias: {shape: [768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.0.layer_norm1.weight: {shape: [768], dtype: float32}
@@ -52,22 +52,22 @@ components:
     conditioner.embedders.0.transformer.text_model.encoder.layers.10.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.10.self_attn.v_proj.bias: {shape: [768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.10.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm1.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm1.weight: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm2.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm2.weight: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc1.bias: {shape: [3072], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc1.weight: {shape: [3072, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc2.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc2.weight: {shape: [768, 3072], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.k_proj.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.out_proj.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.q_proj.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.v_proj.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm1.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm1.weight: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm2.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.layer_norm2.weight: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc1.bias: {shape: [3072], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc1.weight: {shape: [3072, 768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc2.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.mlp.fc2.weight: {shape: [768, 3072], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.k_proj.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.k_proj.weight: {shape: [768, 768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.out_proj.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.out_proj.weight: {shape: [768, 768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.q_proj.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.v_proj.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.encoder.layers.11.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32, optional: true}
     conditioner.embedders.0.transformer.text_model.encoder.layers.2.layer_norm1.bias: {shape: [768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.2.layer_norm1.weight: {shape: [768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.2.layer_norm2.bias: {shape: [768], dtype: float32}
@@ -196,14 +196,14 @@ components:
     conditioner.embedders.0.transformer.text_model.encoder.layers.9.self_attn.q_proj.weight: {shape: [768, 768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.9.self_attn.v_proj.bias: {shape: [768], dtype: float32}
     conditioner.embedders.0.transformer.text_model.encoder.layers.9.self_attn.v_proj.weight: {shape: [768, 768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.final_layer_norm.bias: {shape: [768], dtype: float32}
-    conditioner.embedders.0.transformer.text_model.final_layer_norm.weight: {shape: [768], dtype: float32}
+    conditioner.embedders.0.transformer.text_model.final_layer_norm.bias: {shape: [768], dtype: float32, optional: true}
+    conditioner.embedders.0.transformer.text_model.final_layer_norm.weight: {shape: [768], dtype: float32, optional: true}
   clip_g:
-    conditioner.embedders.1.model.ln_final.bias: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.ln_final.weight: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.logit_scale: {shape: [], dtype: float32}
+    conditioner.embedders.1.model.ln_final.bias: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.ln_final.weight: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.logit_scale: {shape: [], dtype: float32, optional: true}
     conditioner.embedders.1.model.positional_embedding: {shape: [77, 1280], dtype: float32}
-    conditioner.embedders.1.model.text_projection: {shape: [1280, 1280], dtype: float32}
+    conditioner.embedders.1.model.text_projection: {shape: [1280, 1280], dtype: float32, optional: true}
     conditioner.embedders.1.model.token_embedding.weight: {shape: [49408, 1280], dtype: float32}
     conditioner.embedders.1.model.transformer.resblocks.0.attn.in_proj_bias: {shape: [3840], dtype: float32}
     conditioner.embedders.1.model.transformer.resblocks.0.attn.in_proj_weight: {shape: [3840, 1280], dtype: float32}
@@ -505,18 +505,18 @@ components:
     conditioner.embedders.1.model.transformer.resblocks.30.mlp.c_fc.weight: {shape: [5120, 1280], dtype: float32}
     conditioner.embedders.1.model.transformer.resblocks.30.mlp.c_proj.bias: {shape: [1280], dtype: float32}
     conditioner.embedders.1.model.transformer.resblocks.30.mlp.c_proj.weight: {shape: [1280, 5120], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.attn.in_proj_bias: {shape: [3840], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.attn.in_proj_weight: {shape: [3840, 1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.attn.out_proj.bias: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.attn.out_proj.weight: {shape: [1280, 1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.ln_1.bias: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.ln_1.weight: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.ln_2.bias: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.ln_2.weight: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_fc.bias: {shape: [5120], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_fc.weight: {shape: [5120, 1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_proj.bias: {shape: [1280], dtype: float32}
-    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_proj.weight: {shape: [1280, 5120], dtype: float32}
+    conditioner.embedders.1.model.transformer.resblocks.31.attn.in_proj_bias: {shape: [3840], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.attn.in_proj_weight: {shape: [3840, 1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.attn.out_proj.bias: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.attn.out_proj.weight: {shape: [1280, 1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.ln_1.bias: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.ln_1.weight: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.ln_2.bias: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.ln_2.weight: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_fc.bias: {shape: [5120], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_fc.weight: {shape: [5120, 1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_proj.bias: {shape: [1280], dtype: float32, optional: true}
+    conditioner.embedders.1.model.transformer.resblocks.31.mlp.c_proj.weight: {shape: [1280, 5120], dtype: float32, optional: true}
     conditioner.embedders.1.model.transformer.resblocks.4.attn.in_proj_bias: {shape: [3840], dtype: float32}
     conditioner.embedders.1.model.transformer.resblocks.4.attn.in_proj_weight: {shape: [3840, 1280], dtype: float32}
     conditioner.embedders.1.model.transformer.resblocks.4.attn.out_proj.bias: {shape: [1280], dtype: float32}
@@ -839,8 +839,8 @@ components:
     first_stage_model.quant_conv.bias: {shape: [8], dtype: float32}
     first_stage_model.quant_conv.weight: {shape: [8, 8, 1, 1], dtype: float32}
   diffuser:
-    edm_vpred.sigma_max: {shape: [], dtype: float32}
-    edm_vpred.sigma_min: {shape: [], dtype: float32}
+    edm_vpred.sigma_max: {shape: [], dtype: float32, optional: true}
+    edm_vpred.sigma_min: {shape: [], dtype: float32, optional: true}
     model.diffusion_model.input_blocks.0.0.bias: {shape: [320], dtype: float32}
     model.diffusion_model.input_blocks.0.0.weight: {shape: [320, 4, 3, 3], dtype: float32}
     model.diffusion_model.input_blocks.1.0.emb_layers.1.bias: {shape: [320], dtype: float32}
@@ -2521,5 +2521,5 @@ components:
     model.diffusion_model.time_embed.0.weight: {shape: [1280, 320], dtype: float32}
     model.diffusion_model.time_embed.2.bias: {shape: [1280], dtype: float32}
     model.diffusion_model.time_embed.2.weight: {shape: [1280, 1280], dtype: float32}
-    v_pred: {shape: [0], dtype: int64}
-    ztsnr: {shape: [0], dtype: int64}
+    v_pred: {shape: [0], dtype: int64, optional: true}
+    ztsnr: {shape: [0], dtype: int64, optional: true}

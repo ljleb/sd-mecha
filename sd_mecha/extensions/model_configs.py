@@ -8,7 +8,7 @@ import torch
 import yaml
 from collections import OrderedDict
 from sd_mecha.streaming import TensorMetadata
-from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable
+from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable, Optional
 try:
     from yaml import CLoader as YamlLoader
 except ImportError:
@@ -19,21 +19,50 @@ StateDictKey = str
 
 
 @dataclasses.dataclass
+class KeyMetadata:
+    shape: Optional[List[int]]
+    dtype: Optional[str]
+    aliases: Iterable[str] = dataclasses.field(default_factory=list, metadata={"exclude": lambda p: bool(p)})
+    optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
+
+    @property
+    def metadata(self) -> TensorMetadata:
+        return TensorMetadata(self.shape, self.dtype)
+
+
+@dataclasses.dataclass
 class ModelComponent:
-    __keys: Mapping[StateDictKey, TensorMetadata]
+    __keys: Mapping[StateDictKey, KeyMetadata]
 
     def __post_init__(self):
         keys = OrderedDict()
         for k, v in self.__keys.items():
             if isinstance(v, Mapping):
-                keys[k] = TensorMetadata(**v)
+                keys[k] = KeyMetadata(**v)
             else:
                 keys[k] = v
         self.__keys = keys
 
     @property
-    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
-        return self.__keys
+    def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
+        return OrderedDict(
+            (k, v)
+            for k, v in self.__keys.items()
+        )
+
+    @property
+    def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
+        return OrderedDict(
+            (k, v.metadata)
+            for k, v in self.__keys.items()
+        )
+
+    @property
+    def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
+        return OrderedDict(
+            (k, v.aliases)
+            for k, v in self.__keys.items()
+        )
 
 
 @runtime_checkable
@@ -47,31 +76,45 @@ class ModelConfig(Protocol):
     @property
     @abc.abstractmethod
     def identifier(self) -> str:
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def get_architecture_identifier(self) -> str:
-        raise NotImplementedError
+        ...
 
     @abc.abstractmethod
     def get_implementation_identifier(self) -> str:
-        raise NotImplementedError
+        ...
 
     @property
     @abc.abstractmethod
     def components(self) -> Mapping[str, ModelComponent]:
-        raise NotImplementedError
+        ...
 
     @property
     @abc.abstractmethod
-    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
-        raise NotImplementedError
+    def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
+        ...
+
+    @property
+    @abc.abstractmethod
+    def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
+        ...
+
+    @property
+    @abc.abstractmethod
+    def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
+        ...
 
 
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
     __identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
     __components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
+
+    __keys_cache: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    __metadata_cache: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    __aliases_cache: Mapping[StateDictKey, Iterable[StateDictKey]] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
@@ -105,12 +148,34 @@ class ModelConfigImpl(ModelConfig):
         return self.__components
 
     @property
-    def keys(self) -> Mapping[StateDictKey, TensorMetadata]:
-        return OrderedDict(
-            (k, v)
-            for component in self.components.values()
-            for k, v in component.keys.items()
-        )
+    def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
+        if self.__keys_cache is None:
+            self.__keys_cache = OrderedDict(
+                (k, v)
+                for component in self.components.values()
+                for k, v in component.keys.items()
+            )
+        return self.__keys_cache
+
+    @property
+    def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
+        if self.__metadata_cache is None:
+            self.__metadata_cache = OrderedDict(
+                (k, v)
+                for component in self.components.values()
+                for k, v in component.metadata.items()
+            )
+        return self.__metadata_cache
+
+    @property
+    def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
+        if self.__aliases_cache is None:
+            self.__aliases_cache = OrderedDict(
+                (k, v)
+                for component in self.components.values()
+                for k, v in component.aliases.items()
+            )
+        return self.__aliases_cache
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):
@@ -189,7 +254,10 @@ def serialize(obj):
         return {
             field.metadata.get("serial_name", field.name): serialize(getattr(obj, field.name))
             for field in dataclasses.fields(obj)
-            if not field.metadata.get("exclude", False)
+            if (
+                callable(field.metadata.get("exclude")) and field.metadata["exclude"](getattr(obj, field.name))
+                or field.metadata.get("exclude", False)
+            )
         }
     elif isinstance(obj, (str, int, float, type(None))):
         return obj

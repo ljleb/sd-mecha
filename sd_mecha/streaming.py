@@ -142,7 +142,7 @@ class InSafetensorsDict(Mapping[str, torch.Tensor]):
         header = json.loads(header_json)
 
         # sort by memory order to reduce seek time
-        sorted_header = dict(sorted(header.items(), key=lambda item: item[1].get('data_offsets', [0])[0]))
+        sorted_header = OrderedDict(sorted(header.items(), key=lambda item: item[1].get('data_offsets', [0])[0]))
         return header_size, sorted_header
 
     def _ensure_buffer(self, start_pos, length):

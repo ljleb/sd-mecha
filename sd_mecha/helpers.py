@@ -71,6 +71,9 @@ class Defaults:
         total_buffer_size: int = ...,
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
+        omit_extra_keys: bool = ...,
+        omit_ema: bool = ...,
+        check_mandatory_keys: bool = ...,
         tqdm: type = ...,
     ):
         """
@@ -106,6 +109,9 @@ class Defaults:
         self.__total_buffer_size = total_buffer_size
         self.__strict_weight_space = strict_weight_space
         self.__check_finite = check_finite
+        self.__omit_extra_keys = omit_extra_keys
+        self.__omit_ema = omit_ema
+        self.__check_mandatory_keys = check_mandatory_keys
         self.__tqdm = tqdm
 
     def convert(
@@ -138,6 +144,7 @@ class Defaults:
     def merge(
         self,
         recipe: RecipeNodeOrValue,
+        *,
         fallback_model: Optional[RecipeNodeOrValue] = ...,
         merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
@@ -148,8 +155,10 @@ class Defaults:
         model_dirs: pathlib.Path | str | Iterable[pathlib.Path | str] = ...,
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
+        omit_extra_keys: bool = ...,
+        omit_ema: bool = ...,
+        check_mandatory_keys: bool = ...,
         tqdm: type = ...,
-        *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
     ) -> Optional[MutableMapping[str, torch.Tensor]]:
         if merge_device is ...:
@@ -171,20 +180,29 @@ class Defaults:
             strict_weight_space = self.__strict_weight_space
         if check_finite is ...:
             check_finite = self.__check_finite
+        if omit_extra_keys is ...:
+            omit_extra_keys = self.__omit_extra_keys
+        if omit_ema is ...:
+            omit_ema = self.__omit_ema
+        if check_mandatory_keys is ...:
+            check_mandatory_keys = self.__check_mandatory_keys
 
         return merge(
             recipe,
-            fallback_model,
-            merge_device,
-            merge_dtype,
-            output_device,
-            output_dtype,
-            threads,
-            total_buffer_size,
-            model_dirs,
-            strict_weight_space,
-            check_finite,
-            tqdm,
+            fallback_model=fallback_model,
+            merge_device=merge_device,
+            merge_dtype=merge_dtype,
+            output_device=output_device,
+            output_dtype=output_dtype,
+            threads=threads,
+            total_buffer_size=total_buffer_size,
+            model_dirs=model_dirs,
+            strict_weight_space=strict_weight_space,
+            check_finite=check_finite,
+            omit_extra_keys=omit_extra_keys,
+            omit_ema=omit_ema,
+            check_mandatory_keys=check_mandatory_keys,
+            tqdm=tqdm,
             output=output,
         )
 
