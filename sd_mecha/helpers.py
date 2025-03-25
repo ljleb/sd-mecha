@@ -73,7 +73,6 @@ class Defaults:
         check_finite: bool = ...,
         omit_extra_keys: bool = ...,
         omit_ema: bool = ...,
-        alias_extra_keys: bool = ...,
         check_mandatory_keys: bool = ...,
         tqdm: type = ...,
     ):
@@ -112,7 +111,6 @@ class Defaults:
         self.__check_finite = check_finite
         self.__omit_extra_keys = omit_extra_keys
         self.__omit_ema = omit_ema
-        self.__alias_extra_keys = alias_extra_keys
         self.__check_mandatory_keys = check_mandatory_keys
         self.__tqdm = tqdm
 
@@ -159,7 +157,6 @@ class Defaults:
         check_finite: bool = ...,
         omit_extra_keys: bool = ...,
         omit_ema: bool = ...,
-        alias_extra_keys: bool = ...,
         check_mandatory_keys: bool = ...,
         tqdm: type = ...,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
@@ -187,8 +184,6 @@ class Defaults:
             omit_extra_keys = self.__omit_extra_keys
         if omit_ema is ...:
             omit_ema = self.__omit_ema
-        if alias_extra_keys is ...:
-            alias_extra_keys = self.__alias_extra_keys
         if check_mandatory_keys is ...:
             check_mandatory_keys = self.__check_mandatory_keys
 
@@ -206,7 +201,6 @@ class Defaults:
             check_finite=check_finite,
             omit_extra_keys=omit_extra_keys,
             omit_ema=omit_ema,
-            alias_extra_keys=alias_extra_keys,
             check_mandatory_keys=check_mandatory_keys,
             tqdm=tqdm,
             output=output,
