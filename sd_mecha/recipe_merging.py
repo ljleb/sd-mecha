@@ -181,7 +181,7 @@ def merge(
                 buffer_size_per_file_per_thread,
             ) as output_dict,
         ):
-            fix_torch_threading(merge_device)
+            fix_torch_threading()
             futures = []
             for key in recipe_metadata:
                 fn = recipe.accept
@@ -201,11 +201,14 @@ def merge(
                 return output_dict
 
 
-def fix_torch_threading(device):
+def fix_torch_threading():
+    if not torch.cuda.is_available():
+        return
+
     # this greedy loads the torch.linalg module
     # avoids a hard error caused by threads>1 with some torch ops
     # see https://github.com/pytorch/pytorch/issues/90613
-    torch.linalg.inv(torch.ones((1, 1), device=device))
+    torch.linalg.inv(torch.ones((1, 1), device="cuda"))
 
 
 def copy_extra_keys(recipe: RecipeNode):
