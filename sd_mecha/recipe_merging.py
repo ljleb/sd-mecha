@@ -350,7 +350,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
     def visit_literal(self, node: LiteralRecipeNode):
         if isinstance(node.value, Mapping):
-            if isinstance(next(iter(node.value.values())), RecipeNode):
+            if not node.value or isinstance(next(iter(node.value.values())), RecipeNode):
                 for v in node.value.values():
                     v.accept(self)
 
@@ -451,9 +451,10 @@ def check_model_config(state_dict: Iterable[str], config: ModelConfig, strip_ext
 @dataclasses.dataclass
 class CloseInputDictsVisitor(RecipeVisitor):
     def visit_literal(self, node: LiteralRecipeNode):
-        if isinstance(node.value, dict) and isinstance(next(iter(node.value.values())), RecipeNode):
-            for v in node.value.values():
-                v.accept(self)
+        if isinstance(node.value, Mapping):
+            if not node.value or isinstance(next(iter(node.value.values())), RecipeNode):
+                for v in node.value.values():
+                    v.accept(self)
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         if node.state_dict is not None:
