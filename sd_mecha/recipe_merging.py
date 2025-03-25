@@ -10,18 +10,15 @@ import pathlib
 import sys
 import threading
 import typing
-import warnings
-from collections import OrderedDict
-
 import torch
 
-import sd_mecha
 from .extensions import model_configs, model_formats
 from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
 from .extensions.model_configs import ModelConfig
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, recipe_serializer
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
@@ -221,7 +218,6 @@ def fix_torch_threading(device):
 
 def copy_extra_keys(recipe: RecipeNode, alias_extra_keys: bool):
     config = recipe.model_config
-    metadata = config.metadata
     aliases = {k_alias: k for k, k_aliases in config.aliases.items() for k_alias in k_aliases}
 
     forwardable_nodes_visitor = ForwardableNodesVisitor(config)
@@ -229,7 +225,7 @@ def copy_extra_keys(recipe: RecipeNode, alias_extra_keys: bool):
     forwardable_nodes = forwardable_nodes_visitor.forwardable_nodes
 
     new_recipe = functools.reduce(operator.or_, [n[0] for n in forwardable_nodes], recipe)
-    new_metadata = OrderedDict((aliases.get(k, k) if alias_extra_keys else k, v) for n in forwardable_nodes for k, v in n[1].items()) | metadata
+    new_metadata = OrderedDict((aliases.get(k, k) if alias_extra_keys else k, v) for n in forwardable_nodes for k, v in n[1].items())
     return new_recipe, new_metadata
 
 
