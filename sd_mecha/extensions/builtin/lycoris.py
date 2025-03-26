@@ -73,8 +73,8 @@ class LycorisModelConfig(LazyModelConfigBase):
 
         identifier = f"{self.base_config.identifier}_{self.lycoris_identifier}_{'_'.join(self.algorithms)}"
         components = {
-            k: _to_lycoris_keys(component.keys, self.algorithms, self.prefix)
-            for k, component in self.base_config.components.items()
+            k: _to_lycoris_keys(component.keys(), self.algorithms, self.prefix)
+            for k, component in self.base_config.components().items()
         }
         return ModelConfigImpl(identifier, components)
 
@@ -91,7 +91,7 @@ def _to_lycoris_keys(
 
     for algorithm in algorithms:
         for key, meta in keys.items():
-            if key.endswith("bias") or not getattr(meta.metadata.dtype, "is_floating_point", True):
+            if key.endswith("bias") or not getattr(meta.metadata().dtype, "is_floating_point", True):
                 continue
 
             key = key.split('.')

@@ -6,7 +6,7 @@ from .extensions.merge_methods import value_to_node
 from .extensions.model_configs import ModelConfig
 from .extensions import merge_methods
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
-from sd_mecha.recipe_merging import open_input_dicts, infer_model_configs
+from sd_mecha.merging import open_input_dicts, infer_model_configs
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, model_dirs: Iterable[pathlib.Path] = ()):
@@ -51,7 +51,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
 
     if isinstance(recipe, Mapping):
         possible_configs = infer_model_configs(recipe)
-        for possible_config in possible_configs:
+        for possible_config in (cfg for s in possible_configs for cfg in s):
             res = create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
             if res is not None:
                 return res
