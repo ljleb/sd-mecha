@@ -6,6 +6,7 @@ from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Sequence
 from .svd import orthogonal_procrustes, fractional_matrix_power, torch_svd_lowrank
+from .ema import exchange_ema
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
 
@@ -65,11 +66,16 @@ def slerp(
 
 @merge_method
 def add_difference(
-    a: Parameter(Tensor),
-    b: Parameter(Tensor, "delta"),
+    a: Parameter(StateDict[Tensor], "weight"),
+    b: Parameter(StateDict[Tensor], "delta"),
+    *,
     alpha: Parameter(Tensor) = 1.0,
-) -> Return(Tensor):
-    return a.addcmul(alpha, b)
+    **kwargs,
+) -> Return(Tensor, "weight"):
+    key = kwargs["key"]
+    b_val = b[key]  # try to load b from memory first in case it fails to merge before a
+    a_val = a[key]
+    return a_val.addcmul(b_val, alpha)
 
 
 @merge_method
@@ -853,19 +859,33 @@ cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 
 @merge_method
+def get_dtype(
+    a: Parameter(Tensor),
+) -> Return(str, "param"):
+    return cast_dtype_map_reversed[a.dtype]
+
+
+@merge_method
+def get_device(
+    a: Parameter(Tensor),
+) -> Return(str, "param"):
+    return str(a.device)
+
+
+@merge_method
 def pick_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
     **kwargs,
 ) -> Return(T):
-    if component not in a.model_config.components:
+    if component not in a.model_config.components():
         raise ValueError(
             f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
-            f"Valid components: {tuple(a.model_config.components)}"
+            f"Valid components: {tuple(a.model_config.components())}"
         )
 
     key = kwargs["key"]
-    if key in a.model_config.components[component].keys:
+    if key in a.model_config.components()[component].keys():
         return a[key]
     else:
         raise StateDictKeyError(key)
@@ -877,14 +897,14 @@ def omit_component(
     component: Parameter(str, "param"),
     **kwargs,
 ) -> Return(T):
-    if component not in a.model_config.components:
+    if component not in a.model_config.components():
         raise ValueError(
             f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
-            f"Valid components: {tuple(a.model_config.components)}"
+            f"Valid components: {tuple(a.model_config.components())}"
         )
 
     key = kwargs["key"]
-    if key in a.model_config.components[component].keys:
+    if key in a.model_config.components()[component].keys():
         raise StateDictKeyError(key)
     else:
         return a[key]

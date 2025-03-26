@@ -22,7 +22,12 @@ from sd_mecha.extensions.builtin.merge_methods import (
     clamp,
     model_stock,
     fallback,
+    cast,
+    get_dtype,
+    get_device,
     pick_component,
+    omit_component,
+    exchange_ema,
 )
 from .merge_method_wrappers import (
     add_difference,

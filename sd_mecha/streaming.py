@@ -11,7 +11,7 @@ import numpy
 import torch
 import warnings
 from collections import OrderedDict
-from typing import Optional, Mapping, Iterator, Iterable, Tuple, Any
+from typing import Optional, Mapping, Iterator, Iterable, Tuple
 from tqdm import tqdm
 from .typing_ import WriteOnlyMapping
 
@@ -161,7 +161,7 @@ class InSafetensorsDict(SafetensorsMapping):
         header = json.loads(header_json)
 
         # sort by memory order to reduce seek time
-        sorted_header = dict(sorted(header.items(), key=lambda item: item[1].get('data_offsets', [0])[0]))
+        sorted_header = OrderedDict(sorted(header.items(), key=lambda item: item[1].get('data_offsets', [0])[0]))
         return header_size, sorted_header
 
     def _ensure_buffer(self, start_pos, length):
