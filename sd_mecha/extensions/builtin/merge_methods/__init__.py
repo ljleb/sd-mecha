@@ -68,7 +68,6 @@ def slerp(
 def add_difference(
     a: Parameter(StateDict[Tensor], "weight"),
     b: Parameter(StateDict[Tensor], "delta"),
-    *,
     alpha: Parameter(Tensor) = 1.0,
     **kwargs,
 ) -> Return(Tensor, "weight"):
