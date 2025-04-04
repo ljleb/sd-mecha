@@ -12,7 +12,7 @@ b = sd_mecha.model("path/to/model_b.safetensors")
 recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 
 # merge!
-sd_mecha.merge(recipe, "path/to/model_out.safetensors")
+sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
 ```
 
 sd-mecha is a general memory-efficient model merging library. It can merge *any* model:
@@ -92,7 +92,7 @@ It is possible to query the different components of a model config:
 from sd_mecha.extensions import model_configs
 
 config = model_configs.resolve("sd1-ldm")
-for component_id, component in config.components.items():
+for component_id, component in config.components().items():
       # component.keys contains the state dict keys that the component owns
       print(f"{component_id}")
 
