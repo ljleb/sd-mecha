@@ -335,7 +335,7 @@ def open_input_dicts(
     model_dirs: Iterable[pathlib.Path] = (),
     buffer_size_per_dict: int = 0,
     omit_extra_keys: bool = True,
-    check_mandatory_keys: bool = True,
+    check_mandatory_keys: bool = False,
     empty_cuda_cache: bool = False,
 ):
     try:

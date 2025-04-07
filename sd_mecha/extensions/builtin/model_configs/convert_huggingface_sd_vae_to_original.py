@@ -3,7 +3,7 @@ from sd_mecha.extensions.merge_methods import StateDict
 
 
 def convert_vae(huggingface_sd: StateDict[torch.Tensor], ldm_key: str) -> torch.Tensor:
-    huggingface_key = '.'.join(ldm_key.split(".")[1:])
+    huggingface_key = ".".join(ldm_key.split(".")[1:])
 
     needs_reshape = False
     for sd_weight_name, fake_weight_name in vae_extra_conversion_map.items():

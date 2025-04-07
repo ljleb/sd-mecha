@@ -1,13 +1,22 @@
 import torch
-from sd_mecha.extensions.merge_methods import merge_method, StateDict, Return, Parameter
+from torch import Tensor
+from sd_mecha import merge_method, StateDict, Return, Parameter
+from sd_mecha.extensions import model_configs
 from .convert_huggingface_sd_vae_to_original import convert_vae
 
 
-@merge_method(identifier="convert_'sdxl-kohya'_to_'sdxl-sgm'", is_conversion=True)
+sdxl_kohya_config = model_configs.resolve('sdxl-kohya')
+sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
+
+
+@merge_method(
+    identifier=f"convert_'{sdxl_kohya_config.identifier}'_to_'{sdxl_sgm_config.identifier}'",
+    is_conversion=True,
+)
 def convert_sdxl_kohya_to_original(
-    kohya_sd: Parameter(StateDict[torch.Tensor], model_config="sdxl-kohya"),
+    kohya_sd: Parameter(StateDict[Tensor], model_config=sdxl_kohya_config),
     **kwargs,
-) -> Return(torch.Tensor, model_config="sdxl-sgm"):
+) -> Return(Tensor, model_config=sdxl_sgm_config):
     sgm_key = kwargs["key"]
 
     if sgm_key.startswith("model.diffusion_model."):
