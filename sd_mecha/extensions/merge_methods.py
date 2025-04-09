@@ -82,6 +82,9 @@ def Parameter(
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
 
+    if model_config.identifier == "structural":
+        raise ValueError("merge methods cannot convert 'structural' model configs")
+
     return type(Parameter.__name__, (ParameterType,), {
         "data": ParameterData(interface, merge_space, model_config)
     })
@@ -121,6 +124,9 @@ def Return(
 
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
+
+    if model_config.identifier == "structural":
+        raise ValueError("merge methods cannot convert 'structural' model configs")
 
     return type(Return.__name__, (ReturnType,), {
         "data": ParameterData(interface, merge_space, model_config)

@@ -392,6 +392,12 @@ def resolve(identifier: str) -> ModelConfig:
     if identifier == INFER.identifier:
         return INFER
 
+    if identifier == "structural":
+        raise ValueError(
+            "the 'structural' model config is not a unique object, "
+            "it needs to be manually instantiated in this way: model_configs.StructuralModelConfig(...)"
+        )
+
     suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry_base.keys())
     postfix = ""
     if suggestions is not None:
