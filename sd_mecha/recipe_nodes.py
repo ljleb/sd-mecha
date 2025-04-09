@@ -77,35 +77,24 @@ class LiteralRecipeNode(RecipeNode):
         value: LiteralValue,
         *,
         model_config: Optional[str | model_configs.ModelConfig] = None,
+        merge_space: Optional[str | merge_spaces.MergeSpace] = None,
     ):
         self.value = value
         self.__model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
-        self.__merge_space = merge_spaces.resolve("param")
+        self.__merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
         if isinstance(self.value, dict):
             first_value = next(iter(self.value.values()))
             if isinstance(first_value, RecipeNode):
                 if model_config is None:
                     self.__model_config = first_value.model_config
+                if merge_space is None:
+                    self.__merge_space = first_value.merge_space
                 if not all(v.model_config == self.__model_config for v in self.value.values()):
                     raise ValueError(f"All model configs should be the same, expected {self.__model_config} but got {set(v.model_config for v in self.value.values())}")
                 if not all(v.merge_space == first_value.merge_space for v in self.value.values()):
                     raise ValueError(f"All merge spaces should be the same, but got multiple: {set(v.merge_space for v in self.value.values())}")
-                self.__merge_space = first_value.merge_space
-            elif isinstance(first_value, torch.Tensor):
-                self.__merge_space = merge_spaces.resolve("weight")
-
-        # todo: merge space is arbitrary here, can be either param, weight or delta
-        #   we can determine whether value is in param space with:
-        #       not isinstance(value, Tensor) or
-        #       (
-        #           model_config.keys[k].shape == value[k].shape and
-        #           model_config.keys[k].dtype.is_floating_point == value[k].dtype.is_floating_point  # <- this cannot actually be used
-        #       )
-        #   weighted sum / add difference alpha though?
-        #   this doesn't really work in general. there are some cases like when the type doesn't match that do work
-        #   also we cannot automatically distinguish between weight space and delta space
-        #   so it still needs to be a parameter of the constructor here
-        #   we can default to weight space if value is inferred not to be param space as per the above condition
+        if self.__merge_space is None:
+            self.__merge_space = merge_spaces.resolve("param")
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_literal(self, *args, **kwargs)

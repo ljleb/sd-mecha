@@ -297,6 +297,11 @@ class MergeMethod:
     def get_return_merge_space(self, merge_space_args: List[MergeSpace], merge_space_kwargs: Dict[str, MergeSpace]) -> MergeSpace:
         names = self.get_param_names()
         n_args = len(merge_space_args)
+
+        for idx, merge_space_arg in (*zip(names.args_varargs(n_args), merge_space_args), *merge_space_kwargs.items()):
+            if merge_space_arg is None:
+                raise RuntimeError(f"merge space of parameter {idx} cannot be None")
+
         input_merge_spaces = self.get_input_merge_spaces().as_dict(n_args)
 
         resolved_input_spaces = {}

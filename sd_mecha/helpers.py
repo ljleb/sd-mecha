@@ -1,6 +1,8 @@
 import logging
 import pathlib
 import torch
+
+from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig
 from .merging import merge
 from .conversion import convert
@@ -31,7 +33,7 @@ def model(path: str | pathlib.Path | Mapping[str, torch.Tensor], config: Optiona
     return ModelRecipeNode(path, model_config=config, merge_space=merge_space)
 
 
-def literal(value: NonDictLiteralValue | dict, config: Optional[ModelConfig | str] = None) -> LiteralRecipeNode:
+def literal(value: NonDictLiteralValue | dict, config: Optional[ModelConfig | str] = None, merge_space: Optional[str | MergeSpace] = None) -> LiteralRecipeNode:
     """
     Wrap raw python objects into a literal recipe node with an optional model config.
 
@@ -50,7 +52,7 @@ def literal(value: NonDictLiteralValue | dict, config: Optional[ModelConfig | st
     Returns:
         LiteralRecipeNode: A recipe node representing the literal value.
     """
-    return LiteralRecipeNode(value, model_config=config)
+    return LiteralRecipeNode(value, model_config=config, merge_space=merge_space)
 
 
 def set_log_level(level: str = "INFO"):
