@@ -246,7 +246,7 @@ class StructuralModelConfig(ModelConfig):
     def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
         if self._metadata_cache is None:
             self._metadata_cache = OrderedDict(
-                (k, v.metadata)
+                (k, v.metadata())
                 for k, v in self.keys().items()
             )
         return self._metadata_cache

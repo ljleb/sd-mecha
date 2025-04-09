@@ -83,6 +83,8 @@ class LiteralRecipeNode(RecipeNode):
         self.__model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
         self.__merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
         if isinstance(self.value, dict):
+            if not self.value:
+                raise ValueError("literal value cannot be an empty dict")
             first_value = next(iter(self.value.values()))
             if isinstance(first_value, RecipeNode):
                 if model_config is None:

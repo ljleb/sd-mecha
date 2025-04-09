@@ -421,14 +421,14 @@ class LoadInputDictsVisitor(RecipeVisitor):
             inferred_model_configs = infer_model_configs(metadata)
             if any(self.param_config in cfgs for cfgs in inferred_model_configs):
                 config = self.param_config
-            elif len(inferred_model_configs[0]) == 1:
+            elif inferred_model_configs and len(inferred_model_configs[0]) == 1:
                 config = next(iter(inferred_model_configs[0]))
             elif config is not None:  # config is INFER, structural is not allowed
                 raise RuntimeError("could not infer the model config of the current recipe node")
 
         if config is None:
             if not self.structural_metadata:
-                self.structural_metadata = metadata
+                self.structural_metadata.update(metadata)
             else:
                 for k in list(self.structural_metadata):
                     if k not in metadata:

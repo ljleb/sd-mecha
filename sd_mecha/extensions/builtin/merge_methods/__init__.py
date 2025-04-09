@@ -525,7 +525,7 @@ def ties_sum_extended(  # aka add_difference_ties
 @merge_method
 def ties_sum(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
-    k: Parameter(float) = 0.2,
+    k: Parameter(float) = 1.0,
     vote_sgn: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
