@@ -82,7 +82,7 @@ def Parameter(
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
 
-    if model_config.identifier == "structural":
+    if getattr(model_config, "identifier", None) == "structural":
         raise ValueError("merge methods cannot convert 'structural' model configs")
 
     return type(Parameter.__name__, (ParameterType,), {
@@ -125,7 +125,7 @@ def Return(
     if isinstance(model_config, str):
         model_config = model_configs.resolve(model_config)
 
-    if model_config.identifier == "structural":
+    if getattr(model_config, "identifier", None) == "structural":
         raise ValueError("merge methods cannot convert 'structural' model configs")
 
     return type(Return.__name__, (ReturnType,), {

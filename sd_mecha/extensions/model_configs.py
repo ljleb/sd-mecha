@@ -22,7 +22,7 @@ StateDictKey = str
 class KeyMetadata:
     shape: Optional[List[int]] | torch.Size
     dtype: Optional[str] | torch.dtype
-    aliases: Iterable[str] = dataclasses.field(default_factory=list, metadata={"exclude": lambda p: bool(p)})
+    aliases: Iterable[str] = dataclasses.field(default_factory=tuple, metadata={"exclude": lambda p: bool(p)})
     optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
 
     def __post_init__(self):
