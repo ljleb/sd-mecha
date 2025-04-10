@@ -20,55 +20,58 @@ StateDictKey = str
 
 @dataclasses.dataclass
 class KeyMetadata:
-    shape: Optional[List[int]]
-    dtype: Optional[str]
-    aliases: Iterable[str] = dataclasses.field(default_factory=list, metadata={"exclude": lambda p: bool(p)})
+    shape: Optional[List[int]] | torch.Size
+    dtype: Optional[str] | torch.dtype
+    aliases: Iterable[str] = dataclasses.field(default_factory=tuple, metadata={"exclude": lambda p: bool(p)})
     optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
 
-    @property
+    def __post_init__(self):
+        if isinstance(self.shape, list):
+            self.shape = torch.Size(self.shape)
+        if isinstance(self.dtype, str):
+            self.dtype = getattr(torch, self.dtype)
+
     def metadata(self) -> TensorMetadata:
         return TensorMetadata(self.shape, self.dtype)
 
 
 @dataclasses.dataclass
 class ModelComponent:
-    __keys: Mapping[StateDictKey, KeyMetadata]
+    _keys: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(metadata={"serial_name": "keys"})
 
     def __post_init__(self):
         keys = OrderedDict()
-        for k, v in self.__keys.items():
+        for k, v in self._keys.items():
             if isinstance(v, Mapping):
                 keys[k] = KeyMetadata(**v)
             else:
                 keys[k] = v
-        self.__keys = keys
+        self._keys = keys
 
-    @property
     def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
         return OrderedDict(
             (k, v)
-            for k, v in self.__keys.items()
+            for k, v in self._keys.items()
         )
 
-    @property
     def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
         return OrderedDict(
-            (k, v.metadata)
-            for k, v in self.__keys.items()
+            (k, v.metadata())
+            for k, v in self._keys.items()
         )
 
-    @property
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
         return OrderedDict(
             (k, v.aliases)
-            for k, v in self.__keys.items()
+            for k, v in self._keys.items()
         )
 
 
 @runtime_checkable
 class ModelConfig(Protocol):
     def eq(self, other):
-        return self.identifier == getattr(other, "identifier", None)
+        other_identifier = getattr(other, "identifier", None)
+        return self.identifier == other_identifier
 
     def __repr__(self):
         return f"<model config '{self.identifier}'>"
@@ -86,22 +89,18 @@ class ModelConfig(Protocol):
     def get_implementation_identifier(self) -> str:
         ...
 
-    @property
     @abc.abstractmethod
     def components(self) -> Mapping[str, ModelComponent]:
         ...
 
-    @property
     @abc.abstractmethod
     def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
         ...
 
-    @property
     @abc.abstractmethod
     def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
         ...
 
-    @property
     @abc.abstractmethod
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
         ...
@@ -109,12 +108,12 @@ class ModelConfig(Protocol):
 
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
-    __identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
-    __components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
+    _identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
+    _components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
 
-    __keys_cache: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
-    __metadata_cache: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
-    __aliases_cache: Mapping[StateDictKey, Iterable[StateDictKey]] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _keys_cache: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _metadata_cache: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _aliases_cache: Mapping[StateDictKey, Iterable[StateDictKey]] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
@@ -126,16 +125,16 @@ class ModelConfigImpl(ModelConfig):
             )
 
         components = OrderedDict()
-        for k, v in self.__components.items():
+        for k, v in self._components.items():
             if isinstance(v, Mapping):
                 components[k] = ModelComponent(v)
             else:
                 components[k] = v
-        self.__components = components
+        self._components = components
 
     @property
     def identifier(self) -> str:
-        return self.__identifier
+        return self._identifier
 
     def get_architecture_identifier(self):
         return self.identifier.split("-")[0]
@@ -143,39 +142,35 @@ class ModelConfigImpl(ModelConfig):
     def get_implementation_identifier(self):
         return self.identifier.split("-")[1]
 
-    @property
     def components(self) -> Mapping[str, ModelComponent]:
-        return self.__components
+        return self._components
 
-    @property
     def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
-        if self.__keys_cache is None:
-            self.__keys_cache = OrderedDict(
+        if self._keys_cache is None:
+            self._keys_cache = OrderedDict(
                 (k, v)
-                for component in self.components.values()
-                for k, v in component.keys.items()
+                for component in self.components().values()
+                for k, v in component.keys().items()
             )
-        return self.__keys_cache
+        return self._keys_cache
 
-    @property
     def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
-        if self.__metadata_cache is None:
-            self.__metadata_cache = OrderedDict(
+        if self._metadata_cache is None:
+            self._metadata_cache = OrderedDict(
                 (k, v)
-                for component in self.components.values()
-                for k, v in component.metadata.items()
+                for component in self.components().values()
+                for k, v in component.metadata().items()
             )
-        return self.__metadata_cache
+        return self._metadata_cache
 
-    @property
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
-        if self.__aliases_cache is None:
-            self.__aliases_cache = OrderedDict(
+        if self._aliases_cache is None:
+            self._aliases_cache = OrderedDict(
                 (k, v)
-                for component in self.components.values()
-                for k, v in component.aliases.items()
+                for component in self.components().values()
+                for k, v in component.aliases().items()
             )
-        return self.__aliases_cache
+        return self._aliases_cache
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):
@@ -221,20 +216,89 @@ def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
     self._ensure_config()
     attribute = getattr(self.underlying_config, name)
     if inspect.ismethod(attribute):
-        method = attribute.__func__.__get__(self, self.__class__)
+        method = attribute.__func__.__get__(self.underlying_config, self.underlying_config.__class__)
         return method
     return attribute
+
+
+class StructuralModelConfig(ModelConfig):
+    def __init__(self, keys: Mapping[StateDictKey, KeyMetadata]):
+        self._keys_cache = keys
+        self._metadata_cache = None
+        self._aliases_cache = None
+
+    @property
+    def identifier(self) -> str:
+        return "structural"
+
+    def get_architecture_identifier(self) -> str:
+        return self.identifier
+
+    def get_implementation_identifier(self) -> str:
+        return ""
+
+    def components(self) -> Mapping[str, ModelComponent]:
+        return {"keys": ModelComponent(self.keys())}
+
+    def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
+        return self._keys_cache
+
+    def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
+        if self._metadata_cache is None:
+            self._metadata_cache = OrderedDict(
+                (k, v.metadata())
+                for k, v in self.keys().items()
+            )
+        return self._metadata_cache
+
+    def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
+        if self._aliases_cache is None:
+            self._aliases_cache = OrderedDict(
+                (k, v.aliases)
+                for k, v in self.keys().items()
+            )
+        return self._aliases_cache
+
+
+class InferModelConfig(ModelConfig):
+    def eq(self, other):
+        raise RuntimeError("the config has not yet been inferred")
+
+    @property
+    def identifier(self) -> str:
+        return "infer"
+
+    def get_architecture_identifier(self) -> str:
+        return self.identifier
+
+    def get_implementation_identifier(self) -> str:
+        return ""
+
+    def components(self) -> Mapping[str, ModelComponent]:
+        raise RuntimeError("the config has not yet been inferred")
+
+    def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
+        raise RuntimeError("the config has not yet been inferred")
+
+    def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
+        raise RuntimeError("the config has not yet been inferred")
+
+    def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
+        raise RuntimeError("the config has not yet been inferred")
+
+
+INFER = InferModelConfig()
 
 
 class YamlModelConfig(LazyModelConfigBase):
     def __init__(self, yaml_config_file: pathlib.Path):
         super().__init__()
         self.yaml_config_file = yaml_config_file
-        self.__identifier = yaml_config_file.stem
+        self._identifier = yaml_config_file.stem
 
     @property
     def identifier(self) -> str:
-        return self.__identifier
+        return self._identifier
 
     def create_config(self) -> ModelConfig:
         with open(self.yaml_config_file, "r") as f:
@@ -254,7 +318,7 @@ def serialize(obj):
         return {
             field.metadata.get("serial_name", field.name): serialize(getattr(obj, field.name))
             for field in dataclasses.fields(obj)
-            if (
+            if not (
                 callable(field.metadata.get("exclude")) and field.metadata["exclude"](getattr(obj, field.name))
                 or field.metadata.get("exclude", False)
             )
@@ -324,6 +388,15 @@ def resolve(identifier: str) -> ModelConfig:
         return _model_configs_registry_aux[identifier]
     except KeyError:
         pass
+
+    if identifier == INFER.identifier:
+        return INFER
+
+    if identifier == "structural":
+        raise ValueError(
+            "the 'structural' model config is not a unique object, "
+            "it needs to be manually instantiated in this way: model_configs.StructuralModelConfig(...)"
+        )
 
     suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry_base.keys())
     postfix = ""

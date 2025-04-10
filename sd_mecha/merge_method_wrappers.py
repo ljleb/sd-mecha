@@ -1,6 +1,7 @@
 import torch
 from typing import Optional, Dict
-from .extensions.merge_methods import value_to_node, RecipeNodeOrValue
+from torch import Tensor
+from .extensions.merge_methods import value_to_node, RecipeNodeOrValue, Parameter
 from . import recipe_nodes
 from sd_mecha.extensions.builtin import merge_methods
 from sd_mecha.extensions.builtin.merge_methods import (
@@ -14,8 +15,8 @@ from sd_mecha.extensions.builtin.merge_methods import (
 
 def add_difference(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
-    alpha: float = 1.0,
-    clamp_to_ab: bool = False,
+    alpha: Parameter(Tensor) = 1.0,
+    clamp_to_ab: Parameter(bool) = False,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -47,7 +48,7 @@ def add_difference(
 
 def add_perpendicular(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: RecipeNodeOrValue, *,
-    alpha: float = 1.0,
+    alpha: Parameter(Tensor) = 1.0,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -83,8 +84,8 @@ def add_perpendicular(
 def add_difference_ties(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
-    alpha: float,
-    k: float = 0.2,
+    alpha: Parameter(Tensor) = 1.0,
+    k: Parameter(float) = 1.0,
 ) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
     base = value_to_node(base)
@@ -117,15 +118,15 @@ def add_difference_ties(
 def add_difference_ties_extended(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
-    alpha: float = 1.0,
-    k: float = 0.2,
-    vote_sgn: float = 0.0,
-    apply_stock: float = 0.0,
-    cos_eps: float = 1e-6,
-    apply_median: float = 0.0,
-    eps: float = 1e-6,
-    maxiter: float = 100,
-    ftol: float =1e-20,
+    alpha: Parameter(Tensor) = 1.0,
+    k: Parameter(float) = 0.2,
+    vote_sgn: Parameter(bool) = False,
+    apply_stock: Parameter(bool) = False,
+    cos_eps: Parameter(float) = 1e-6,
+    apply_median: Parameter(bool) = False,
+    eps: Parameter(float) = 1e-6,
+    maxiter: Parameter(int) = 100,
+    ftol: Parameter(float) = 1e-20,
 ) -> recipe_nodes.RecipeNode:
     # $$ \{\theta_{init}\}_{t=1}^n $$
     base = value_to_node(base)
@@ -164,9 +165,9 @@ def add_difference_ties_extended(
 
 def copy_region(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
-    width: float = 1.0,
-    offset: float = 0.0,
-    top_k: bool = False,
+    width: Parameter(float) = 1.0,
+    offset: Parameter(float) = 0.0,
+    top_k: Parameter(bool) = False,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -202,8 +203,8 @@ tensor_sum = copy_region
 
 def rotate(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
-    alignment: float = 1.0,
-    alpha: float = 0.0,
+    alignment: Parameter(float) = 1.0,
+    alpha: Parameter(float) = 0.0,
     cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
@@ -237,11 +238,11 @@ def rotate(
 def dropout(
     a: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
-    probability: float = 0.9,
-    alpha: float = 0.5,
-    overlap: float = 1.0,
-    overlap_emphasis: float = 0.0,
-    seed: Optional[float] = None,
+    probability: Parameter(float) = 0.9,
+    alpha: Parameter(Tensor) = 0.5,
+    overlap: Parameter(float) = 1.0,
+    overlap_emphasis: Parameter(float) = 0.0,
+    seed: Parameter(int) = None,
 ) -> recipe_nodes.RecipeNode:
     deltas = [
         subtract(model, a)
@@ -269,18 +270,18 @@ ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
 def ties_with_dare(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
-    probability: float = 0.9,
-    rescale: float = 1.0,
-    alpha: float = 0.5,
-    seed: float = -1,
-    k: float = 0.2,
-    vote_sgn: float = 0.0,
-    apply_stock: float = 0.0,
-    cos_eps: float = 1e-6,
-    apply_median: float = 0.0,
-    eps: float = 1e-6,
-    maxiter: float = 100,
-    ftol: float = 1e-20,
+    probability: Parameter(float) = 0.9,
+    rescale: Parameter(bool) = True,
+    alpha: Parameter(Tensor) = 1.0,
+    seed: Parameter(int) = None,
+    k: Parameter(float) = 1.0,
+    vote_sgn: Parameter(bool) = False,
+    apply_stock: Parameter(bool) = False,
+    cos_eps: Parameter(float) = 1e-6,
+    apply_median: Parameter(bool) = False,
+    eps: Parameter(float) = 1e-6,
+    maxiter: Parameter(int) = 100,
+    ftol: Parameter(float) = 1e-20,
 ) -> recipe_nodes.RecipeNode:
     # $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
     base = value_to_node(base)
@@ -317,7 +318,7 @@ def ties_with_dare(
 def n_model_stock(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
-    cos_eps: float = 1e-6,
+    cos_eps: Parameter(float) = 1e-6,
 ) -> recipe_nodes.RecipeNode:
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)

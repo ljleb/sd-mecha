@@ -1,3 +1,4 @@
+import abc
 import contextlib
 import ctypes
 import dataclasses
@@ -55,34 +56,25 @@ class TensorMetadata:
         return self.shape.numel()
 
 
-class MemoryDict(Mapping[str, torch.Tensor]):
-    def __init__(self, underlying_dict: Mapping[str, torch.Tensor]):
-        self.underlying_dict = underlying_dict
-
-    def __getitem__(self, key) -> torch.Tensor:
-        return self.underlying_dict[key]
-
-    def __len__(self) -> int:
-        return len(self.underlying_dict)
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.underlying_dict)
-
+class SafetensorsMapping(Mapping[str, torch.Tensor], abc.ABC):
+    @abc.abstractmethod
     def keys(self) -> Iterable[str]:
-        return self.underlying_dict.keys()
+        ...
 
+    @abc.abstractmethod
     def metadata(self) -> Iterable[Tuple[str, TensorMetadata]]:
-        for key in self.keys():
-            yield key, TensorMetadata(self.underlying_dict[key].shape,  self.underlying_dict[key].dtype)
+        ...
 
+    @abc.abstractmethod
     def values(self) -> Iterable[torch.Tensor]:
-        return self.underlying_dict.values()
+        ...
 
+    @abc.abstractmethod
     def items(self) -> Iterable[Tuple[str, torch.Tensor]]:
-        return self.underlying_dict.items()
+        ...
 
 
-class InSafetensorsDict(Mapping[str, torch.Tensor]):
+class InSafetensorsDict(SafetensorsMapping):
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":
             raise ValueError(f"Model type not supported: {file_path} (only safetensors are supported)")

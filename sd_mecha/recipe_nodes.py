@@ -77,19 +77,24 @@ class LiteralRecipeNode(RecipeNode):
         value: LiteralValue,
         *,
         model_config: Optional[str | model_configs.ModelConfig] = None,
+        merge_space: Optional[str | merge_spaces.MergeSpace] = None,
     ):
         self.value = value
         self.__model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
-        self.__merge_space = merge_spaces.resolve("param")
+        self.__merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
         if isinstance(self.value, dict):
-            first_value = next(iter(self.value.values()))
+            first_value = next(iter((*self.value.values(), Ellipsis)))  # using ... as placeholder as None is a valid LiteralValue
             if isinstance(first_value, RecipeNode):
-                self.__model_config = first_value.model_config if model_config is None else self.__model_config
+                if model_config is None:
+                    self.__model_config = first_value.model_config
+                if merge_space is None:
+                    self.__merge_space = first_value.merge_space
                 if not all(v.model_config == self.__model_config for v in self.value.values()):
                     raise ValueError(f"All model configs should be the same, expected {self.__model_config} but got {set(v.model_config for v in self.value.values())}")
                 if not all(v.merge_space == first_value.merge_space for v in self.value.values()):
                     raise ValueError(f"All merge spaces should be the same, but got multiple: {set(v.merge_space for v in self.value.values())}")
-                self.__merge_space = first_value.merge_space
+        if self.__merge_space is None:
+            self.__merge_space = merge_spaces.resolve("param")
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_literal(self, *args, **kwargs)

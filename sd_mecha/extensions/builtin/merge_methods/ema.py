@@ -7,7 +7,7 @@ def exchange_ema(
     model: Parameter(StateDict[Tensor]),
     **kwargs,
 ) -> Return(Tensor):
-    input_keys = model.model_config.keys
+    input_keys = model.model_config.keys()
     target_key = kwargs["key"]
     to_ema_key_fn = to_ema_key_fns.get(model.model_config.identifier, lambda k: k)
     ema_key = to_ema_key_fn(target_key)

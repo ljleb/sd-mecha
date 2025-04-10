@@ -5,7 +5,7 @@ import torch
 from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Sequence
-from .svd import orthogonal_procrustes, fractional_matrix_power
+from .svd import orthogonal_procrustes, fractional_matrix_power, torch_svd_lowrank
 from .ema import exchange_ema
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
@@ -18,7 +18,6 @@ T = TypeVar("T")
 def weighted_sum(
     a: Parameter(StateDict[torch.Tensor]),
     b: Parameter(StateDict[torch.Tensor]),
-    *,
     alpha: Parameter(Tensor) = 0.5,
     **kwargs,
 ) -> Return(Tensor):
@@ -67,16 +66,15 @@ def slerp(
 
 @merge_method
 def add_difference(
-    a: Parameter(StateDict[Tensor]),
+    a: Parameter(StateDict[Tensor], "weight"),
     b: Parameter(StateDict[Tensor], "delta"),
-    *,
     alpha: Parameter(Tensor) = 1.0,
     **kwargs,
-) -> Return(Tensor):
+) -> Return(Tensor, "weight"):
     key = kwargs["key"]
     b_val = b[key]  # try to load b from memory first in case it fails to merge before a
     a_val = a[key]
-    return a_val + alpha * b_val
+    return a_val.addcmul(b_val, alpha)
 
 
 @merge_method
@@ -103,7 +101,6 @@ def perpendicular_component(
 def geometric_sum(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 0.5,
 ) -> Return(Tensor):
     a = torch.complex(a, torch.zeros_like(a))
@@ -116,7 +113,6 @@ def geometric_sum(
 def add_cosine_a(
     a: Parameter(Tensor, "weight"),
     b: Parameter(Tensor, "weight"),
-    *,
     alpha: Parameter(Tensor) = 1.0,
 ) -> Return(Tensor, "weight"):
     a_norm = torch.nn.functional.normalize(a, dim=0)
@@ -129,7 +125,6 @@ def add_cosine_a(
 def add_cosine_b(
     a: Parameter(Tensor, "weight"),
     b: Parameter(Tensor, "weight"),
-    *,
     alpha: Parameter(Tensor) = 1.0,
 ) -> Return(Tensor, "weight"):
     similarity = torch.nn.functional.cosine_similarity(a, b, dim=0)
@@ -148,7 +143,6 @@ def add_cosine_generic(a: Tensor, b: Tensor, alpha: Tensor, similarity: Tensor) 
 def tensor_sum(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
-    *,
     width: Parameter(float) = 0.5,
     offset: Parameter(float) = 0.0,
 ) -> Return(Tensor):
@@ -170,7 +164,6 @@ def tensor_sum(
 def top_k_tensor_sum(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
-    *,
     width: Parameter(float) = 1.0,
     offset: Parameter(float) = 0.0,
 ) -> Return(Tensor):
@@ -227,7 +220,6 @@ def train_difference_mask(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
     c: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 1.0,
 ) -> Return(Tensor, "param"):
     return alpha * 1.8 * torch.nan_to_num((b - a).abs() / ((b - a).abs() + (b - c).abs()), nan=0)
@@ -238,9 +230,7 @@ def add_opposite_mask(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
     c: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 1.0,
-    **kwargs,
 ) -> Return(Tensor, "param"):
     return alpha * 2 * torch.nan_to_num((a - b).abs() / ((a - b).abs() + (a + b - 2*c).abs()), nan=0)
 
@@ -250,7 +240,6 @@ def add_strict_opposite_mask(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
     c: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 1.0,
 ) -> Return(Tensor, "param"):
     threshold = torch.maximum(torch.abs(a - c), torch.abs(b - c))
@@ -261,7 +250,6 @@ def add_strict_opposite_mask(
 def select_max_delta(
     a: Parameter(Tensor, "delta"),
     b: Parameter(Tensor, "delta"),
-    *,
     alpha: Parameter(Tensor) = 0.5,
 ) -> Return(Tensor, "delta"):
     a_abs = ((a - a.mean()) / a.std()).nan_to_num(nan=0).abs()
@@ -273,7 +261,6 @@ def select_max_delta(
 def select_max_white_delta(
     a: Parameter(Tensor, "delta"),
     b: Parameter(Tensor, "delta"),
-    *,
     alpha: Parameter(Tensor) = 0.5,
 ) -> Return(Tensor, "delta"):
     a_norm = (a - a.mean()) / a.std(correction=0)
@@ -292,7 +279,6 @@ def multiply_quotient(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
     c: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 1.0,
 ) -> Return(Tensor):
     ac_log = torch.log(a.abs()) - torch.log(c.abs())
@@ -314,7 +300,6 @@ def multiply_quotient(
 def crossover(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
-    *,
     alpha: Parameter(float) = 0.5,
     tilt: Parameter(float) = 0.0,
 ) -> Return(Tensor):
@@ -398,7 +383,6 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
 def rotate(
     a_dict: Parameter(Tensor),
     b_dict: Parameter(Tensor),
-    *,
     alignment: Parameter(float) = 1.0,
     alpha: Parameter(Tensor) = 0.0,
     **kwargs,
@@ -541,7 +525,7 @@ def ties_sum_extended(  # aka add_difference_ties
 @merge_method
 def ties_sum(  # aka add_difference_ties
     *models: Parameter(Tensor, "delta"),
-    k: Parameter(float) = 0.2,
+    k: Parameter(float) = 1.0,
     vote_sgn: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
@@ -803,6 +787,23 @@ def geometric_median_objective(median, points: Tuple, weights):
 
 
 @merge_method
+def truncate_rank(
+    a: Parameter(Tensor, merge_space="delta"),
+    rank_ratio: Parameter(float) = 0.5,
+) -> Return(Tensor, merge_space="delta"):
+    if a.dim() < 2:
+        return a
+
+    original_shape = a.shape
+    a_2d = a.flatten(start_dim=1)
+    max_rank = min(a_2d.shape)
+    target_rank = min(max(round(max_rank * rank_ratio), 1), max_rank)
+    svd_driver = "gesvda" if a.is_cuda else None
+    u, s, vt = torch_svd_lowrank(a_2d, q=target_rank, full_matrices=False, driver=svd_driver)
+    return (u @ torch.diag(s) @ vt).reshape(original_shape)
+
+
+@merge_method
 def fallback(
     a: Parameter(StateDict[T]),
     default: Parameter(StateDict[T]),
@@ -818,7 +819,6 @@ def fallback(
 @merge_method
 def cast(
     a: Parameter(Tensor),
-    *,
     device: Parameter(str) = None,
     dtype: Parameter(str) = None,
 ) -> Return(Tensor):
@@ -877,14 +877,14 @@ def pick_component(
     component: Parameter(str, "param"),
     **kwargs,
 ) -> Return(T):
-    if component not in a.model_config.components:
+    if component not in a.model_config.components():
         raise ValueError(
             f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
-            f"Valid components: {tuple(a.model_config.components)}"
+            f"Valid components: {tuple(a.model_config.components())}"
         )
 
     key = kwargs["key"]
-    if key in a.model_config.components[component].keys:
+    if key in a.model_config.components()[component].keys():
         return a[key]
     else:
         raise StateDictKeyError(key)
@@ -896,14 +896,14 @@ def omit_component(
     component: Parameter(str, "param"),
     **kwargs,
 ) -> Return(T):
-    if component not in a.model_config.components:
+    if component not in a.model_config.components():
         raise ValueError(
             f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
-            f"Valid components: {tuple(a.model_config.components)}"
+            f"Valid components: {tuple(a.model_config.components())}"
         )
 
     key = kwargs["key"]
-    if key in a.model_config.components[component].keys:
+    if key in a.model_config.components()[component].keys():
         raise StateDictKeyError(key)
     else:
         return a[key]
