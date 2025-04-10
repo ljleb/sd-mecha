@@ -351,7 +351,7 @@ def open_input_dicts(
     empty_cuda_cache: bool = False,
 ):
     try:
-        recipe.accept(LoadInputDictsVisitor(model_dirs, buffer_size_per_dict, omit_extra_keys, check_mandatory_keys))
+        recipe.accept(LoadInputDictsVisitor(list(model_dirs), buffer_size_per_dict, omit_extra_keys, check_mandatory_keys))
         yield recipe
     finally:
         recipe.accept(CloseInputDictsVisitor())

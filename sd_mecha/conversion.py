@@ -32,6 +32,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
         ValueError:
             If no conversion path is found.
     """
+    model_dirs = list(model_dirs)
     all_converters = merge_methods.get_all_converters()
     converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
     for converter in all_converters:
