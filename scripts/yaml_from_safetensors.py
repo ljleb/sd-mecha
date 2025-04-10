@@ -1,6 +1,7 @@
 import pathlib
 from collections import OrderedDict
 from sd_mecha.extensions import model_configs
+from sd_mecha.extensions.model_configs import KeyMetadata
 from sd_mecha.streaming import InSafetensorsDict
 
 
@@ -10,7 +11,10 @@ path_to_config = pathlib.Path(".") / f"{cfg_id}.yaml"
 
 
 def main():
-    header = OrderedDict(InSafetensorsDict(path_to_model, 0).metadata())
+    header = OrderedDict(
+        (k, KeyMetadata(v.shape, v.dtype))
+        for k, v in InSafetensorsDict(path_to_model, 0).metadata()
+    )
     config = model_configs.ModelConfigImpl(cfg_id, {
         "diffuser": model_configs.ModelComponent(header)
     })
