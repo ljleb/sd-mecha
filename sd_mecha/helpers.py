@@ -11,43 +11,53 @@ from .extensions.merge_methods import NonDictLiteralValue
 from typing import Optional, List, MutableMapping, Iterable, Mapping
 
 
-def model(path: str | pathlib.Path | Mapping[str, torch.Tensor], config: Optional[ModelConfig | str] = None, merge_space: str = "weight") -> RecipeNode:
+def model(
+    state_dict: str | pathlib.Path | Mapping[str, torch.Tensor],
+    config: Optional[str | ModelConfig] = None,
+    merge_space: str | MergeSpace = "weight",
+) -> RecipeNode:
     """
-    Create a `ModelRecipeNode` referring to a safetensors file or directory of a diffusers model.
+    Create a recipe node representing a state dict.
 
     Args:
-        path (str or Path):
+        state_dict:
             Path to a `.safetensors` file or an already loaded state dict.
-        config (str, optional):
-            The model config, or None to infer it.
-        merge_space (str):
-            The merge space in which the model is expected to be ("weight" by default).
+        config:
+            Model config or an identifier thereof.
+        merge_space:
+            The merge space in which the model is expected to be.
 
     Returns:
         ModelRecipeNode: A node that can be used in recipe graphs.
     """
-    if isinstance(path, Mapping):
-        return LiteralRecipeNode(path, model_config=config)
-    if isinstance(path, str):
-        path = pathlib.Path(path)
-    return ModelRecipeNode(path, model_config=config, merge_space=merge_space)
+    if isinstance(state_dict, Mapping):
+        return LiteralRecipeNode(state_dict, model_config=config)
+    if isinstance(state_dict, str):
+        state_dict = pathlib.Path(state_dict)
+    return ModelRecipeNode(state_dict, model_config=config, merge_space=merge_space)
 
 
-def literal(value: NonDictLiteralValue | dict, config: Optional[ModelConfig | str] = None, merge_space: Optional[str | MergeSpace] = None) -> LiteralRecipeNode:
+def literal(
+    value: NonDictLiteralValue | dict,
+    config: Optional[ModelConfig | str] = None,
+    merge_space: Optional[str | MergeSpace] = None,
+) -> LiteralRecipeNode:
     """
-    Wrap raw python objects into a literal recipe node with an optional model config.
+    Create a recipe node wrapping tensors or some builtin python objects.
 
-    Useful when you need to use recipe node properties on python objects directly, i.e.:
+    This is used to access recipe node properties on python objects directly, i.e.:
     ```python
     sd_mecha.literal({...}) | 3
     ```
-    It is implicitly used when passing a dictionary or a single scalar as input to merge methods.
+    There is typically no need to wrap inputs into recipe nodes manually as this function is implicitly applied whenever needed.
 
     Args:
         value:
-            The literal data to wrap.
-        config (str, optional):
-            Model config or an identifier thereof, if relevant.
+            The literal value to wrap into a recipe node.
+        config:
+            Model config or an identifier thereof.
+        merge_space:
+            The merge space in which the literal is expected to be.
 
     Returns:
         LiteralRecipeNode: A recipe node representing the literal value.
@@ -61,16 +71,16 @@ def set_log_level(level: str = "INFO"):
 
 class Defaults:
     """
-    Convenience wrapper around common recipe operations with custom default values.
+    Convenience class for common recipe operations to reduce repetition in recipe scripts.
     """
 
     def __init__(
         self,
         model_dirs: pathlib.Path | str | Iterable[pathlib.Path | str] = ...,
-        merge_device: Optional[str] = ...,
+        merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
         output_device: Optional[str | torch.device] = ...,
-        output_dtype: Optional[torch.dtype] = torch.float16,
+        output_dtype: Optional[torch.dtype] = ...,
         threads: Optional[int] = ...,
         total_buffer_size: int = ...,
         strict_weight_space: bool = ...,
