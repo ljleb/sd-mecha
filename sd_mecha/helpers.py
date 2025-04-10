@@ -31,7 +31,7 @@ def model(
         ModelRecipeNode: A node that can be used in recipe graphs.
     """
     if isinstance(state_dict, Mapping):
-        return LiteralRecipeNode(state_dict, model_config=config)
+        return LiteralRecipeNode(state_dict, model_config=config, merge_space=merge_space)
     if isinstance(state_dict, str):
         state_dict = pathlib.Path(state_dict)
     return ModelRecipeNode(state_dict, model_config=config, merge_space=merge_space)

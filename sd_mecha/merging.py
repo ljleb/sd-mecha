@@ -680,6 +680,7 @@ class CastInputDicts(RecipeVisitor):
             return LiteralRecipeNode(
                 {k: v.accept(self) for k, v in node.value.items()},
                 model_config=node.model_config,
+                merge_space=node.merge_space,
             )
         return node
 
