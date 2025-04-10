@@ -2,7 +2,7 @@ import logging
 import pathlib
 import torch
 from .extensions.merge_spaces import MergeSpace
-from .extensions.model_configs import ModelConfig, INFER
+from .extensions.model_configs import ModelConfig
 from .merging import merge
 from .conversion import convert
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
@@ -33,9 +33,7 @@ def model(
         raise ValueError("merge space cannot be None")
 
     if isinstance(state_dict, Mapping):
-        if not state_dict and config in (None, INFER):
-            raise ValueError("the state dict cannot be empty when the model config is inferred")
-        elif state_dict and not isinstance(first_value := next(iter(state_dict.values())), torch.Tensor):
+        if state_dict and not isinstance(first_value := next(iter(state_dict.values())), torch.Tensor):
             raise ValueError(f"state dict must contain values of type Tensor, not {type(first_value)}")
         return LiteralRecipeNode(state_dict, model_config=config, merge_space=merge_space)
     if isinstance(state_dict, str):
