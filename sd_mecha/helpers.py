@@ -92,27 +92,7 @@ class Defaults:
     ):
         """
         Args:
-            merge_device (optional):
-                Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
-            merge_dtype (optional):
-                Torch dtype for intermediate merges (e.g., `torch.float32`, `torch.float64`).
-            output_device (optional):
-                Final output device (e.g., "cpu").
-            output_dtype (optional):
-                Final dtype for the saved model.
-            threads (optional):
-                Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
-            total_buffer_size (optional):
-                Total byte size of the buffers for all safetensors state dicts (input and output).
-            model_dirs (optional):
-                One or more directories to search for model files if `recipe` references relative paths.
-            strict_weight_space (optional):
-                If True, verifies that merges occur in "weight" space. If False, merges can happen
-                in other merge spaces (like "delta" or "param").
-            check_finite (optional):
-                If True, warns if any non-finite values appear in the final merged tensors.
-            tqdm (optional):
-                A custom progress-bar factory. By default, uses `tqdm.tqdm`.
+            See documentation for `sd_mecha.merge` or `sd_mecha.conversion` for a description of each parameter.
         """
         self.__model_dirs = model_dirs
         self.__merge_device = merge_device
@@ -137,18 +117,7 @@ class Defaults:
         """
         Convert a recipe or model from one model config to another.
 
-        This is a convenience wrapper for `sd_mecha.convert`, using the paths set in `model_dirs`.
-
-        Args:
-            recipe:
-                A `RecipeNode` or dictionary representing the input model or partial recipe.
-            config (str or ModelConfig or RecipeNode):
-                The desired output config, or a node referencing that config.
-            model_dirs (Iterable[Path], optional):
-                Directories to resolve relative model paths, if needed.
-
-        Returns:
-            A new recipe node describing the entire conversion path. If no path is found, raises `ValueError`.
+        See `sd_mecha.convert` for more information.
         """
         if model_dirs is ...:
             model_dirs = self.__model_dirs
@@ -175,6 +144,11 @@ class Defaults:
         tqdm: type = ...,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
     ) -> Optional[MutableMapping[str, torch.Tensor]]:
+        """
+        Materialize a state dict from a recipe graph and optionally save it to a file.
+
+        See `sd_mecha.merge` for more information.
+        """
         if merge_device is ...:
             merge_device = self.__merge_device
         if merge_dtype is ...:
