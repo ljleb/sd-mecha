@@ -74,33 +74,6 @@ class SafetensorsMapping(Mapping[str, torch.Tensor], abc.ABC):
         ...
 
 
-class MemorySafetensorsDict(SafetensorsMapping):
-    def __init__(self, underlying_dict: Mapping[str, torch.Tensor]):
-        self.underlying_dict = underlying_dict
-
-    def __getitem__(self, key) -> torch.Tensor:
-        return self.underlying_dict[key]
-
-    def __len__(self) -> int:
-        return len(self.underlying_dict)
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.underlying_dict)
-
-    def keys(self) -> Iterable[str]:
-        return self.underlying_dict.keys()
-
-    def metadata(self) -> Iterable[Tuple[str, TensorMetadata]]:
-        for k, v in self.items():
-            yield k, TensorMetadata(v.shape, v.dtype)
-
-    def values(self) -> Iterable[torch.Tensor]:
-        return self.underlying_dict.values()
-
-    def items(self) -> Iterable[Tuple[str, torch.Tensor]]:
-        return self.underlying_dict.items()
-
-
 class InSafetensorsDict(SafetensorsMapping):
     def __init__(self, file_path: pathlib.Path, buffer_size):
         if not file_path.suffix == ".safetensors":

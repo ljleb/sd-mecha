@@ -16,7 +16,7 @@ from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT,
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, StructuralModelConfig, KeyMetadata
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
-from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError, MemorySafetensorsDict
+from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
@@ -244,7 +244,11 @@ class ForwardableNodesVisitor(RecipeVisitor):
             node.merge_space == self.target_merge_space and
             not any(node in n[0] for n in self.forwardable_nodes)
         ):
-            self.forwardable_nodes.append((node, OrderedDict(MemorySafetensorsDict(node.value).metadata())))
+            metadata = OrderedDict(
+                (k, TensorMetadata(v.shape, v.dtype))
+                for k, v in node.value.items()
+            )
+            self.forwardable_nodes.append((node, metadata))
 
     def visit_model(self, node: ModelRecipeNode):
         if node.model_config == self.target_config and not any(node in n[0] for n in self.forwardable_nodes):
