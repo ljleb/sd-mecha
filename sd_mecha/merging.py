@@ -380,7 +380,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
                 metadata[k] = KeyMetadata(None, None, optional=True)
 
         node.model_config = self.__determine_model_config(metadata, node.model_config)
-        check_model_config(node.value, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, "memory")
+        check_model_config(node.value, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, "<in-memory state dict>")
 
     def visit_model(self, node: recipe_nodes.ModelRecipeNode):
         node.state_dict, node_path = self.__load_dict(node)
