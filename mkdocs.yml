@@ -1,0 +1,21 @@
+site_name: Mecha
+theme:
+  name: gitbook
+extra_css:
+  - style.css
+nav:
+  - Home: index.md
+  - Guide:
+    - Guide: guide/index.md
+    - Introduction: guide/0-introduction.md
+    - Typical Use-Cases: guide/1-typical-use-cases.md
+    - User-Defined Merge Methods: guide/2-user-defined-merge-methods.md
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          setup_commands:
+            - import sys
+            - sys.path.append('sd_mecha')
