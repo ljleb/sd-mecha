@@ -15,6 +15,9 @@ class MergeSpace:
     def __hash__(self):
         return hash(self.identifier)
 
+    def __repr__(self):
+        return f"MergeSpace('{self.identifier}')"
+
 
 class MergeSpaceSymbol:
     def __init__(self, *merge_spaces: Tuple[str | MergeSpace, ...]):

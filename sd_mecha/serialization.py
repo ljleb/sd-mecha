@@ -180,7 +180,8 @@ class SerializerVisitor(RecipeVisitor):
             return value
         else:
             config = self.__serialize_value(node.model_config.identifier)
-            line = f"literal {value} model_config={config}"
+            merge_space = self.__serialize_value(node.merge_space.identifier)
+            line = f"literal {value} model_config={config} merge_space={merge_space}"
             return self.__add_instruction(line)
 
     def visit_model(self, node: ModelRecipeNode) -> str:

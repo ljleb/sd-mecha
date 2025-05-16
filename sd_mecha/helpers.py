@@ -1,54 +1,72 @@
 import logging
 import pathlib
 import torch
+from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig
-from .recipe_merging import merge
+from .merging import merge
 from .conversion import convert
 from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
 from .extensions.merge_methods import NonDictLiteralValue
-from typing import Optional, List, MutableMapping, Iterable
+from typing import Optional, List, MutableMapping, Iterable, Mapping
 
 
-def model(path: str | pathlib.Path, config: Optional[ModelConfig | str] = None, merge_space: str = "weight") -> ModelRecipeNode:
+def model(
+    state_dict: str | pathlib.Path | Mapping[str, torch.Tensor],
+    config: Optional[str | ModelConfig] = None,
+    merge_space: str | MergeSpace = "weight",
+) -> RecipeNode:
     """
-    Create a `ModelRecipeNode` referring to a safetensors file or directory of a diffusers model.
+    Create a recipe node representing a state dict.
 
     Args:
-        path (str or Path):
-            Path to a `.safetensors` file (or directory in certain formats).
-        config (str, optional):
-            A model config identifier if known, or None to let `sd_mecha` infer it.
-        merge_space (str):
-            The merge space in which the model is expected to be ("weight" by default).
+        state_dict:
+            Path to a `.safetensors` file or an already loaded state dict.
+        config:
+            Model config or an identifier thereof.
+        merge_space:
+            The merge space in which the model is expected to be.
 
     Returns:
         ModelRecipeNode: A node that can be used in recipe graphs.
     """
-    if isinstance(path, str):
-        path = pathlib.Path(path)
-    return ModelRecipeNode(path, model_config=config, merge_space=merge_space)
+    if merge_space is None:
+        raise ValueError("merge space cannot be None")
+
+    if isinstance(state_dict, Mapping):
+        if state_dict and not isinstance(first_value := next(iter(state_dict.values())), torch.Tensor):
+            raise ValueError(f"state dict must contain values of type Tensor, not {type(first_value)}")
+        return LiteralRecipeNode(state_dict, model_config=config, merge_space=merge_space)
+    if isinstance(state_dict, str):
+        state_dict = pathlib.Path(state_dict)
+    return ModelRecipeNode(state_dict, model_config=config, merge_space=merge_space)
 
 
-def literal(value: NonDictLiteralValue | dict, config: Optional[ModelConfig | str] = None) -> LiteralRecipeNode:
+def literal(
+    value: NonDictLiteralValue | dict,
+    config: Optional[ModelConfig | str] = None,
+    merge_space: Optional[str | MergeSpace] = None,
+) -> LiteralRecipeNode:
     """
-    Wrap raw python objects into a literal recipe node with an optional model config.
+    Create a recipe node wrapping tensors or some builtin python objects.
 
-    Useful when you need to use recipe node properties on python objects directly, i.e.:
+    This is used to access recipe node properties on python objects directly, i.e.:
     ```python
     sd_mecha.literal({...}) | 3
     ```
-    It is implicitly used when passing a dictionary or a single scalar as input to merge methods.
+    There is typically no need to wrap inputs into recipe nodes manually as this function is implicitly applied whenever needed.
 
     Args:
         value:
-            The literal data to wrap.
-        config (str, optional):
-            Model config or an identifier thereof, if relevant.
+            The literal value to wrap into a recipe node.
+        config:
+            Model config or an identifier thereof.
+        merge_space:
+            The merge space in which the literal is expected to be.
 
     Returns:
         LiteralRecipeNode: A recipe node representing the literal value.
     """
-    return LiteralRecipeNode(value, model_config=config)
+    return LiteralRecipeNode(value, model_config=config, merge_space=merge_space)
 
 
 def set_log_level(level: str = "INFO"):
@@ -57,45 +75,28 @@ def set_log_level(level: str = "INFO"):
 
 class Defaults:
     """
-    Convenience wrapper around common recipe operations with custom default values.
+    Convenience class for common recipe operations to reduce repetition in recipe scripts.
     """
 
     def __init__(
         self,
         model_dirs: pathlib.Path | str | Iterable[pathlib.Path | str] = ...,
-        merge_device: Optional[str] = ...,
+        merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
         output_device: Optional[str | torch.device] = ...,
-        output_dtype: Optional[torch.dtype] = torch.float16,
+        output_dtype: Optional[torch.dtype] = ...,
         threads: Optional[int] = ...,
         total_buffer_size: int = ...,
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
+        omit_extra_keys: bool = ...,
+        omit_ema: bool = ...,
+        check_mandatory_keys: bool = ...,
         tqdm: type = ...,
     ):
         """
         Args:
-            merge_device (optional):
-                Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
-            merge_dtype (optional):
-                Torch dtype for intermediate merges (e.g., `torch.float32`, `torch.float64`).
-            output_device (optional):
-                Final output device (e.g., "cpu").
-            output_dtype (optional):
-                Final dtype for the saved model.
-            threads (optional):
-                Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
-            total_buffer_size (optional):
-                Total byte size of the buffers for all safetensors state dicts (input and output).
-            model_dirs (optional):
-                One or more directories to search for model files if `recipe` references relative paths.
-            strict_weight_space (optional):
-                If True, verifies that merges occur in "weight" space. If False, merges can happen
-                in other merge spaces (like "delta" or "param").
-            check_finite (optional):
-                If True, warns if any non-finite values appear in the final merged tensors.
-            tqdm (optional):
-                A custom progress-bar factory. By default, uses `tqdm.tqdm`.
+            See documentation for `sd_mecha.merge` or `sd_mecha.conversion` for a description of each parameter.
         """
         self.__model_dirs = model_dirs
         self.__merge_device = merge_device
@@ -106,6 +107,9 @@ class Defaults:
         self.__total_buffer_size = total_buffer_size
         self.__strict_weight_space = strict_weight_space
         self.__check_finite = check_finite
+        self.__omit_extra_keys = omit_extra_keys
+        self.__omit_ema = omit_ema
+        self.__check_mandatory_keys = check_mandatory_keys
         self.__tqdm = tqdm
 
     def convert(
@@ -117,18 +121,7 @@ class Defaults:
         """
         Convert a recipe or model from one model config to another.
 
-        This is a convenience wrapper for `sd_mecha.convert`, using the paths set in `model_dirs`.
-
-        Args:
-            recipe:
-                A `RecipeNode` or dictionary representing the input model or partial recipe.
-            config (str or ModelConfig or RecipeNode):
-                The desired output config, or a node referencing that config.
-            model_dirs (Iterable[Path], optional):
-                Directories to resolve relative model paths, if needed.
-
-        Returns:
-            A new recipe node describing the entire conversion path. If no path is found, raises `ValueError`.
+        See `sd_mecha.convert` for more information.
         """
         if model_dirs is ...:
             model_dirs = self.__model_dirs
@@ -138,6 +131,7 @@ class Defaults:
     def merge(
         self,
         recipe: RecipeNodeOrValue,
+        *,
         fallback_model: Optional[RecipeNodeOrValue] = ...,
         merge_device: Optional[str | torch.device] = ...,
         merge_dtype: Optional[torch.dtype] = ...,
@@ -148,10 +142,17 @@ class Defaults:
         model_dirs: pathlib.Path | str | Iterable[pathlib.Path | str] = ...,
         strict_weight_space: bool = ...,
         check_finite: bool = ...,
+        omit_extra_keys: bool = ...,
+        omit_ema: bool = ...,
+        check_mandatory_keys: bool = ...,
         tqdm: type = ...,
-        *,
         output: MutableMapping[str, torch.Tensor] | pathlib.Path | str = ...,
     ) -> Optional[MutableMapping[str, torch.Tensor]]:
+        """
+        Materialize a state dict from a recipe graph and optionally save it to a file.
+
+        See `sd_mecha.merge` for more information.
+        """
         if merge_device is ...:
             merge_device = self.__merge_device
         if merge_dtype is ...:
@@ -171,20 +172,29 @@ class Defaults:
             strict_weight_space = self.__strict_weight_space
         if check_finite is ...:
             check_finite = self.__check_finite
+        if omit_extra_keys is ...:
+            omit_extra_keys = self.__omit_extra_keys
+        if omit_ema is ...:
+            omit_ema = self.__omit_ema
+        if check_mandatory_keys is ...:
+            check_mandatory_keys = self.__check_mandatory_keys
 
         return merge(
             recipe,
-            fallback_model,
-            merge_device,
-            merge_dtype,
-            output_device,
-            output_dtype,
-            threads,
-            total_buffer_size,
-            model_dirs,
-            strict_weight_space,
-            check_finite,
-            tqdm,
+            fallback_model=fallback_model,
+            merge_device=merge_device,
+            merge_dtype=merge_dtype,
+            output_device=output_device,
+            output_dtype=output_dtype,
+            threads=threads,
+            total_buffer_size=total_buffer_size,
+            model_dirs=model_dirs,
+            strict_weight_space=strict_weight_space,
+            check_finite=check_finite,
+            omit_extra_keys=omit_extra_keys,
+            omit_ema=omit_ema,
+            check_mandatory_keys=check_mandatory_keys,
+            tqdm=tqdm,
             output=output,
         )
 
