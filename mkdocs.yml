@@ -1,17 +1,14 @@
-site_name: Mecha
+site_name: sd-mecha
 theme:
-  name: gitbook
+  name: material
+  features:
+    - content.code.copy
 extra_css:
   - style.css
-nav:
-  - Home: index.md
-  - Guide:
-    - Guide: guide/index.md
-    - Introduction: guide/0-introduction.md
-    - Typical Use-Cases: guide/1-typical-use-cases.md
-    - User-Defined Merge Methods: guide/2-user-defined-merge-methods.md
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js
+  - javascripts/mathjax_config.js
 plugins:
-  - search
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -19,3 +16,20 @@ plugins:
           setup_commands:
             - import sys
             - sys.path.append('sd_mecha')
+markdown_extensions:
+  - extra
+  - tables
+  - mdx_math:
+      enable_dollar_delimiter: True
+      use_gitlab_delimiters: True
+  - fenced_code
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      inline_syntax: [true]
+      generic: true

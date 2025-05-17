@@ -9,12 +9,12 @@ To contribute to this guide, or bring attention to ambiguous or erroneous sectio
 
 This guide is tied to a specific version of sd-mecha.
 Verify this is the appropriate version.
-To access the guide for a different version of sd-mecha, please refer to the source tree under [guide/](index.md) of the appropriate git tag or commit.
+To access the guide for a different version of sd-mecha, please refer to the source tree under [guide/](README.md) of the appropriate git tag or commit.
 
-The guide is separated into the following chapters:
+The guide is separated into the following sections:
 
 - **Introduction**: Overview of sd-mecha.
-- **Chapter 1**: Typical use cases.
-- **Chapter 2**: user-defined merge methods.
+- **Section 1**: Typical use cases.
+- **Section 2**: user-defined merge methods.
 
 Next: [Introduction](0-introduction.md)
