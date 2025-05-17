@@ -72,6 +72,9 @@ def add_difference(
     **kwargs,
 ) -> Return(Tensor, "weight"):
     key = kwargs["key"]
+    if torch.allclose(alpha, torch.zeros_like(alpha)):
+        return a[key]
+
     b_val = b[key]  # try to load b from memory first in case it fails to merge before a
     a_val = a[key]
     return a_val.addcmul(b_val, alpha)
