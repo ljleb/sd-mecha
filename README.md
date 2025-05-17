@@ -2,7 +2,8 @@
 
 [![PyPI version](https://badge.fury.io/py/sd-mecha.svg)](https://badge.fury.io/py/sd-mecha)
 [![Discord Server](https://dcbadge.vercel.app/api/server/2EPaw6fxxm?style=flat)](https://discord.gg/invite/2EPaw6fxxm)
-[Guide](docs/guide)
+
+sd-mecha is a memory efficient model merging and conversion library. Quick example:
 
 ```python
 import sd_mecha
@@ -16,26 +17,19 @@ recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
 ```
 
-sd-mecha is a general memory-efficient model merging library. It can merge any model:
-- Diffusion models
-- LLMs
-- VLMs
-- Aesthetic scorers
-- etc.
-
 ## Features
 
-- Memory efficient model merging: merge a very large number of models in a single execution
-- Textual and interpretable format for storage and execution (.mecha)
+- Memory efficient model merging: merge a very large number of models in one execution
+- Human-readable serialization format (.mecha)
 - Extensible library interface:
-  - add custom models
-  - add custom merge methods
+  - user-defined models
+  - user-defined merge methods and architecture conversions
 - Builtin support for popular diffusion models:
   - Stable Diffusion 1.5
   - Stable Diffusion XL
   - FLUX Schnell/Dev
-- Merge LyCORIS networks together and to checkpoints
-- Block-wise hyperparameters for precise control of blocks (aka MBW)
+- Merge LyCORIS networks together and to checkpoints (no extraction yet)
+- Kohya's Merge Block Weighted (MBW) for SD1 and SDXL
 
 ## Install
 
@@ -47,12 +41,11 @@ Make sure to install the appropriate release of [`torch`](https://pytorch.org/ge
 
 ## Usage
 
-See the [mecha guide](docs/guide) for an in-depth exploration of how to use the library, and to decide whether it is appropriate for your purposes.
+See the [mecha guide](docs/guide) for an in-depth exploration of the library.
+
+## Examples
 
 ### Merge models
-
-To merge models, mecha uses recipes.
-A recipe is a list of instructions that describes the exact steps needed to derive a state dict from inputs.
 
 Here's an example script that merges three models:
 
@@ -85,8 +78,8 @@ print([config.identifier for config in all_configs])
 # ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
 ```
 
-A *component* of a model config is a subset of keys of the config that belong to the same logical group.
-For example, all keys starting with "first_stage_model." in Stable Diffusion models belong to the component "vae".
+A component of a model config is a subset of keys of the config that belong to the same logical group.
+For example, all keys starting with "first_stage_model." in Stable Diffusion 1 models belong to the component "vae".
 
 It is possible to query the different components of a model config:
 
