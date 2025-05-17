@@ -70,12 +70,11 @@ def add_difference(
     **kwargs,
 ) -> Return(Tensor, "weight"):
     key = kwargs["key"]
-    if alpha.numel() == 1 and not alpha.any():
+    if alpha.numel() == 1 and math.isclose(alpha.item(), 0.0):
         return a[key]
 
     b_val = b[key]  # try to load b from memory first in case it fails to merge before a
-    a_val = a[key]
-    return a_val.addcmul(b_val, alpha)
+    return a[key].addcmul(b_val, alpha)
 
 
 @merge_method
