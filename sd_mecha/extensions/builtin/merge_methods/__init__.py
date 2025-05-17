@@ -798,6 +798,9 @@ def truncate_rank(
     a_2d = a.flatten(start_dim=1)
     max_rank = min(a_2d.shape)
     target_rank = min(max(round(max_rank * rank_ratio), 1), max_rank)
+    if target_rank == max_rank:
+        return a
+
     svd_driver = "gesvda" if a.is_cuda else None
     u, s, vt = torch_svd_lowrank(a_2d, q=target_rank, full_matrices=False, driver=svd_driver)
     return (u @ torch.diag(s) @ vt).reshape(original_shape)
