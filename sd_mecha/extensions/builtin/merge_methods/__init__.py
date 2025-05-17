@@ -27,7 +27,7 @@ def weighted_sum(
         alpha_float = alpha.item()
         if math.isclose(alpha_float, 0.0):
             return a[key]
-        elif math.isclose(alpha_float, 1.0):
+        if math.isclose(alpha_float, 1.0):
             return b[key]
 
     return torch.lerp(a[key], b[key], alpha)
@@ -797,9 +797,11 @@ def truncate_rank(
     original_shape = a.shape
     a_2d = a.flatten(start_dim=1)
     max_rank = min(a_2d.shape)
-    target_rank = min(max(round(max_rank * rank_ratio), 1), max_rank)
+    target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
     if target_rank == max_rank:
         return a
+    if target_rank == 0:
+        return torch.zeros_like(a)
 
     svd_driver = "gesvda" if a.is_cuda else None
     u, s, vt = torch_svd_lowrank(a_2d, q=target_rank, full_matrices=False, driver=svd_driver)
