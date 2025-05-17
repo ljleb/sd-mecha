@@ -16,5 +16,6 @@ The guide is separated into the following sections:
 - **Introduction**: Overview of sd-mecha.
 - **Section 1**: Typical use cases.
 - **Section 2**: user-defined merge methods.
+- **Section 3**: builtin merge methods.
 
 Next: [Introduction](0-introduction.md)
