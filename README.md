@@ -15,7 +15,7 @@ recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
 ```
 
-sd-mecha is a general memory-efficient model merging library. It can merge *any* model:
+sd-mecha is a general memory-efficient model merging library. It can merge any model:
 - Diffusion models
 - LLMs
 - VLMs
@@ -32,7 +32,6 @@ sd-mecha is a general memory-efficient model merging library. It can merge *any*
 - Builtin support for popular diffusion models:
   - Stable Diffusion 1.5
   - Stable Diffusion XL
-  - Stable Diffusion 3
   - FLUX Schnell/Dev
 - Merge LyCORIS networks together and to checkpoints
 - Block-wise hyperparameters for precise control of blocks (aka MBW)
@@ -47,7 +46,7 @@ Make sure to install the appropriate release of [`torch`](https://pytorch.org/ge
 
 ## Usage
 
-For an in-depth exploration of how to use the library, and to decide whether it is appropriate for your purposes, see the [mecha guide](docs/guide).
+See the [mecha guide](docs/guide) for an in-depth exploration of how to use the library, and to decide whether it is appropriate for your purposes.
 
 ### Merge models
 
