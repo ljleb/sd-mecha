@@ -1,5 +1,8 @@
 # Introduction
 
+The design principles and a few core concepts of the library are covered here.  
+You can skip this section if you want to start merging straight away: [Typical use cases](1-typical-use-cases.md)
+
 ## What is sd-mecha
 
 sd-mecha is a PyTorch-based python library for general purpose operations on [state dictionaries](https://pytorch.org/tutorials/recipes/recipes/what_is_state_dict.html).
