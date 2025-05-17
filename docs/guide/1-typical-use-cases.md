@@ -9,12 +9,12 @@ A traditional merge method is `weighted_sum`. Let's use it as an illustrative ex
 ```python
 import sd_mecha
 
-a = sd_mecha.model("path/to/model_a.safetensors")
-b = sd_mecha.model("path/to/model_b.safetensors")
+a = sd_mecha.model("path/to/model_a.safetensors")  # 1
+b = sd_mecha.model("path/to/model_b.safetensors")  # 2
 
-recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
+recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)  # 3
 
-sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
+sd_mecha.merge(recipe, output="path/to/model_out.safetensors")  # 4
 ```
 
 Here is what happens at each step:
