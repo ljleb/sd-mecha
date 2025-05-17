@@ -1,6 +1,6 @@
 # Mecha Guide
 
-Welcome to a guide about how to use sd-mecha.
+Welcome to a guide about how to use sd-mecha!
 The focus of this guide is to understand how to use the library and decide whether it is for you or not.
 
 This guide does not explain how to write code in python. Basic experience with python programming is assumed.
