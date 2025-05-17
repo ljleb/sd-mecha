@@ -788,9 +788,9 @@ def geometric_median_objective(median, points: Tuple, weights):
 
 @merge_method
 def truncate_rank(
-    a: Parameter(Tensor),
+    a: Parameter(Tensor, merge_space="delta"),
     rank_ratio: Parameter(float) = 0.5,
-) -> Return(Tensor):
+) -> Return(Tensor, merge_space="delta"):
     if a.dim() < 2:
         return a
 
