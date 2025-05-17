@@ -23,16 +23,14 @@ def weighted_sum(
 ) -> Return(Tensor):
     key = kwargs["key"]
 
-    if torch.allclose(alpha, torch.zeros_like(alpha)):
-        return a[key]
-    elif torch.allclose(alpha, torch.ones_like(alpha)):
-        return b[key]
+    if alpha.numel() == 1:
+        alpha_float = alpha.item()
+        if math.isclose(alpha_float, 0.0):
+            return a[key]
+        elif math.isclose(alpha_float, 1.0):
+            return b[key]
 
-    return weighted_sum_impl(a[key], b[key], alpha)
-
-
-def weighted_sum_impl(a: Tensor | np.ndarray, b: Tensor | np.ndarray, alpha: Tensor | np.ndarray) -> Tensor | np.ndarray:
-    return (1-alpha)*a + alpha*b
+    return torch.lerp(a[key], b[key], alpha)
 
 
 @merge_method
@@ -58,9 +56,9 @@ def slerp(
     a_contrib = a_normalized * torch.sin((1-alpha)*omega)
     b_contrib = b_normalized * torch.sin(alpha*omega)
     res = (a_contrib + b_contrib) / torch.sin(omega)
-    res *= weighted_sum_impl(a.norm(), b.norm(), alpha=alpha)
+    res *= torch.lerp(a.norm(), b.norm(), alpha)
     if res.isnan().any():
-        return weighted_sum_impl(a, b, alpha=alpha)
+        return torch.lerp(a, b, alpha)
     return res
 
 
@@ -72,7 +70,7 @@ def add_difference(
     **kwargs,
 ) -> Return(Tensor, "weight"):
     key = kwargs["key"]
-    if torch.allclose(alpha, torch.zeros_like(alpha)):
+    if alpha.numel() == 1 and not alpha.any():
         return a[key]
 
     b_val = b[key]  # try to load b from memory first in case it fails to merge before a
@@ -139,7 +137,7 @@ def add_cosine_b(
 
 def add_cosine_generic(a: Tensor, b: Tensor, alpha: Tensor, similarity: Tensor) -> Tensor:
     k = 1 - torch.clamp(similarity - alpha, 0, 1)
-    return weighted_sum_impl(a, b, alpha=k)
+    return torch.lerp(a, b, k)
 
 
 @merge_method
@@ -311,10 +309,10 @@ def crossover(
     if alpha == 1:
         return b
     if tilt == 1:
-        return weighted_sum_impl(a, b, alpha=alpha)
+        return torch.lerp(a, b, alpha)
 
     if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return weighted_sum_impl(a, b, alpha=tilt)
+        return torch.lerp(a, b, tilt)
 
     shape = a.shape
 
@@ -622,7 +620,7 @@ def dropout(  # aka n-supermario
     return final_delta / masks.sum(0).clamp(1) / rescalar
 
 
-def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
+def overlapping_sets_pmf(n, p, overlap: float, overlap_emphasis):
     if np.isclose(overlap, round(overlap)):
         if round(overlap) % 2 == 0:
             pmf = np.array([1/n*float(bin(i).count("1") == 1) for i in range(1, 2**n)])
@@ -646,10 +644,10 @@ def overlapping_sets_pmf(n, p, overlap, overlap_emphasis):
         expanded_binomial_pmf[i-1] = binomial_pmf[num_sets-1] / binomial_coefficient_np(n, num_sets)
     expanded_binomial_pmf /= expanded_binomial_pmf.sum()
 
-    pmf = weighted_sum_impl(
+    pmf = torch.lerp(
         pmf,
-        weighted_sum_impl(pmf, expanded_binomial_pmf, alpha=1-abs(2*overlap-1)),
-        alpha=overlap_emphasis,
+        torch.lerp(pmf, expanded_binomial_pmf, 1-abs(2*overlap-1)),
+        overlap_emphasis,
     )
     return np.concatenate([[p], pmf * (1 - p)])
 
