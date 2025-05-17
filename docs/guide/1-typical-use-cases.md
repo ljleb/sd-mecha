@@ -128,3 +128,5 @@ Explanation:
 
 1. `sd_mecha.pick_component(a, "vae")`: picks the `vae` component of model `a`. It discards all keys from other components.
 2. `a_vae | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. The `|` operator is a shorthand for `sd_mecha.fallback`.
+
+Next: [User-Defined Merge Methods](2-user-defined-merge-methods.md)

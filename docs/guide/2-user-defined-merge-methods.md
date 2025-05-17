@@ -178,3 +178,5 @@ blocks = convert_my_blocks_to_sdxl(sd_mecha.literal({
 # example usage
 recipe = sd_mecha.weighted_sum(a, b, alpha=blocks)
 ```
+
+Next: [Builtin Merge Methods](3-merge-methods-listing.md)
