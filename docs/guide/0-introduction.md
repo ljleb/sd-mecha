@@ -1,7 +1,7 @@
 # Introduction
 
 The design principles of the library and a few core concepts are introduced here.  
-You can skip this section if you want to start merging straight away: [Typical use cases](1-typical-use-cases.md)
+You can skip this section if you want to start merging right away: [Typical use cases](1-typical-use-cases.md)
 
 ## What is sd-mecha
 
