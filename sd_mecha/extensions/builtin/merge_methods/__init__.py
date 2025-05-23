@@ -16,8 +16,8 @@ T = TypeVar("T")
 
 @merge_method
 def weighted_sum(
-    a: Parameter(StateDict[torch.Tensor]),
-    b: Parameter(StateDict[torch.Tensor]),
+    a: Parameter(StateDict[Tensor]),
+    b: Parameter(StateDict[Tensor]),
     alpha: Parameter(Tensor) = 0.5,
     **kwargs,
 ) -> Return(Tensor):
@@ -381,18 +381,20 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
 
 @merge_method
 def rotate(
-    a_dict: Parameter(Tensor),
-    b_dict: Parameter(Tensor),
+    a_dict: Parameter(StateDict[Tensor]),
+    b_dict: Parameter(StateDict[Tensor]),
     alignment: Parameter(float) = 1.0,
     alpha: Parameter(Tensor) = 0.0,
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
-    if math.isclose(alignment, 0) and torch.allclose(alpha, torch.zeros_like(alpha)):
-        return a_dict[key]
 
-    if math.isclose(alignment, 1) and torch.allclose(alpha, torch.ones_like(alpha)):
-        return b_dict[key]
+    if alpha.numel() == 1:
+        alpha_float = alpha.item()
+        if math.isclose(alignment, 0.0) and math.isclose(alpha_float, 0.0):
+            return a_dict[key]
+        if math.isclose(alignment, 1) and math.isclose(alpha_float, 1.0):
+            return b_dict[key]
 
     a = a_dict[key]
     b = b_dict[key]
@@ -444,7 +446,7 @@ def rotate(
         a_neurons = (1-alpha)*a_neurons + alpha*b_neurons@rotation.T
 
     a_neurons @= transform
-    a_neurons += (1-alignment)*a_centroid + alignment*b_centroid
+    a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
     return a_neurons.reshape_as(a)
 
 
