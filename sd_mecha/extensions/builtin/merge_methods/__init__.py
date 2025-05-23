@@ -393,7 +393,7 @@ def rotate(
         alpha_float = alpha.item()
         if math.isclose(alignment, 0.0) and math.isclose(alpha_float, 0.0):
             return a_dict[key]
-        if math.isclose(alignment, 1) and math.isclose(alpha_float, 1.0):
+        if math.isclose(alignment, 1.0) and math.isclose(alpha_float, 1.0):
             return b_dict[key]
 
     a = a_dict[key]
