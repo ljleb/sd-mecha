@@ -288,11 +288,10 @@ def multiply_quotient(
     c = torch.complex(c, torch.zeros_like(c))
 
     threshold = torch.maximum(torch.abs(ac_log), torch.abs(bc_log))
-    alpha *= torch.clamp(-torch.nan_to_num(ac_log * bc_log / threshold**2, nan=0), 0)
+    alpha = alpha * torch.clamp(-torch.nan_to_num(ac_log * bc_log / threshold**2, nan=0), 0)
 
     res = a * (b / c)**alpha
     res = torch.where(torch.isnan(res), a, res)
-    del a, b, c
     return res.real
 
 
@@ -854,13 +853,9 @@ cast_dtype_map = {
     "int8": torch.int8,
     "bool": torch.bool,
 }
-if hasattr(torch, "uint8"):
-    cast_dtype_map |= {
-        "uint64": torch.uint64,
-        "uint32": torch.uint32,
-        "uint16": torch.uint16,
-        "uint8": torch.uint8,
-    }
+for dtype_str in ("uint8", "uint16", "uint32", "uint64"):
+    if hasattr(torch, dtype_str):
+        cast_dtype_map[dtype_str] = getattr(torch, dtype_str)
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 

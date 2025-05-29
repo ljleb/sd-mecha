@@ -379,12 +379,10 @@ DTYPE_MAPPING = {
     "F8_E5M2": (torch.float8_e5m2, 1),
     "BOOL": (torch.bool, 1),
 }
-if hasattr(torch, "uint8"):
-    DTYPE_MAPPING |= {
-        "U64": (torch.uint64, 8),
-        "U32": (torch.uint32, 4),
-        "U16": (torch.uint16, 2),
-        "U8": (torch.uint8, 1),
-    }
+for i, dtype_str in enumerate(("uint8", "uint16", "uint32", "uint64")):
+    if hasattr(torch, dtype_str):
+        num_bytes = 2**i
+        num_bits = 8 * num_bytes
+        DTYPE_MAPPING[f"U{num_bits}"] = (getattr(torch, dtype_str), num_bytes)
 
 DTYPE_REVERSE_MAPPING = {v: (k, b) for k, (v, b) in DTYPE_MAPPING.items()}
