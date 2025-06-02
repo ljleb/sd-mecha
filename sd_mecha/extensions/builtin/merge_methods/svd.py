@@ -11,17 +11,17 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
         svd_driver = "gesvdj" if a.is_cuda else None
         u, _, vh = svd_lowrank(a.mH @ b, driver=svd_driver, rank=a.shape[0])
 
-        return LowRankMatmul.create_from_svd(u, vh)
+        return LowRankOrthogonalMatmul.create_from_svd(u, vh)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, vh = torch.linalg.svd(a.mH @ b, driver=svd_driver)
         if cancel_reflection:
             u[..., -1] /= torch.slogdet(u)[0] * torch.slogdet(vh)[0]
 
-        return FullRankMatmul(u @ vh)
+        return FullRankOrthogonalMatmul(u @ vh)
 
 
-class LowRankMatmul:
+class LowRankOrthogonalMatmul:
     @staticmethod
     def create_from_svd(u, vh):
         n = u.shape[-2]
@@ -29,14 +29,14 @@ class LowRankMatmul:
         proj = torch.linalg.qr(torch.cat((u, vh.mH), -1)).Q
         q = u @ vh + eye_n - vh.mH @ vh
         rotation_k = proj.T @ q @ proj
-        return LowRankMatmul(rotation_k, proj)
+        return LowRankOrthogonalMatmul(rotation_k, proj)
 
     def __init__(self, rotation_k, proj):
         self.rotation_k = rotation_k
         self.proj = proj
 
     def __call__(self, x: Tensor, t: float | int, cache: Optional[dict]):
-        transform_k = get_transform(self.rotation_k, t, cache)
+        transform_k = fractional_orthogonal_matrix_power(self.rotation_k, t, cache)
         if transform_k is None:
             return x
 
@@ -45,39 +45,39 @@ class LowRankMatmul:
         return x + (r2 - r1) @ self.proj.mH
 
     def to(self, *args, **kwargs):
-        return LowRankMatmul(self.rotation_k.to(*args, **kwargs), self.proj.to(*args, **kwargs))
+        return LowRankOrthogonalMatmul(self.rotation_k.to(*args, **kwargs), self.proj.to(*args, **kwargs))
 
 
-class FullRankMatmul:
+class FullRankOrthogonalMatmul:
     def __init__(self, rotation):
         self.rotation = rotation
 
     def __call__(self, x: Tensor, t: float | int, cache: Optional[dict]):
-        transform = get_transform(self.rotation, t, cache)
+        transform = fractional_orthogonal_matrix_power(self.rotation, t, cache)
         if transform is None:
             return x
         return x @ transform
 
     def to(self, *args, **kwargs):
-        return FullRankMatmul(self.rotation.to(*args, **kwargs))
+        return FullRankOrthogonalMatmul(self.rotation.to(*args, **kwargs))
 
 
-def get_transform(rotation, t, cache):
+def fractional_orthogonal_matrix_power(q, t, cache):
     t_is_integer = math.isclose(t, round(t))
 
     if math.isclose(t, 0.0):
         return None
     elif math.isclose(t, 1.0):
-        return rotation
+        return q
     elif math.isclose(t, -1.0):
-        return rotation.mH
+        return q.mH
     elif t_is_integer:
-        return torch.linalg.matrix_power(rotation, round(t), cache)
+        return torch.linalg.matrix_power(q, round(t))
     else:
-        return fractional_orthogonal_matrix_power(rotation, t)
+        return normal_matrix_power(q, t, cache)
 
 
-def fractional_orthogonal_matrix_power(q, power, cache=None):
+def normal_matrix_power(q, power, cache=None):
     if cache is not None and "eigenvalues" in cache:
         eig_v = cache["eig_v"].to(q.device, q.dtype).view_as_complex()
         eig_vs = cache["eig_vs"].to(q.device, q.dtype).view_as_complex()
@@ -92,33 +92,6 @@ def fractional_orthogonal_matrix_power(q, power, cache=None):
     if result.imag.abs().max() > 1e-6:
         print(f"imaginary residual in fractional matrix power: max|Im Q^p| = {result.imag.abs().max().item()}", file=sys.stderr)
     return result.to(dtype=q.dtype)
-
-
-class MatmulIdentity:
-    def __matmul__(self, other):
-        return other
-
-    def __rmatmul__(self, other):
-        return other
-
-    @property
-    def mH(self):
-        return self
-
-    @property
-    def mT(self):
-        return self
-
-    @property
-    def H(self):
-        return self
-
-    @property
-    def T(self):
-        return self
-
-    def to(self, *_args, **_kwargs):
-        return self
 
 
 def svd_lowrank(a: Tensor, rank: int, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
