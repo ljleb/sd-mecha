@@ -10,7 +10,6 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     if n < p:
         svd_driver = "gesvdj" if a.is_cuda else None
         u, _, vh = svd_lowrank(a.mH @ b, driver=svd_driver, rank=a.shape[0])
-
         return LowRankOrthogonalMatmul.create_from_svd(u, vh)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
@@ -28,7 +27,7 @@ class LowRankOrthogonalMatmul:
         eye_n = torch.eye(n, dtype=u.dtype, device=u.device)
         proj = torch.linalg.qr(torch.cat((u, vh.mH), -1)).Q
         q = u @ vh + eye_n - vh.mH @ vh
-        rotation_k = proj.T @ q @ proj
+        rotation_k = proj.mH @ q @ proj
         return LowRankOrthogonalMatmul(rotation_k, proj)
 
     def __init__(self, rotation_k, proj):
