@@ -1,0 +1,29 @@
+identifier: sd1-supermerger_blocks
+components:
+  blocks:
+    BASE: {shape: [], dtype: float32}
+    IN00: {shape: [], dtype: float32}
+    IN01: {shape: [], dtype: float32}
+    IN02: {shape: [], dtype: float32}
+    IN03: {shape: [], dtype: float32}
+    IN04: {shape: [], dtype: float32}
+    IN05: {shape: [], dtype: float32}
+    IN06: {shape: [], dtype: float32}
+    IN07: {shape: [], dtype: float32}
+    IN08: {shape: [], dtype: float32}
+    IN09: {shape: [], dtype: float32}
+    IN10: {shape: [], dtype: float32}
+    IN11: {shape: [], dtype: float32}
+    M00: {shape: [], dtype: float32}
+    OUT00: {shape: [], dtype: float32}
+    OUT01: {shape: [], dtype: float32}
+    OUT02: {shape: [], dtype: float32}
+    OUT03: {shape: [], dtype: float32}
+    OUT04: {shape: [], dtype: float32}
+    OUT05: {shape: [], dtype: float32}
+    OUT06: {shape: [], dtype: float32}
+    OUT07: {shape: [], dtype: float32}
+    OUT08: {shape: [], dtype: float32}
+    OUT09: {shape: [], dtype: float32}
+    OUT10: {shape: [], dtype: float32}
+    OUT11: {shape: [], dtype: float32}

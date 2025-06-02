@@ -3,20 +3,14 @@ sd_mecha.set_log_level()
 
 
 models = [
-    "ghostmix_v20Bakedvae",
-    "dreamshaper_332BakedVaeClipFix",
-    "realisticVisionV20_v20",
-    "illustrationArtstyleMM_27",
-    "lyriel_v16",
-    "Midnight Maple",
-    "mixproyuki77mi_v10",
+    sd_mecha.model("ghostmix_v20Bakedvae.safetensors"),
+    sd_mecha.model("dreamshaper_332BakedVaeClipFix.safetensors"),
+    sd_mecha.model("realisticVisionV20_v20.safetensors"),
+    sd_mecha.model("illustrationArtstyleMM_27.safetensors"),
+    sd_mecha.model("lyriel_v16.safetensors"),
+    sd_mecha.model("Midnight Maple.safetensors"),
+    sd_mecha.model("mixproyuki77mi_v10.safetensors"),
 ]
 
-recipe = sd_mecha.add_difference_ties("pure/v1-5-pruned", *models, alpha=0.5)
-
-merger = sd_mecha.RecipeMerger(
-    models_dir=r"E:\sd\models\Stable-diffusion",
-    default_device="cpu",
-)
-
-merger.merge_and_save(recipe, output="basic_merge")
+recipe = sd_mecha.add_difference_ties(sd_mecha.model("pure/v1-5-pruned.safetensors"), *models, alpha=0.5)
+sd = sd_mecha.merge(recipe, output_device="cpu")

@@ -11,9 +11,5 @@ models = [
     "CounterfeitV30_v30",
 ]
 
-recipe = models[0]
-for i, model in enumerate(models[1:], start=2):
-    recipe = sd_mecha.weighted_sum(model, recipe, alpha=(i-1)/i)
-
-merger = sd_mecha.RecipeMerger(models_dir=r"E:\sd\models\Stable-diffusion")
-merger.merge_and_save(recipe, output="basic_merge")
+recipe = sd_mecha.n_average(*models)
+sd = sd_mecha.merge(recipe)
