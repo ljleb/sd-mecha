@@ -413,14 +413,14 @@ def rotate(
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
-    alignment_is_float = not math.isclose(alignment, round(alignment))
-
     cache = kwargs.get("cache")
     if cache is not None:
         key = kwargs["key"]
         if key not in cache:
             cache[key] = {}
         cache = cache[key]
+
+    alignment_is_float = not math.isclose(alignment, round(alignment))
 
     if cache is not None and "transform" in cache:
         transform = cache["transform"].to(a.device, a.dtype)
