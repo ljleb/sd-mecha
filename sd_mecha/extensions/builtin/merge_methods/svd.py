@@ -194,7 +194,7 @@ def orthogonal_matrix_power(q, power, cache=None, key=None):
 
 
 # src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L150
-# license applies, see /pytorch.LICENSE
+# license applies, see /LICENSE-pytorch.txt
 def svd_lowrank(a: Tensor, rank: int, iters: int = 0, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
     m, n = a.shape[-2:]
 
@@ -213,7 +213,7 @@ def svd_lowrank(a: Tensor, rank: int, iters: int = 0, driver: Optional[str] = No
 
 
 # src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L12
-# license applies, see /pytorch.LICENSE
+# license applies, see /LICENSE-pytorch.txt
 def get_approximate_basis(a: Tensor, rank: int, iters: int = 0) -> Tensor:
     r = torch.randn(a.shape[-1], rank, dtype=a.dtype, device=a.device)
     q = torch.linalg.householder_product(*torch.geqrf(a @ r))

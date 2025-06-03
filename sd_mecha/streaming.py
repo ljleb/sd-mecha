@@ -333,7 +333,7 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
 
 
 # src: https://github.com/huggingface/safetensors/blob/aa4ad823cf71d913f283b70332d37ab45803949d/bindings/python/py_src/safetensors/torch.py#L405
-# this function is Apache 2.0, see /safetensors.LICENSE
+# this function is Apache 2.0, see /LICENSE-safetensors.txt
 def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
     # assume tensor is not spare nor contiguous and on the cpu
     total_bytes = len(tensor.untyped_storage())
