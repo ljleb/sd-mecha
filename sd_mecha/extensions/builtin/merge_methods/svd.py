@@ -72,6 +72,7 @@ def rotate(
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
     rank_ratio: Parameter(float) = 0.5,
+    use_approximate_basis: Parameter(bool) = False,
     approximate_basis_iters: Parameter(int) = 2,
     approximate_basis_seed: Parameter(int) = None,
     **kwargs,
@@ -95,20 +96,29 @@ def truncate_rank(
         return torch.zeros_like(a)
 
     original_shape = a.shape
-    if "s" in cache and cache["s"].numel() >= target_rank and cache["iters"] == approximate_basis_iters:
+    if (
+        "s" in cache and cache["s"].numel() >= target_rank and
+        cache.get("iters", approximate_basis_iters) == approximate_basis_iters and
+        cache.get("seed", approximate_basis_seed) == approximate_basis_seed
+    ):
         u = cache["u"][..., :target_rank].to(a)
         s = cache["s"][..., :target_rank].to(a)
         vh = cache["vh"][..., :target_rank, :].to(a)
     else:
         svd_driver = "gesvda" if a.is_cuda else None
-        u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=approximate_basis_iters, seed=approximate_basis_seed, driver=svd_driver)
+        if use_approximate_basis:
+            u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=approximate_basis_iters, seed=approximate_basis_seed, driver=svd_driver)
+        else:
+            u, s, vh = torch.linalg.svd(a_2d, full_matrices=False, driver=svd_driver)
         if cache is not None:
             cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
             cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
             cache["vh"] = vh.to(device="cpu", dtype=torch.bfloat16)
-            cache["iters"] = approximate_basis_iters
+            if use_approximate_basis:
+                cache["iters"] = approximate_basis_iters
+                cache["seed"] = approximate_basis_seed
 
-    return (u * s.unsqueeze(-2) @ vh).reshape(original_shape)
+    return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
