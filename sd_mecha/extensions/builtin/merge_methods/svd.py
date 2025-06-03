@@ -84,13 +84,14 @@ def truncate_rank(
             cache[key] = {}
         cache = cache[key]
 
+    a_2d = a.flatten(start_dim=1)
+    max_rank = min(a_2d.shape)
+    target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
+
     original_shape = a.shape
-    if "u" in cache:
-        u, s, vh = cache["u"].to(a), cache["s"].to(a), cache["vh"].to(a)
+    if "s" in cache and cache["s"].numel() < target_rank:
+        u, s, vh = cache["u"][:, :target_rank].to(a), cache["s"][:target_rank].to(a), cache["vh"][:target_rank].to(a)
     else:
-        a_2d = a.flatten(start_dim=1)
-        max_rank = min(a_2d.shape)
-        target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
         if target_rank == max_rank:
             return a
         if target_rank == 0:
