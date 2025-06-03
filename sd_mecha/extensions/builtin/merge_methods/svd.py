@@ -199,7 +199,7 @@ def solve_symmetric_sylvester(s, c):
     c_t = vs.mH @ c @ vs
     d = v.unsqueeze(-2) + v.unsqueeze(-1)
     if torch.any(torch.abs(d) < 1e-12):
-        print("Singular Sylvester operator: some λ_i+λ_j ≈ 0", file=sys.stderr)
+        logging.warning("Singular Sylvester operator: some λ_i+λ_j ≈ 0")
 
     g_t = c_t / d
     g = vs @ g_t @ vs.mH
@@ -213,7 +213,7 @@ def logm(m, key):
 
     max_v, _ = res.imag.abs().flatten(start_dim=-2).max(dim=-1)
     if max_v[max_v.argmax()] > 1e-4:
-        print(f"imaginary residual at batch index {max_v.argmax()}: {max_v[max_v.argmax()].item()}, key: {key}", file=sys.stderr)
+        logging.warning(f"imaginary residual at batch index {max_v.argmax()}: {max_v[max_v.argmax()].item()}, key: {key}")
     return res.to(m.dtype)
 
 
