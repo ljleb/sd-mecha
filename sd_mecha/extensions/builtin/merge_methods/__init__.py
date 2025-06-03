@@ -385,6 +385,8 @@ def rotate(
     alignment: Parameter(float) = 1.0,
     alpha: Parameter(Tensor) = 0.0,
     centralization: Parameter(float) = 1.0,
+    stiefel_eps: Parameter(float) = 1e-8,
+    stiefel_max_iters: Parameter(int) = 100,
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
@@ -430,10 +432,10 @@ def rotate(
         if cache is not None:
             cache["transform"] = transform.to("cpu", torch.bfloat16)
 
-    if alpha.numel() > 1 or not math.isclose(alpha, 0):
+    if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
         a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
 
-    a_neurons = transform(a_neurons, alignment, cache, key)
+    a_neurons = transform(a_neurons, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
     a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
     return a_neurons.reshape_as(a)
 

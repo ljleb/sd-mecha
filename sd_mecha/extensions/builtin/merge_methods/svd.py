@@ -9,7 +9,7 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     n, p = a.shape[-2:]
     if n < p:
         svd_driver = "gesvd" if a.is_cuda else None
-        u, _, vh = svd_lowrank(a.mH @ b, driver=svd_driver, rank=a.shape[0])
+        u, _, vh = svd_lowrank(a.mH @ b, rank=a.shape[0], driver=svd_driver)
         return LowRankOrthogonalMatmul(u, vh)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
@@ -25,7 +25,7 @@ class LowRankOrthogonalMatmul:
         self.u = u
         self.vh = vh
 
-    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None):
+    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None, stiefel_eps=1e-8, stiefel_max_iters=100, **_kwargs):
         def x_proj(): return x - x @ self.vh.mH @ self.vh
 
         if math.isclose(t, 0.0):
@@ -40,7 +40,7 @@ class LowRankOrthogonalMatmul:
             else:
                 return x_proj() + x @ self.vh.mH @ torch.linalg.matrix_power(self.u.mH @ self.vh.mH, abs(round(t)) - 1) @ self.u.mH
         else:
-            u = stiefel_interpolate(self.vh.mH, self.u, t, cache, key, 1e-8, 100)
+            u = stiefel_interpolate(self.vh.mH, self.u, t, stiefel_eps, stiefel_max_iters, cache, key)
             return x_proj() + x @ u @ self.vh
 
     def to(self, *args, **kwargs):
@@ -51,7 +51,10 @@ class FullRankOrthogonalMatmul:
     def __init__(self, rotation):
         self.rotation = rotation
 
-    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None):
+    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None, **_kwargs):
+        if math.isclose(t, 0.0):
+            return x
+
         transform = fractional_orthogonal_matrix_power(self.rotation, t, cache, key)
         return x @ transform
 
@@ -60,29 +63,27 @@ class FullRankOrthogonalMatmul:
 
 
 def fractional_orthogonal_matrix_power(q, t, cache=None, key=None):
-    t_is_integer = math.isclose(t, round(t))
-
     if math.isclose(t, 0.0):
         return torch.eye(q.shape[-1], device=q.device, dtype=q.dtype)
     elif math.isclose(t, 1.0):
         return q
     elif math.isclose(t, -1.0):
         return q.mH
-    elif t_is_integer:
+    elif math.isclose(t, round(t)):
         return torch.linalg.matrix_power(q, round(t))
     else:
         return normal_matrix_power(q, t, cache, key)
 
 
 def normal_matrix_power(q, power, cache=None, key=None):
-    if cache is not None and "eigenvalues" in cache:
-        eig_v = cache["eig_v"].to(q.device, q.dtype).view_as_complex()
-        eig_vs = cache["eig_vs"].to(q.device, q.dtype).view_as_complex()
+    if cache is not None and "eig_v" in cache:
+        eig_v = torch.view_as_complex(cache["eig_v"].to(device=q.device, dtype=q.dtype))
+        eig_vs = torch.view_as_complex(cache["eig_vs"].to(device=q.device, dtype=q.dtype))
     else:
         eig_v, eig_vs = torch.linalg.eig(q)
         if cache is not None:
-            cache["eig_v"] = eig_v.view_as_real().to(device="cpu", dtype=torch.bfloat16)
-            cache["eig_vs"] = eig_vs.view_as_real().to(device="cpu", dtype=torch.bfloat16)
+            cache["eig_v"] = torch.view_as_real(eig_v).to(device="cpu", dtype=torch.bfloat16)
+            cache["eig_vs"] = torch.view_as_real(eig_vs).to(device="cpu", dtype=torch.bfloat16)
 
     eig_v_pow = (eig_v**power).unsqueeze(-2)
     result = eig_vs * eig_v_pow @ eig_vs.mH
@@ -109,8 +110,8 @@ def orthogonal_complete(a: Tensor) -> Tensor:
     return torch.cat((a, a_extension), dim=-1)
 
 
-def stiefel_interpolate(a, b, t, cache=None, key=None, tau=None, max_iter=100):
-    delta = log_stiefel(a, b, tau, max_iter, cache, key)
+def stiefel_interpolate(a, b, t, eps=1e-8, max_iter=100, cache=None, key=None):
+    delta = log_stiefel(a, b, eps, max_iter, cache, key)
     res = exp_stiefel(a, t * delta)
     return res
 
@@ -125,7 +126,7 @@ def exp_stiefel(U, Delta):
     return U @ M[..., :p, :p] + Q @ M[..., p:, :p]
 
 
-def log_stiefel(a, b, tau=None, max_iter=100, cache=None, key=None):
+def log_stiefel(a, b, eps=1e-8, max_iter=100, cache=None, key=None):
     if cache is not None and "log_stiefel" in cache:
         return cache["log_stiefel"].to(device=a.device, dtype=a.dtype)
 
@@ -135,7 +136,6 @@ def log_stiefel(a, b, tau=None, max_iter=100, cache=None, key=None):
     batch_size, n, p = b.shape
     assert n > p
     k = min(n-p, p)
-    tau = tau or 1e-8
     assert max_iter >= 1
 
     m = a.mH @ b
@@ -170,7 +170,7 @@ def log_stiefel(a, b, tau=None, max_iter=100, cache=None, key=None):
         elif printed_error:
             print(f"warning: log error started converging {c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
             printed_error = False
-        if c_norm <= tau:
+        if c_norm <= eps:
             break
         elif i == max_iter - 1:
             print(f"stiefel error: {c_norm.item()}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
@@ -184,7 +184,7 @@ def log_stiefel(a, b, tau=None, max_iter=100, cache=None, key=None):
     res = delta.reshape(original_shape)
 
     if cache is not None:
-        cache["log_stiefel"] = res.to("cpu", torch.bfloat16)
+        cache["log_stiefel"] = res.to(device="cpu", dtype=torch.bfloat16)
 
     return res
 
