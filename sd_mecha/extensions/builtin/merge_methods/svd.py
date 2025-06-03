@@ -89,7 +89,7 @@ def normal_matrix_power(q, power, cache=None, key=None):
     eig_v_pow = eig_v**power
     result = eig_vs * eig_v_pow.unsqueeze(-2) @ eig_vs.mH
     if result.imag.abs().max() > 1e-6:
-        print(f"imaginary residual in fractional matrix power: max|Im Q^p| = {result.imag.abs().max().item()}, key: {key}", file=sys.stderr)
+        logging.warning(f"imaginary residual in fractional matrix power: max|Im Q^p| = {result.imag.abs().max().item()}, key: {key}")
     return result.to(dtype=q.dtype)
 
 
