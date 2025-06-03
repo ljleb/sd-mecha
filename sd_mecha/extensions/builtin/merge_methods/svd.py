@@ -87,16 +87,15 @@ def truncate_rank(
     a_2d = a.flatten(start_dim=1)
     max_rank = min(a_2d.shape)
     target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
+    if target_rank == max_rank:
+        return a
+    if target_rank == 0:
+        return torch.zeros_like(a)
 
     original_shape = a.shape
     if "s" in cache and cache["s"].numel() < target_rank:
         u, s, vh = cache["u"][:, :target_rank].to(a), cache["s"][:target_rank].to(a), cache["vh"][:target_rank].to(a)
     else:
-        if target_rank == max_rank:
-            return a
-        if target_rank == 0:
-            return torch.zeros_like(a)
-
         svd_driver = "gesvda" if a.is_cuda else None
         u, s, vh = svd_lowrank(a_2d, rank=target_rank, driver=svd_driver)
         if cache is not None:
