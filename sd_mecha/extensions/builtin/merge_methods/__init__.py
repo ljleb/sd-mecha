@@ -384,6 +384,7 @@ def rotate(
     b: Parameter(StateDict[Tensor]),
     alignment: Parameter(float) = 1.0,
     alpha: Parameter(Tensor) = 0.0,
+    centralization: Parameter(float) = 1.0,
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
@@ -408,8 +409,8 @@ def rotate(
 
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)
-    a_centroid = a_neurons.mean(0)
-    b_centroid = b_neurons.mean(0)
+    a_centroid = a_neurons.mean(0) * centralization
+    b_centroid = b_neurons.mean(0) * centralization
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
@@ -429,10 +430,10 @@ def rotate(
         if cache is not None:
             cache["transform"] = transform.to("cpu", torch.bfloat16)
 
-    if not math.isclose(alpha, 0):
-        a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache), alpha)
+    if alpha.numel() > 1 or not math.isclose(alpha, 0):
+        a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
 
-    a_neurons = transform(a_neurons, alignment, cache)
+    a_neurons = transform(a_neurons, alignment, cache, key)
     a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
     return a_neurons.reshape_as(a)
 

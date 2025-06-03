@@ -43,7 +43,7 @@ def add_difference(
             res, a, b,
         )
 
-    return res
+    return res | a
 
 
 def add_perpendicular(

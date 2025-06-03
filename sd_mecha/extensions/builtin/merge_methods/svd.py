@@ -8,64 +8,62 @@ from torch import Tensor
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     n, p = a.shape[-2:]
     if n < p:
-        svd_driver = "gesvdj" if a.is_cuda else None
+        svd_driver = "gesvd" if a.is_cuda else None
         u, _, vh = svd_lowrank(a.mH @ b, driver=svd_driver, rank=a.shape[0])
-        return LowRankOrthogonalMatmul.create_from_svd(u, vh)
+        return LowRankOrthogonalMatmul(u, vh)
     else:
         svd_driver = "gesvd" if a.is_cuda else None
         u, _, vh = torch.linalg.svd(a.mH @ b, driver=svd_driver)
         if cancel_reflection:
-            u[..., -1] /= torch.slogdet(u)[0] * torch.slogdet(vh)[0]
+            u[..., -1] /= torch.slogdet(u @ vh)[0]
 
         return FullRankOrthogonalMatmul(u @ vh)
 
 
 class LowRankOrthogonalMatmul:
-    @staticmethod
-    def create_from_svd(u, vh):
-        n = u.shape[-2]
-        eye_n = torch.eye(n, dtype=u.dtype, device=u.device)
-        proj = torch.linalg.qr(torch.cat((u, vh.mH), -1)).Q
-        q = u @ vh + eye_n - vh.mH @ vh
-        rotation_k = proj.mH @ q @ proj
-        return LowRankOrthogonalMatmul(rotation_k, proj)
+    def __init__(self, u, vh):
+        self.u = u
+        self.vh = vh
 
-    def __init__(self, rotation_k, proj):
-        self.rotation_k = rotation_k
-        self.proj = proj
+    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None):
+        def x_proj(): return x - x @ self.vh.mH @ self.vh
 
-    def __call__(self, x: Tensor, t: float | int, cache: Optional[dict]):
-        transform_k = fractional_orthogonal_matrix_power(self.rotation_k, t, cache)
-        if transform_k is None:
+        if math.isclose(t, 0.0):
             return x
-
-        r1 = x @ self.proj
-        r2 = r1 @ transform_k
-        return x + (r2 - r1) @ self.proj.mH
+        elif math.isclose(t, 1.0):
+            return x_proj() + x @ self.u @ self.vh
+        elif math.isclose(t, -1.0):
+            return x_proj() + x @ self.vh.mH @ self.u.mH
+        elif math.isclose(t, round(t)):
+            if t > 0:
+                return x_proj() + x @ self.u @ torch.linalg.matrix_power(self.vh @ self.u, round(t) - 1) @ self.vh
+            else:
+                return x_proj() + x @ self.vh.mH @ torch.linalg.matrix_power(self.u.mH @ self.vh.mH, abs(round(t)) - 1) @ self.u.mH
+        else:
+            u = stiefel_interpolate(self.vh.mH, self.u, t, cache, key, 1e-8, 100)
+            return x_proj() + x @ u @ self.vh
 
     def to(self, *args, **kwargs):
-        return LowRankOrthogonalMatmul(self.rotation_k.to(*args, **kwargs), self.proj.to(*args, **kwargs))
+        return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.vh.to(*args, **kwargs))
 
 
 class FullRankOrthogonalMatmul:
     def __init__(self, rotation):
         self.rotation = rotation
 
-    def __call__(self, x: Tensor, t: float | int, cache: Optional[dict]):
-        transform = fractional_orthogonal_matrix_power(self.rotation, t, cache)
-        if transform is None:
-            return x
+    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None):
+        transform = fractional_orthogonal_matrix_power(self.rotation, t, cache, key)
         return x @ transform
 
     def to(self, *args, **kwargs):
         return FullRankOrthogonalMatmul(self.rotation.to(*args, **kwargs))
 
 
-def fractional_orthogonal_matrix_power(q, t, cache):
+def fractional_orthogonal_matrix_power(q, t, cache=None, key=None):
     t_is_integer = math.isclose(t, round(t))
 
     if math.isclose(t, 0.0):
-        return None
+        return torch.eye(q.shape[-1], device=q.device, dtype=q.dtype)
     elif math.isclose(t, 1.0):
         return q
     elif math.isclose(t, -1.0):
@@ -73,23 +71,23 @@ def fractional_orthogonal_matrix_power(q, t, cache):
     elif t_is_integer:
         return torch.linalg.matrix_power(q, round(t))
     else:
-        return normal_matrix_power(q, t, cache)
+        return normal_matrix_power(q, t, cache, key)
 
 
-def normal_matrix_power(q, power, cache=None):
+def normal_matrix_power(q, power, cache=None, key=None):
     if cache is not None and "eigenvalues" in cache:
         eig_v = cache["eig_v"].to(q.device, q.dtype).view_as_complex()
         eig_vs = cache["eig_vs"].to(q.device, q.dtype).view_as_complex()
     else:
         eig_v, eig_vs = torch.linalg.eig(q)
         if cache is not None:
-            cache["eig_v"] = eig_v.view_as_real().to("cpu", torch.bfloat16)
-            cache["eig_vs"] = eig_vs.view_as_real().to("cpu", torch.bfloat16)
+            cache["eig_v"] = eig_v.view_as_real().to(device="cpu", dtype=torch.bfloat16)
+            cache["eig_vs"] = eig_vs.view_as_real().to(device="cpu", dtype=torch.bfloat16)
 
     eig_v_pow = (eig_v**power).unsqueeze(-2)
-    result = (eig_vs * eig_v_pow) @ eig_vs.mH
+    result = eig_vs * eig_v_pow @ eig_vs.mH
     if result.imag.abs().max() > 1e-6:
-        print(f"imaginary residual in fractional matrix power: max|Im Q^p| = {result.imag.abs().max().item()}", file=sys.stderr)
+        print(f"imaginary residual in fractional matrix power: max|Im Q^p| = {result.imag.abs().max().item()}, key: {key}", file=sys.stderr)
     return result.to(dtype=q.dtype)
 
 
@@ -101,11 +99,121 @@ def svd_lowrank(a: Tensor, rank: int, driver: Optional[str] = None) -> Tuple[Ten
     return u, s, vh
 
 
-def orthogonal_extend(a: Tensor) -> Tensor:
+def orthogonal_complete(a: Tensor) -> Tensor:
     m, n = a.shape[-2:]
     if m <= n:
         return a
 
-    proj = torch.eye(m, device=a.device, dtype=a.dtype)[:, n:] - a @ a.mH
+    proj = torch.eye(m, device=a.device, dtype=a.dtype)[:, n:] - a @ a.mH[..., n:]
     a_extension = torch.linalg.householder_product(*torch.geqrf(proj))
-    return torch.cat((a, a_extension), dim=1)
+    return torch.cat((a, a_extension), dim=-1)
+
+
+def stiefel_interpolate(a, b, t, cache=None, key=None, tau=None, max_iter=100):
+    delta = log_stiefel(a, b, tau, max_iter, cache, key)
+    res = exp_stiefel(a, t * delta)
+    return res
+
+
+def exp_stiefel(U, Delta):
+    A = U.mH @ Delta
+    Y = Delta - U @ A
+    Q, R = qr_pos(Y)
+    W = torch.cat((torch.cat((A, -R.mH), -1), torch.cat((R, torch.zeros_like(A)), -1)), -2)
+    M = torch.linalg.matrix_exp(W)
+    p = A.shape[-2]
+    return U @ M[..., :p, :p] + Q @ M[..., p:, :p]
+
+
+def log_stiefel(a, b, tau=None, max_iter=100, cache=None, key=None):
+    if cache is not None and "log_stiefel" in cache:
+        return cache["log_stiefel"].to(device=a.device, dtype=a.dtype)
+
+    original_shape = a.shape
+    a = a.view(-1, original_shape[-2], original_shape[-1])
+    b = b.view(-1, original_shape[-2], original_shape[-1])
+    batch_size, n, p = b.shape
+    assert n > p
+    k = min(n-p, p)
+    tau = tau or 1e-8
+    assert max_iter >= 1
+
+    m = a.mH @ b
+
+    q, n_mat = qr_pos(b - a @ m)
+    q = q[..., :k]
+    n_mat = n_mat[..., :k, :]
+    v = orthogonal_complete(torch.cat((m, n_mat), dim=-2))
+
+    r, sigma, r_hat_t = torch.linalg.svd(v[..., p:, p:], driver="gesvd" if v.is_cuda else None)
+    q @= r
+    v[..., p:, :p] = r.mH @ n_mat
+    v[..., :p, p:] @= r_hat_t.mH
+    p_arange = torch.arange(p, p+k, device=v.device)
+    v[..., p:, p:].zero_()
+    v[..., p_arange, p_arange] = sigma
+    del r, sigma, r_hat_t, p_arange
+
+    v[v.slogdet()[0] < 0, ..., -1] *= -1
+
+    k_arange = torch.arange(k, device=v.device, dtype=torch.long)
+    printed_error = False
+    l = None
+    for i in range(max_iter):
+        l = logm(v, key)
+        c = l[..., p:, p:]
+        c_norm_idx = torch.linalg.matrix_norm(c).argmax()
+        c_norm = torch.linalg.matrix_norm(c[c_norm_idx])
+        if c_norm > 10:
+            print(f"warning: log error very high {c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
+            printed_error = True
+        elif printed_error:
+            print(f"warning: log error started converging {c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
+            printed_error = False
+        if c_norm <= tau:
+            break
+        elif i == max_iter - 1:
+            print(f"stiefel error: {c_norm.item()}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
+
+        s = l[..., p:, :p] @ l[..., p:, :p].mH / 12
+        s[..., k_arange, k_arange] -= 0.5
+        g = solve_symmetric_sylvester(s, c)
+        v[..., p:] @= torch.linalg.matrix_exp(g)
+
+    delta = a @ l[..., :p, :p] + q @ l[..., p:, :p]
+    res = delta.reshape(original_shape)
+
+    if cache is not None:
+        cache["log_stiefel"] = res.to("cpu", torch.bfloat16)
+
+    return res
+
+
+def solve_symmetric_sylvester(s, c):
+    v, vs = torch.linalg.eigh(s)
+    c_t = vs.mH @ c @ vs
+    d = v.unsqueeze(-2) + v.unsqueeze(-1)
+    if torch.any(torch.abs(d) < 1e-12):
+        print("Singular Sylvester operator: some λ_i+λ_j ≈ 0", file=sys.stderr)
+
+    g_t = c_t / d
+    g = vs @ g_t @ vs.mH
+    return g
+
+
+def logm(m, key):
+    v, vs = torch.linalg.eig(m)
+    v_log = v.unsqueeze(-2).log()
+    res = torch.linalg.solve(vs, vs*v_log, left=False)
+
+    max_v, _ = res.imag.abs().flatten(start_dim=-2).max(dim=-1)
+    if max_v[max_v.argmax()] > 1e-4:
+        print(f"imaginary residual at batch index {max_v.argmax()}: {max_v[max_v.argmax()].item()}, key: {key}", file=sys.stderr)
+    return res.to(m.dtype)
+
+
+def qr_pos(x):
+    q, r = torch.linalg.qr(x)
+    s = torch.sign(r.diagonal(offset=0, dim1=-2, dim2=-1))
+    s[s == 0] = 1
+    return q * s.unsqueeze(-2), r / s.unsqueeze(-1)
