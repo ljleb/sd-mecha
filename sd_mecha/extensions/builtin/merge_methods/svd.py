@@ -116,14 +116,18 @@ def stiefel_interpolate(a, b, t, eps=1e-8, max_iter=100, cache=None, key=None):
     return res
 
 
-def exp_stiefel(U, Delta):
-    A = U.mH @ Delta
-    Y = Delta - U @ A
-    Q, R = qr_pos(Y)
-    W = torch.cat((torch.cat((A, -R.mH), -1), torch.cat((R, torch.zeros_like(A)), -1)), -2)
-    M = torch.linalg.matrix_exp(W)
-    p = A.shape[-2]
-    return U @ M[..., :p, :p] + Q @ M[..., p:, :p]
+def exp_stiefel(u, delta):
+    p = u.shape[-1]
+
+    a = u.mH @ delta
+    q, r = qr_pos(delta - u @ a)
+    w = torch.cat((
+        torch.cat((a, -r.mH), -1),
+        torch.cat((r, torch.zeros_like(a)), -1)
+    ), -2)
+    m = torch.linalg.matrix_exp(w)
+    res = u @ m[..., :p, :p] + q @ m[..., p:, :p]
+    return res
 
 
 def log_stiefel(a, b, eps=1e-8, max_iter=100, cache=None, key=None):
