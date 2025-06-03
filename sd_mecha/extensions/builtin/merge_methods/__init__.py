@@ -5,7 +5,7 @@ import torch
 from scipy.stats import binom
 from torch import Tensor
 from typing import Tuple, TypeVar, Sequence
-from .svd import orthogonal_procrustes, fractional_matrix_power, torch_svd_lowrank
+from .svd import orthogonal_procrustes, svd_lowrank
 from .ema import exchange_ema
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.streaming import StateDictKeyError
@@ -380,10 +380,13 @@ def create_filter(shape: Tuple[int, ...] | torch.Size, alpha: float, tilt: float
 
 @merge_method
 def rotate(
-    a_dict: Parameter(StateDict[Tensor]),
-    b_dict: Parameter(StateDict[Tensor]),
+    a: Parameter(StateDict[Tensor]),
+    b: Parameter(StateDict[Tensor]),
     alignment: Parameter(float) = 1.0,
     alpha: Parameter(Tensor) = 0.0,
+    centralization: Parameter(float) = 1.0,
+    stiefel_eps: Parameter(float) = 1e-8,
+    stiefel_max_iters: Parameter(int) = 100,
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
@@ -391,14 +394,14 @@ def rotate(
     if alpha.numel() == 1:
         alpha_float = alpha.item()
         if math.isclose(alignment, 0.0) and math.isclose(alpha_float, 0.0):
-            return a_dict[key]
+            return a[key]
         if math.isclose(alignment, 1.0) and math.isclose(alpha_float, 1.0):
-            return b_dict[key]
+            return b[key]
 
-    a = a_dict[key]
-    b = b_dict[key]
+    a = a[key]
+    b = b[key]
     if len(a.shape) <= 1 or torch.allclose(a.half(), b.half()):
-        return (1-alpha)*a + alpha*b
+        return torch.lerp(a, b, alpha)
 
     is_conv = len(a.shape) == 4 and a.shape[-2:].numel() != 1
     if is_conv:
@@ -408,8 +411,8 @@ def rotate(
 
     a_neurons = a.reshape(*shape_2d)
     b_neurons = b.reshape(*shape_2d)
-    a_centroid = a_neurons.mean(0)
-    b_centroid = b_neurons.mean(0)
+    a_centroid = a_neurons.mean(0) * centralization
+    b_centroid = b_neurons.mean(0) * centralization
     a_neurons -= a_centroid
     b_neurons -= b_centroid
 
@@ -420,31 +423,19 @@ def rotate(
             cache[key] = {}
         cache = cache[key]
 
-    alignment_is_float = math.isclose(alignment, round(alignment))
+    alignment_is_float = not math.isclose(alignment, round(alignment))
 
-    if cache is not None and "rotation" in cache:
-        rotation = transform = cache["rotation"].to(a.device, a.dtype)
+    if cache is not None and "transform" in cache:
+        transform = cache["transform"].to(device=a.device, dtype=a.dtype)
     else:
-        rotation = transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
+        transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
         if cache is not None:
-            cache["rotation"] = rotation.to("cpu", torch.float16)
+            cache["transform"] = transform.to(device="cpu", dtype=torch.bfloat16)
 
-    if alignment_is_float:
-        transform = fractional_matrix_power(transform, alignment, cache)
-    elif math.isclose(alignment, 0):
-        transform = torch.eye(
-            len(transform),
-            dtype=transform.dtype,
-            device=transform.device,
-        )
-    elif not math.isclose(alignment, 1):
-        transform = torch.linalg.matrix_power(transform, round(alignment))
+    if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
+        a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
 
-    if not torch.allclose(alpha, torch.zeros_like(alpha)):
-        # interpolate the relationship between the neurons
-        a_neurons = (1-alpha)*a_neurons + alpha*b_neurons@rotation.T
-
-    a_neurons @= transform
+    a_neurons = transform(a_neurons, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
     a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
     return a_neurons.reshape_as(a)
 
@@ -805,8 +796,8 @@ def truncate_rank(
         return torch.zeros_like(a)
 
     svd_driver = "gesvda" if a.is_cuda else None
-    u, s, vt = torch_svd_lowrank(a_2d, q=target_rank, full_matrices=False, driver=svd_driver)
-    return (u @ torch.diag(s) @ vt).reshape(original_shape)
+    u, s, vh = svd_lowrank(a_2d, rank=target_rank, driver=svd_driver)
+    return (u * s.unsqueeze(-2) @ vh).reshape(original_shape)
 
 
 @merge_method
