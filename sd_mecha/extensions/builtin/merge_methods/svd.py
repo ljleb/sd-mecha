@@ -72,10 +72,10 @@ def fractional_orthogonal_matrix_power(q, t, cache=None, key=None):
     elif math.isclose(t, round(t)):
         return torch.linalg.matrix_power(q, round(t))
     else:
-        return normal_matrix_power(q, t, cache, key)
+        return orthogonal_matrix_power(q, t, cache, key)
 
 
-def normal_matrix_power(q, power, cache=None, key=None):
+def orthogonal_matrix_power(q, power, cache=None, key=None):
     if cache is not None and "eig_v" in cache:
         eig_v = torch.view_as_complex(cache["eig_v"].to(device=q.device, dtype=q.dtype))
         eig_vs = torch.view_as_complex(cache["eig_vs"].to(device=q.device, dtype=q.dtype))
