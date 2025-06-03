@@ -73,6 +73,7 @@ def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
     rank_ratio: Parameter(float) = 0.5,
     approximate_basis_iters: Parameter(int) = 2,
+    approximate_basis_seed: Parameter(int) = None,
     **kwargs,
 ) -> Return(Tensor, merge_space="delta"):
     if a.dim() < 2:
@@ -100,7 +101,7 @@ def truncate_rank(
         vh = cache["vh"][..., :target_rank, :].to(a)
     else:
         svd_driver = "gesvda" if a.is_cuda else None
-        u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=approximate_basis_iters, driver=svd_driver)
+        u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=approximate_basis_iters, seed=approximate_basis_seed, driver=svd_driver)
         if cache is not None:
             cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
             cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
@@ -199,13 +200,13 @@ def orthogonal_matrix_power(q, power, cache=None, key=None):
 
 # src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L150
 # license applies, see /LICENSE-pytorch.txt
-def svd_lowrank(a: Tensor, rank: int, iters: int = 0, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
+def svd_lowrank(a: Tensor, rank: int, iters: int = 0, seed: int = None, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
     m, n = a.shape[-2:]
 
     if m < n:
         a = a.mH
 
-    q = get_approximate_basis(a, rank, iters=iters)
+    q = get_approximate_basis(a, rank, iters=iters, seed=seed)
     b = q.mH @ a
     u, s, vh = torch.linalg.svd(b, full_matrices=False, driver=driver)
     u = q @ u
@@ -218,8 +219,13 @@ def svd_lowrank(a: Tensor, rank: int, iters: int = 0, driver: Optional[str] = No
 
 # src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L12
 # license applies, see /LICENSE-pytorch.txt
-def get_approximate_basis(a: Tensor, rank: int, iters: int = 0) -> Tensor:
-    r = torch.randn(a.shape[-1], rank, dtype=a.dtype, device=a.device)
+def get_approximate_basis(a: Tensor, rank: int, iters: int = 0, seed: int = None) -> Tensor:
+    generator = None
+    if seed is not None:
+        generator = torch.Generator(a.device)
+        generator.manual_seed(seed)
+
+    r = torch.randn(a.shape[-1], rank, dtype=a.dtype, device=a.device, generator=generator)
     q = torch.linalg.householder_product(*torch.geqrf(a @ r))
     for i in range(iters):
         q = torch.linalg.householder_product(*torch.geqrf(a.mH @ q))
