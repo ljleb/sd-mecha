@@ -72,7 +72,7 @@ def rotate(
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
     rank_ratio: Parameter(float) = 0.5,
-    use_approximate_basis: Parameter(bool) = False,
+    use_approximate_basis: Parameter(bool) = True,
     approximate_basis_iters: Parameter(int) = 2,
     approximate_basis_seed: Parameter(int) = None,
     **kwargs,
