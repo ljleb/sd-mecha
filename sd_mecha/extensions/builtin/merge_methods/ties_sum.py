@@ -55,7 +55,7 @@ def find_della_dropout(delta: Tensor, probability: Tensor, della_eps: float, gen
         rank_per_element = torch.from_numpy(rankdata(delta.abs().numpy(force=True), method="ordinal").reshape(delta.shape)).to(device=delta.device)
         ne = delta.numel()
         # center window
-        delta_i = (rank_per_element / ne - ((ne + 1) / (ne * 2))) * -della_eps
+        delta_i = (rank_per_element / ne - ((ne + 1) / (ne * 2))) * della_eps
     else:
         delta_i = 0.0
 
