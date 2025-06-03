@@ -79,11 +79,11 @@ def ties_sum_extended(
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
     if apply_median:
+        filtered_delta = geometric_median.__wrapped__(*filtered_delta, eps=eps, maxiter=maxiter, ftol=ftol)
+    else:
         t = 1.0 if apply_stock else get_model_stock_t(filtered_delta, cos_eps=cos_eps)
         filtered_delta = filtered_delta.sum(dim=0)
         filtered_delta *= t / param_counts
-    else:
-        filtered_delta = geometric_median.__wrapped__(*filtered_delta, eps=eps, maxiter=maxiter, ftol=ftol)
 
     return torch.nan_to_num(filtered_delta)
 

@@ -65,7 +65,7 @@ def test_della():
         maxiter=maxiter,
         ftol=ftol,
     )
-    # assert torch.allclose(test_no_della, expected, atol=0.0001)
+    assert torch.allclose(test_no_della, expected, atol=0.0001)
 
     actual_della = sd_mecha.ties_sum_with_dropout.__wrapped__(
         *models,
@@ -82,7 +82,7 @@ def test_della():
         maxiter=maxiter,
         ftol=ftol,
     )
-    # assert torch.allclose(actual_della, expected2, atol=0.0001)
+    assert torch.allclose(actual_della, expected2, atol=0.0001)
 
     actual_della_flipped = sd_mecha.ties_sum_with_dropout.__wrapped__(
         *models,
@@ -99,5 +99,4 @@ def test_della():
         maxiter=maxiter,
         ftol=ftol,
     )
-    # assert torch.allclose(actual_della_flipped, expected, atol=0.0001)
-    pass
+    assert torch.allclose(actual_della_flipped, expected, atol=0.0001)
