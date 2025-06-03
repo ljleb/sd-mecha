@@ -426,11 +426,11 @@ def rotate(
     alignment_is_float = not math.isclose(alignment, round(alignment))
 
     if cache is not None and "transform" in cache:
-        transform = cache["transform"].to(a.device, a.dtype)
+        transform = cache["transform"].to(device=a.device, dtype=a.dtype)
     else:
         transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
         if cache is not None:
-            cache["transform"] = transform.to("cpu", torch.bfloat16)
+            cache["transform"] = transform.to(device="cpu", dtype=torch.bfloat16)
 
     if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
         a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
