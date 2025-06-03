@@ -118,8 +118,8 @@ def truncate_rank(
                 cache["iters"] = approximate_basis_iters
                 cache["seed"] = approximate_basis_seed
             else:
-                cache.pop("iters")
-                cache.pop("seed")
+                cache.pop("iters", None)
+                cache.pop("seed", None)
 
     return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
 
