@@ -94,7 +94,7 @@ def truncate_rank(
         return torch.zeros_like(a)
 
     original_shape = a.shape
-    if "s" in cache and cache["s"].numel() < target_rank:
+    if "s" in cache and cache["s"].numel() >= target_rank and cache["iters"] == approximate_basis_iters:
         u, s, vh = cache["u"][:, :target_rank].to(a), cache["s"][:target_rank].to(a), cache["vh"][:target_rank].to(a)
     else:
         svd_driver = "gesvda" if a.is_cuda else None
@@ -103,6 +103,7 @@ def truncate_rank(
             cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
             cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
             cache["vh"] = vh.to(device="cpu", dtype=torch.bfloat16)
+            cache["iters"] = approximate_basis_iters
 
     return (u * s.unsqueeze(-2) @ vh).reshape(original_shape)
 
