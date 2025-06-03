@@ -95,7 +95,7 @@ def truncate_rank(
 
     original_shape = a.shape
     if "s" in cache and cache["s"].numel() >= target_rank and cache["iters"] == approximate_basis_iters:
-        u, s, vh = cache["u"][:, :target_rank].to(a), cache["s"][:target_rank].to(a), cache["vh"][:target_rank].to(a)
+        u, s, vh = cache["u"][..., :target_rank].to(a), cache["s"][..., :target_rank].to(a), cache["vh"][..., :target_rank, :].to(a)
     else:
         svd_driver = "gesvda" if a.is_cuda else None
         u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=approximate_basis_iters, driver=svd_driver)
