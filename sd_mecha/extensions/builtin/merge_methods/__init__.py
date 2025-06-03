@@ -797,7 +797,7 @@ def truncate_rank(
 
     svd_driver = "gesvda" if a.is_cuda else None
     u, s, vh = svd_lowrank(a_2d, rank=target_rank, driver=svd_driver)
-    return (u @ torch.diag(s) @ vh).reshape(original_shape)
+    return ((u * s.unsqueeze(-2)) @ vh).reshape(original_shape)
 
 
 @merge_method
