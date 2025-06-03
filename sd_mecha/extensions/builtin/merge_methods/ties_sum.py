@@ -13,7 +13,7 @@ def ties_sum_with_dropout(
     probability: Parameter(Tensor) = 0.9,
     della_eps: Parameter(float) = 0.0,
     rescale: Parameter(bool) = True,
-    k: Parameter(float) = 1.0,
+    k: Parameter(float) = 0.2,
     vote_sgn: Parameter(bool) = False,
     apply_stock: Parameter(bool) = False,
     cos_eps: Parameter(float) = 1e-6,
