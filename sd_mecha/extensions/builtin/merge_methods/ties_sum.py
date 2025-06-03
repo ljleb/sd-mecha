@@ -52,7 +52,7 @@ def ties_sum_with_dropout(
 
 def find_della_dropout(delta: Tensor, probability: Tensor, della_eps: float, generator: torch.Generator):
     if not math.isclose(della_eps, 0.0):
-        rank_per_element = torch.from_numpy(rankdata(delta.abs(), method="ordinal").reshape(delta.shape)).to(device=delta.device)
+        rank_per_element = torch.from_numpy(rankdata(delta.abs().numpy(force=True), method="ordinal").reshape(delta.shape)).to(device=delta.device)
         ne = delta.numel()
         # center window
         delta_i = (rank_per_element / ne - ((ne + 1) / (ne * 2))) * -della_eps
@@ -83,7 +83,7 @@ def ties_sum_extended(
     else:
         t = 1.0 if apply_stock else get_model_stock_t(filtered_delta, cos_eps=cos_eps)
         filtered_delta = filtered_delta.sum(dim=0)
-        filtered_delta *= t / param_counts
+        filtered_delta = filtered_delta * t / param_counts
 
     return torch.nan_to_num(filtered_delta)
 
