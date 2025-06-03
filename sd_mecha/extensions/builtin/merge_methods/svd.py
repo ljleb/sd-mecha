@@ -1,3 +1,4 @@
+import logging
 import math
 import sys
 import torch
@@ -110,8 +111,8 @@ def orthogonal_complete(a: Tensor) -> Tensor:
     return torch.cat((a, a_extension), dim=-1)
 
 
-def stiefel_interpolate(a, b, t, eps=1e-8, max_iter=100, cache=None, key=None):
-    delta = log_stiefel(a, b, eps, max_iter, cache, key)
+def stiefel_interpolate(a, b, t, eps=1e-8, max_iters=100, cache=None, key=None):
+    delta = log_stiefel(a, b, eps, max_iters, cache, key)
     res = exp_stiefel(a, t * delta)
     return res
 
@@ -130,7 +131,7 @@ def exp_stiefel(u, delta):
     return res
 
 
-def log_stiefel(a, b, eps=1e-8, max_iter=100, cache=None, key=None):
+def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
     if cache is not None and "log_stiefel" in cache:
         return cache["log_stiefel"].to(device=a.device, dtype=a.dtype)
 
@@ -138,9 +139,9 @@ def log_stiefel(a, b, eps=1e-8, max_iter=100, cache=None, key=None):
     a = a.view(-1, original_shape[-2], original_shape[-1])
     b = b.view(-1, original_shape[-2], original_shape[-1])
     batch_size, n, p = b.shape
-    assert n > p
+    assert n > p, "a and b should be tall, not square nor wide"
     k = min(n-p, p)
-    assert max_iter >= 1
+    assert max_iters >= 1, "max_iters should be at least 1"
 
     m = a.mH @ b
 
@@ -163,21 +164,21 @@ def log_stiefel(a, b, eps=1e-8, max_iter=100, cache=None, key=None):
     k_arange = torch.arange(k, device=v.device, dtype=torch.long)
     printed_error = False
     l = None
-    for i in range(max_iter):
+    for i in range(max_iters):
         l = logm(v, key)
         c = l[..., p:, p:]
         c_norm_idx = torch.linalg.matrix_norm(c).argmax()
         c_norm = torch.linalg.matrix_norm(c[c_norm_idx])
         if c_norm > 10:
-            print(f"warning: log error very high {c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
+            logging.warning(f"log_stiefel: very high c_norm={c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}")
             printed_error = True
         elif printed_error:
-            print(f"warning: log error started converging {c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
+            logging.warning(f"log_stiefel: started converging c_norm={c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}")
             printed_error = False
         if c_norm <= eps:
             break
-        elif i == max_iter - 1:
-            print(f"stiefel error: {c_norm.item()}, batch {c_norm_idx}, key: {key}", file=sys.stderr)
+        elif i == max_iters - 1:
+            logging.warning(f"log_stiefel: {c_norm.item()}, batch {c_norm_idx}, key: {key}")
 
         s = l[..., p:, :p] @ l[..., p:, :p].mH / 12
         s[..., k_arange, k_arange] -= 0.5
