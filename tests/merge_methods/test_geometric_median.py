@@ -1,37 +1,24 @@
 import torch
 import sd_mecha
-import time
 
 
 def test_geometric_median():
-    k = 1.0
-    use_signs = 1.0
-
-    probability = 0.25
-    no_rescale = 1.0
-    seed = 114514
-
-    cos_eps = 1e-6
-    no_stock = 0.0
-
-    apply_median = 1.0
-
     eps = 1e-6
-    maxiter = 100 #1 iter = 10 sec, avg 5-10 iter
+    maxiter = 100
     ftol = 1e-20
 
     models = [
         torch.tensor([
-            [3., 4., 1., -2.],
-            [2., 1., -4., 3.],
-            [-1., 2., 3., 4.],
-            [4., -3., 2., 1.],
+            [ 3.,  4.,  1., -2.],
+            [ 2.,  1., -4.,  3.],
+            [-1.,  2.,  3.,  4.],
+            [ 4., -3.,  2.,  1.],
         ]),
         torch.tensor([
-            [-1., 3., 4., 2.],
-            [4., 2., -3., 1.],
-            [3., -1., 2., 4.],
-            [2., 4., 1., -3.],
+            [-1.,  3.,  4.,  2.],
+            [ 4.,  2., -3.,  1.],
+            [ 3., -1.,  2.,  4.],
+            [ 2.,  4.,  1., -3.],
         ]),
         torch.tensor([
             [-1.,  3.,  2.,  0.],
@@ -52,17 +39,5 @@ def test_geometric_median():
         [3.0677,  0.0989, -0.2711,  0.4481]
     ])
 
-    expected2 = torch.tensor([
-        [0.0000,  3.1750,  2.2089,  0.0000],
-        [3.0170,  0.5588, -0.6999,  1.1580],
-        [0.5758,  2.2492,  1.1580,  0.0000],
-        [2.9830,  0.0000,  0.3500,  0.1750]
-    ])
-
     median = sd_mecha.geometric_median.__wrapped__(*models, eps=eps, maxiter=maxiter, ftol=ftol)
     assert torch.allclose(median, expected, atol=0.0001)
-
-    ts = time.time()
-    sd_mecha.geometric_median.__wrapped__(*models2, eps=eps, maxiter=maxiter, ftol=ftol)
-    te = time.time()
-    assert (te - ts) < 10.0

@@ -50,5 +50,9 @@ def test_ties():
     actual = sd_mecha.ties_sum.__wrapped__(*models, k=k)
     assert torch.allclose(actual, expected)
 
-    actual2 = sd_mecha.ties_sum.__wrapped__(*models, k=k, vote_sgn=True)
+    actual2 = sd_mecha.ties_sum.__wrapped__(
+        *models,
+        k=k,
+        vote_sgn=True,
+    )
     assert not torch.allclose(actual, actual2)

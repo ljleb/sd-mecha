@@ -18,6 +18,7 @@ from sd_mecha.extensions.builtin.merge_methods import (
     add_cosine_b,
     ties_sum,
     ties_sum_extended,
+    ties_sum_with_dropout,
     crossover,
     clamp,
     model_stock,

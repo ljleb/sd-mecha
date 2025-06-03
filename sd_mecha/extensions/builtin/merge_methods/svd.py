@@ -3,6 +3,107 @@ import math
 import torch
 from typing import Optional, Tuple
 from torch import Tensor
+from sd_mecha import merge_method, Parameter, StateDict, Return
+
+
+@merge_method
+def rotate(
+    a: Parameter(StateDict[Tensor]),
+    b: Parameter(StateDict[Tensor]),
+    alignment: Parameter(float) = 1.0,
+    alpha: Parameter(Tensor) = 0.0,
+    centralization: Parameter(float) = 1.0,
+    stiefel_eps: Parameter(float) = 1e-8,
+    stiefel_max_iters: Parameter(int) = 100,
+    **kwargs,
+) -> Return(Tensor):
+    key = kwargs["key"]
+
+    if alpha.numel() == 1:
+        alpha_float = alpha.item()
+        if math.isclose(alignment, 0.0) and math.isclose(alpha_float, 0.0):
+            return a[key]
+        if math.isclose(alignment, 1.0) and math.isclose(alpha_float, 1.0):
+            return b[key]
+
+    a = a[key]
+    b = b[key]
+    if len(a.shape) <= 1 or torch.allclose(a.half(), b.half()):
+        return torch.lerp(a, b, alpha)
+
+    is_conv = len(a.shape) == 4 and a.shape[-2:].numel() != 1
+    if is_conv:
+        shape_2d = a.shape[:2].numel(), a.shape[2:].numel()
+    else:
+        shape_2d = a.shape[:1].numel(), a.shape[1:].numel()
+
+    a_neurons = a.reshape(*shape_2d)
+    b_neurons = b.reshape(*shape_2d)
+    a_centroid = a_neurons.mean(0) * centralization
+    b_centroid = b_neurons.mean(0) * centralization
+    a_neurons -= a_centroid
+    b_neurons -= b_centroid
+
+    cache = kwargs.get("cache")
+    if cache is not None:
+        key = kwargs["key"]
+        if key not in cache:
+            cache[key] = {}
+        cache = cache[key]
+
+    alignment_is_float = not math.isclose(alignment, round(alignment))
+
+    if cache is not None and "transform" in cache:
+        transform = cache["transform"].to(device=a.device, dtype=a.dtype)
+    else:
+        transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
+        if cache is not None:
+            cache["transform"] = transform.to(device="cpu", dtype=torch.bfloat16)
+
+    if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
+        a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
+
+    a_neurons = transform(a_neurons, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
+    a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
+    return a_neurons.reshape_as(a)
+
+
+@merge_method
+def truncate_rank(
+    a: Parameter(Tensor, merge_space="delta"),
+    rank_ratio: Parameter(float) = 0.5,
+    **kwargs,
+) -> Return(Tensor, merge_space="delta"):
+    if a.dim() < 2:
+        return a
+
+    cache = kwargs.get("cache")
+    if cache is not None:
+        key = kwargs["key"]
+        if key not in cache:
+            cache[key] = {}
+        cache = cache[key]
+
+    original_shape = a.shape
+    if "u" in cache:
+        u, s, vh = cache["u"].to(a), cache["s"].to(a), cache["vh"].to(a)
+    else:
+        a_2d = a.flatten(start_dim=1)
+        max_rank = min(a_2d.shape)
+        target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
+        if target_rank == max_rank:
+            return a
+        if target_rank == 0:
+            return torch.zeros_like(a)
+
+        svd_driver = "gesvda" if a.is_cuda else None
+        u, s, vh = svd_lowrank(a_2d, rank=target_rank, driver=svd_driver)
+        if cache is not None:
+            cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
+            cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
+            cache["vh"] = vh.to(device="cpu", dtype=torch.bfloat16)
+
+    return (u * s.unsqueeze(-2) @ vh).reshape(original_shape)
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
