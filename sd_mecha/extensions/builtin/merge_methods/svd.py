@@ -97,7 +97,7 @@ def truncate_rank(
         u, s, vh = cache["u"][:, :target_rank].to(a), cache["s"][:target_rank].to(a), cache["vh"][:target_rank].to(a)
     else:
         svd_driver = "gesvda" if a.is_cuda else None
-        u, s, vh = svd_lowrank(a_2d, rank=target_rank, driver=svd_driver)
+        u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=2, driver=svd_driver)
         if cache is not None:
             cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
             cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
@@ -195,7 +195,7 @@ def orthogonal_matrix_power(q, power, cache=None, key=None):
 
 # src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L150
 # license applies, see /pytorch.LICENSE
-def svd_lowrank(a: Tensor, rank: int, iters: int = 2, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
+def svd_lowrank(a: Tensor, rank: int, iters: int = 0, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
     m, n = a.shape[-2:]
 
     if m < n:
