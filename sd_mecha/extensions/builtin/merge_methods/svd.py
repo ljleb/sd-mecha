@@ -72,6 +72,7 @@ def rotate(
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
     rank_ratio: Parameter(float) = 0.5,
+    approximate_basis_iters: Parameter(int) = 2,
     **kwargs,
 ) -> Return(Tensor, merge_space="delta"):
     if a.dim() < 2:
@@ -97,7 +98,7 @@ def truncate_rank(
         u, s, vh = cache["u"][:, :target_rank].to(a), cache["s"][:target_rank].to(a), cache["vh"][:target_rank].to(a)
     else:
         svd_driver = "gesvda" if a.is_cuda else None
-        u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=2, driver=svd_driver)
+        u, s, vh = svd_lowrank(a_2d, rank=target_rank, iters=approximate_basis_iters, driver=svd_driver)
         if cache is not None:
             cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
             cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
