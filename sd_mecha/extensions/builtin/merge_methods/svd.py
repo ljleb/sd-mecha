@@ -193,12 +193,34 @@ def orthogonal_matrix_power(q, power, cache=None, key=None):
     return result.to(dtype=q.dtype)
 
 
-def svd_lowrank(a: Tensor, rank: int, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
-    q = torch.linalg.householder_product(*torch.geqrf(a.mH[..., :rank])).mH
-    b_t = a @ q.mH
-    u, s, vh = torch.linalg.svd(b_t, driver=driver, full_matrices=False)
-    vh @= q
+# src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L150
+# license applies, see /pytorch.LICENSE
+def svd_lowrank(a: Tensor, rank: int, iters: int = 2, driver: Optional[str] = None) -> Tuple[Tensor, Tensor, Tensor]:
+    m, n = a.shape[-2:]
+
+    if m < n:
+        a = a.mH
+
+    q = get_approximate_basis(a, rank, iters=iters)
+    b = q.mH @ a
+    u, s, vh = torch.linalg.svd(b, full_matrices=False, driver=driver)
+    u = q @ u
+
+    if m < n:
+        u, vh = vh.mH, u.mH
+
     return u, s, vh
+
+
+# src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L12
+# license applies, see /pytorch.LICENSE
+def get_approximate_basis(a: Tensor, rank: int, iters: int = 0) -> Tensor:
+    r = torch.randn(a.shape[-1], rank, dtype=a.dtype, device=a.device)
+    q = torch.linalg.householder_product(*torch.geqrf(a @ r))
+    for i in range(iters):
+        q = torch.linalg.householder_product(*torch.geqrf(a.mH @ q))
+        q = torch.linalg.householder_product(*torch.geqrf(a @ q))
+    return q
 
 
 def orthogonal_complete(a: Tensor) -> Tensor:
