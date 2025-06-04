@@ -17,6 +17,20 @@ def rotate(
     stiefel_max_iters: Parameter(int) = 100,
     **kwargs,
 ) -> Return(Tensor):
+    """
+    Align model A with model B by an orthogonal transform.
+
+    Useful properties: alignment=alpha=0 returns model A, whereas alignment=alpha=1 returns model B.
+
+    :param a: model A
+    :param b: model B
+    :param alignment: decides how much to align a to b by an orthogonal matrix. fractional values between 0 and 1 allow to rotate model A towards model B partially. An alignment of 1 means to minimize the distance between the two by rotation alone (no scaling allowed)
+    :param alpha: interpolates the scaling component of model A with model B's. This interpolates the part of model A that is not affected by the orthogonal martix
+    :param centralization: how much to center the rows of model A and model B before applying the alignment. centering the rows allows to align model A to model B a lot more closely
+    :param stiefel_eps: acceptable error for wide matrices with fractional alignment
+    :param stiefel_max_iters: maximum number of iterations for wide matrices with fractional alignment
+    :return: model A rotated towards B by an orthogonal transform Q^alignment, after centralizing model A.
+    """
     key = kwargs["key"]
 
     if alpha.numel() == 1:
@@ -37,19 +51,26 @@ def rotate(
     else:
         shape_2d = a.shape[:1].numel(), a.shape[1:].numel()
 
-    a_neurons = a.reshape(*shape_2d)
-    b_neurons = b.reshape(*shape_2d)
-    a_centroid = a_neurons.mean(0) * centralization
-    b_centroid = b_neurons.mean(0) * centralization
-    a_neurons -= a_centroid
-    b_neurons -= b_centroid
-
     cache = kwargs.get("cache")
     if cache is not None:
         key = kwargs["key"]
         if key not in cache:
             cache[key] = {}
         cache = cache[key]
+
+    if cache is not None:
+        # if centralization is different from the cached value, invalidate cache
+        if not math.isclose(cache.get("centralization", centralization), centralization):
+            cache.clear()
+        else:
+            cache["centralization"] = centralization
+
+    a_neurons = a.reshape(*shape_2d)
+    b_neurons = b.reshape(*shape_2d)
+    a_centroid = a_neurons.mean(0) * centralization
+    b_centroid = b_neurons.mean(0) * centralization
+    a_neurons -= a_centroid
+    b_neurons -= b_centroid
 
     alignment_is_float = not math.isclose(alignment, round(alignment))
 
@@ -263,13 +284,18 @@ def stiefel_interpolate(a, b, t, eps=1e-8, max_iters=100, cache=None, key=None):
 
 
 def exp_stiefel(u, delta):
-    p = u.shape[-1]
+    n, p = u.shape[-2:]
+
+    assert n > p, "u should be tall, not square nor wide"
+    k = min(n-p, p)
 
     a = u.mH @ delta
     q, r = qr_pos(delta - u @ a)
+    q = q[..., :k]
+    r = r[..., :k, :]
     w = torch.cat((
         torch.cat((a, -r.mH), -1),
-        torch.cat((r, torch.zeros_like(a)), -1)
+        torch.cat((r, torch.zeros_like(a[..., :k, :k])), -1)
     ), -2)
     m = torch.linalg.matrix_exp(w)
     res = u @ m[..., :p, :p] + q @ m[..., p:, :p]
@@ -277,7 +303,15 @@ def exp_stiefel(u, delta):
 
 
 def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
-    if cache is not None and "log_stiefel" in cache:
+    if (
+        cache is not None and "log_stiefel" in cache and
+        math.isclose(math.log10(cache.get("log_stiefel_eps", eps)), math.log10(eps)) and (
+            cache["log_stiefel_converged"] and cache["log_stiefel_iters"] < max_iters or
+
+            # possible optimization: start from current cache["log_stiefel"] when max_iters > cache["log_stiefel_iters"]
+            not cache["log_stiefel_converged"] and cache["log_stiefel_iters"] == max_iters
+        )
+    ):
         return cache["log_stiefel"].to(device=a.device, dtype=a.dtype)
 
     original_shape = a.shape
@@ -309,6 +343,7 @@ def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
     k_arange = torch.arange(k, device=v.device, dtype=torch.long)
     printed_error = False
     l = None
+    converged = False
     for i in range(max_iters):
         l = logm(v, key)
         c = l[..., p:, p:]
@@ -321,6 +356,7 @@ def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
             logging.warning(f"log_stiefel: started converging c_norm={c_norm.item():0.3f} at iteration {i}, batch {c_norm_idx}, key: {key}")
             printed_error = False
         if c_norm <= eps:
+            converged = True
             break
         elif i == max_iters - 1:
             logging.warning(f"log_stiefel: {c_norm.item()}, batch {c_norm_idx}, key: {key}")
@@ -335,6 +371,9 @@ def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
 
     if cache is not None:
         cache["log_stiefel"] = res.to(device="cpu", dtype=torch.bfloat16)
+        cache["log_stiefel_eps"] = eps
+        cache["log_stiefel_iters"] = i + 1
+        cache["log_stiefel_converged"] = converged
 
     return res
 

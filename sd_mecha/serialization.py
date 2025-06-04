@@ -210,7 +210,7 @@ class SerializerVisitor(RecipeVisitor):
         if isinstance(value, dict):
             dict_line = "dict " + " ".join(f"{k}={self.__serialize_value(v)}" for k, v in value.items())
             return self.__add_instruction(dict_line)
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
             return str(value)
         # int or float needs to be handled before this (1.0 == True)
         if isinstance(value, Hashable) and value in REVERSE_CONSTANTS:
