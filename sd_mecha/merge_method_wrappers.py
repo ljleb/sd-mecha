@@ -10,6 +10,7 @@ from sd_mecha.extensions.builtin.merge_methods import (
     ties_sum_extended,
     clamp,
     model_stock,
+    isotropic,
 )
 
 
@@ -163,6 +164,37 @@ def add_difference_ties_extended(
     )
 
 
+# https://arxiv.org/abs/2502.04959
+def add_difference_isotropic(
+    base: RecipeNodeOrValue,
+    *models: RecipeNodeOrValue,
+    alpha: Parameter(Tensor) = 1.0,
+) -> recipe_nodes.RecipeNode:
+    # $$ \theta_{t=1}^T $$
+    base = value_to_node(base)
+    models = tuple(value_to_node(model) for model in models)
+
+    # Create task vectors.
+    # $$ \Delta_t $$
+    models = tuple(
+        subtract(model, base)
+        if model.merge_space == "weight" else
+        model
+        for model in models
+    )
+
+    res, _ = isotropic(
+        *models,
+    )
+
+    # Obtain merged checkpoint
+
+    # $$ \theta_{0}^{(l)} + \alpha * \Delta_{Iso_C}^{(l)} $$
+    return add_difference(
+        base, res,
+        alpha=alpha,
+    )
+
 def copy_region(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     width: Parameter(float) = 1.0,
@@ -271,6 +303,7 @@ def ties_with_dare(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
     probability: Parameter(float) = 0.9,
+    della_eps: Parameter(float) = 0.0,
     rescale: Parameter(bool) = True,
     alpha: Parameter(Tensor) = 1.0,
     seed: Parameter(int) = None,
@@ -279,6 +312,7 @@ def ties_with_dare(
     apply_stock: Parameter(bool) = False,
     cos_eps: Parameter(float) = 1e-6,
     apply_median: Parameter(bool) = False,
+    apply_isotropic: Parameter(bool) = False,
     eps: Parameter(float) = 1e-6,
     maxiter: Parameter(int) = 100,
     ftol: Parameter(float) = 1e-20,
@@ -293,10 +327,18 @@ def ties_with_dare(
         for model in models
     )
 
+    S_bar = None
+
+    if apply_isotropic:
+        # This stage will stress a lot.
+        _, S_tmp = isotropic(*deltas)
+        S_bar = S_tmp
+
     # $$ \tilde{\delta}^{t_k} $$
     res = ties_sum_with_dropout(
         *deltas,
         probability=probability,
+        della_eps=della_eps,
         rescale=rescale,
         k=k,
         vote_sgn=vote_sgn,
@@ -308,6 +350,15 @@ def ties_with_dare(
         maxiter=maxiter,
         ftol=ftol,
     )
+
+    if S_bar:
+        d_ta = torch.clone(res)
+
+        # S_ta will be different from S_bar
+        U_ta, _, Vh_ta = torch.linalg.svd(d_ta)
+
+        # Rearranged for notation $$ \sigma U V^T $$
+        res = S_bar * U_ta @ Vh_ta
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return merge_methods.add_difference(base, res, alpha=alpha)

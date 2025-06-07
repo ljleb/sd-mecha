@@ -144,6 +144,28 @@ def truncate_rank(
 
     return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
 
+@merge_method
+def isotropic(
+    *models: Parameter(Tensor),
+) -> Return(Tensor):
+    # Focus on Iso-C until I have idea to write Iso-CTS
+    # Default full rank SVD. Don't know how to expand to the rank yet
+    
+    # Fun fact: torch.mean will yield exact same result
+    d_ta = torch.sum(torch.stack(models), 0, keepdim=True)
+
+    # S_ta will be different from S_bar
+    U_ta, _, Vh_ta = torch.linalg.svd(d_ta)
+
+    # One line haha
+    S_bar = torch.mean(torch.stack([S for _, S, _ in[torch.linalg.svd(m) for m in models]]), 0, keepdim=True)
+    
+    # Rearranged for notation $$ \sigma U V^T $$
+    d_Iso_c = S_bar * U_ta @ Vh_ta
+
+    # Return S_bar for intermediate use (e.g. integrating with other algos)
+    return d_Iso_c, S_bar
+
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     n, p = a.shape[-2:]
