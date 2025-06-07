@@ -26,7 +26,7 @@ from .logistics import (
     cast_dtype_map_reversed,
 )
 from .slicing import tensor_sum, top_k_tensor_sum
-from .svd import rotate, truncate_rank, isotropic
+from .svd import rotate, truncate_rank, isotropic, isotropic_overrided
 from .ties_sum import (
     ties_sum_with_dropout,
     ties_sum,

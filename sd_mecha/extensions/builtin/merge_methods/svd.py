@@ -146,25 +146,65 @@ def truncate_rank(
 
 @merge_method
 def isotropic(
-    *models: Parameter(Tensor),
-) -> Return(Tensor):
+    *deltas: Parameter(Tensor, "delta"),
+    return_sbar: Parameter(bool) = False,
+) -> Return(Tensor, "delta"):
     # Focus on Iso-C until I have idea to write Iso-CTS
     # Default full rank SVD. Don't know how to expand to the rank yet
     
+    #Parameter checking by ljleb
+    if not deltas:
+        return deltas
+    original_shape = deltas[0].shape
+    if len(original_shape) < 2:
+        d_fallback = sum(deltas) / len(deltas)
+        sbar_fallback = 1.0
+        return sbar_fallback if return_sbar else d_fallback.reshape(original_shape)
+
     # Fun fact: torch.mean will yield exact same result
-    d_ta = torch.sum(torch.stack(models), 0, keepdim=True)
+    #d_ta = torch.sum(torch.stack(deltas), 0, keepdim=True)
+    # Workaround due to Tensor.shape issue
+    d_ta = sum(deltas).flatten(start_dim=1)
 
     # S_ta will be different from S_bar
-    U_ta, _, Vh_ta = torch.linalg.svd(d_ta)
+    U_ta, S_ta, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
 
     # One line haha
-    S_bar = torch.mean(torch.stack([S for _, S, _ in[torch.linalg.svd(m) for m in models]]), 0, keepdim=True)
-    
+    #S_bar = torch.mean(torch.stack([S for _, S, _ in[torch.linalg.svd(d, full_matrices=False) for d in deltas]]), 0, keepdim=True)
+    S_bar = sum([S for _, S, _ in [torch.linalg.svd(d, full_matrices=False) for d in deltas]]).flatten() / len(deltas)
+
+    # Check dimension again. If fallback to S_ta, we may further reduce it into scalar.
+    S_bar = S_bar if S_bar.shape == S_ta.shape else S_ta
+
     # Rearranged for notation $$ \sigma U V^T $$
-    d_Iso_c = S_bar * U_ta @ Vh_ta
+    d_Iso_c = U_ta * S_bar @ Vh_ta
 
     # Return S_bar for intermediate use (e.g. integrating with other algos)
-    return d_Iso_c, S_bar
+    # Need reshape for d_Iso_c
+    return S_bar if return_sbar else d_Iso_c.reshape(original_shape)
+
+@merge_method
+def isotropic_overrided(
+    d_ta: Parameter(Tensor, "delta"),
+    S_bar: Parameter(Tensor, "delta"),
+) -> Return(Tensor, "delta"):
+    
+    #Parameter checking
+    original_shape = d_ta.shape
+    if len(original_shape) < 2:
+        return d_ta
+    
+    # Workaround due to Tensor.shape issue
+    d_ta = d_ta.flatten(start_dim=1)
+
+    # S_ta will be different from S_bar
+    U_ta, _, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
+
+    # Rearranged for notation $$ \sigma U V^T $$
+    d_Iso_c = U_ta * S_bar @ Vh_ta
+
+    # Need reshape for d_Iso_c
+    return d_Iso_c.reshape(original_shape)
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):

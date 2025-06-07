@@ -11,6 +11,7 @@ from sd_mecha.extensions.builtin.merge_methods import (
     clamp,
     model_stock,
     isotropic,
+    isotropic_overrided,
 )
 
 
@@ -331,8 +332,7 @@ def ties_with_dare(
 
     if apply_isotropic:
         # This stage will stress a lot.
-        _, S_tmp = isotropic(*deltas)
-        S_bar = S_tmp
+        S_bar = isotropic(*deltas, return_sbar=True)
 
     # $$ \tilde{\delta}^{t_k} $$
     res = ties_sum_with_dropout(
@@ -352,13 +352,9 @@ def ties_with_dare(
     )
 
     if S_bar:
-        d_ta = torch.clone(res)
-
-        # S_ta will be different from S_bar
-        U_ta, _, Vh_ta = torch.linalg.svd(d_ta)
-
         # Rearranged for notation $$ \sigma U V^T $$
-        res = S_bar * U_ta @ Vh_ta
+        r_tmp = isotropic_overrided(res, S_bar)
+        res = r_tmp
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return merge_methods.add_difference(base, res, alpha=alpha)
