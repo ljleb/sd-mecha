@@ -144,64 +144,72 @@ def truncate_rank(
 
     return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
 
+# https://arxiv.org/abs/2502.04959
+# Focus on Iso-C until I have idea to write Iso-CTS.
+# apply_exp: Use exponential mean instead of arithmetic mean. Proposed by ljleb.
+# apply_high_dim: Apply SVD on tensors with dim > 2. Paper apply for dim==2. SVD does not accept dim < 2.
 @merge_method
 def isotropic(
     *deltas: Parameter(Tensor, "delta"),
-    return_sbar: Parameter(bool) = False,
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
-    # Focus on Iso-C until I have idea to write Iso-CTS
-    # Default full rank SVD. Don't know how to expand to the rank yet
-    
-    #Parameter checking by ljleb
-    if not deltas:
-        return deltas
-    original_shape = deltas[0].shape
-    if len(original_shape) < 2:
-        d_fallback = sum(deltas) / len(deltas)
-        sbar_fallback = 1.0
-        return sbar_fallback if return_sbar else d_fallback.reshape(original_shape)
 
-    # Fun fact: torch.mean will yield exact same result
-    #d_ta = torch.sum(torch.stack(deltas), 0, keepdim=True)
-    # Workaround due to Tensor.shape issue
+    original_shape = deltas[0].shape
+
+    # Paper's code also exlude text_projection, but it may be fine?
+    if ((len(original_shape) > 2) and not apply_high_dim) or (len(original_shape) < 2):
+        # Fallback: Paper code use arithmetic mean
+        return (sum(deltas) / len(deltas)).reshape(original_shape)
+
+    # Workaround for dim > 2
     d_ta = sum(deltas).flatten(start_dim=1)
 
     # S_ta will be different from S_bar
     U_ta, S_ta, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
 
-    # One line haha
-    #S_bar = torch.mean(torch.stack([S for _, S, _ in[torch.linalg.svd(d, full_matrices=False) for d in deltas]]), 0, keepdim=True)
-    S_bar = sum([S for _, S, _ in [torch.linalg.svd(d, full_matrices=False) for d in deltas]]).flatten() / len(deltas)
+    # Can it be any kind of mean?
+    S_mean = S_ta.log().mean().exp() if apply_exp else S_ta.mean()
 
-    # Check dimension again. If fallback to S_ta, we may further reduce it into scalar.
-    S_bar = S_bar if S_bar.shape == S_ta.shape else S_ta
+    # Follow paper's implementation
+    S_bar = torch.ones_like(S_ta) * S_mean
 
-    # Rearranged for notation $$ \sigma U V^T $$
-    d_Iso_c = U_ta * S_bar @ Vh_ta
+    d_Iso_c = torch.linalg.multi_dot((U_ta, torch.diag(S_bar), Vh_ta)) 
 
-    # Return S_bar for intermediate use (e.g. integrating with other algos)
     # Need reshape for d_Iso_c
-    return S_bar if return_sbar else d_Iso_c.reshape(original_shape)
+    return d_Iso_c.reshape(original_shape)
 
+# https://arxiv.org/abs/2502.04959
+# Instead of sum of vectors, we feed the merged vector.
+# apply_exp: Use exponential mean instead of arithmetic mean. Proposed by ljleb.
+# apply_high_dim: Apply SVD on tensors with dim > 2. Paper apply for dim==2. SVD does not accept dim < 2.
 @merge_method
 def isotropic_overrided(
     d_ta: Parameter(Tensor, "delta"),
-    S_bar: Parameter(Tensor, "delta"),
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
     
     #Parameter checking
     original_shape = d_ta.shape
-    if len(original_shape) < 2:
+
+    # Paper's code also exlude text_projection, but it may be fine?
+    if ((len(original_shape) > 2) and not apply_high_dim) or (len(original_shape) < 2):
         return d_ta
     
-    # Workaround due to Tensor.shape issue
+    # Workaround for dim > 2
     d_ta = d_ta.flatten(start_dim=1)
 
     # S_ta will be different from S_bar
-    U_ta, _, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
+    U_ta, S_ta, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
 
-    # Rearranged for notation $$ \sigma U V^T $$
-    d_Iso_c = U_ta * S_bar @ Vh_ta
+    # Can it be any kind of mean?
+    S_mean = S_ta.log().mean().exp() if apply_exp else S_ta.mean()
+
+    # Follow paper's implementation
+    S_bar = torch.ones_like(S_ta) * S_mean
+
+    d_Iso_c = torch.linalg.multi_dot((U_ta, torch.diag(S_bar), Vh_ta)) 
 
     # Need reshape for d_Iso_c
     return d_Iso_c.reshape(original_shape)

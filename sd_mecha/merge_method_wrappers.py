@@ -170,6 +170,8 @@ def add_difference_isotropic(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
     alpha: Parameter(Tensor) = 1.0,
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
 ) -> recipe_nodes.RecipeNode:
     # $$ \theta_{t=1}^T $$
     base = value_to_node(base)
@@ -185,7 +187,7 @@ def add_difference_isotropic(
     )
 
     res, _ = isotropic(
-        *models,
+        *models, apply_exp=apply_exp, apply_high_dim=apply_high_dim
     )
 
     # Obtain merged checkpoint
@@ -314,6 +316,8 @@ def ties_with_dare(
     cos_eps: Parameter(float) = 1e-6,
     apply_median: Parameter(bool) = False,
     apply_isotropic: Parameter(bool) = False,
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
     eps: Parameter(float) = 1e-6,
     maxiter: Parameter(int) = 100,
     ftol: Parameter(float) = 1e-20,
@@ -327,12 +331,6 @@ def ties_with_dare(
         model
         for model in models
     )
-
-    S_bar = None
-
-    if apply_isotropic:
-        # This stage will stress a lot.
-        S_bar = isotropic(*deltas, return_sbar=True)
 
     # $$ \tilde{\delta}^{t_k} $$
     res = ties_sum_with_dropout(
@@ -351,14 +349,12 @@ def ties_with_dare(
         ftol=ftol,
     )
 
-    if S_bar:
-        # Rearranged for notation $$ \sigma U V^T $$
-        r_tmp = isotropic_overrided(res, S_bar)
-        res = r_tmp
+    if apply_isotropic:
+        # This stage will stress a lot.
+        res = isotropic_overrided(res, apply_exp=apply_exp, apply_high_dim=apply_high_dim)
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return merge_methods.add_difference(base, res, alpha=alpha)
-
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
 # https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py

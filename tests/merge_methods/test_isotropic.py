@@ -30,13 +30,17 @@ def test_isotropic():
         models2.append(torch.rand(640, 320, 3, 3))
 
     expected = torch.tensor([
-        [ 0.6583,  4.5956,  2.5195, -1.1094],
-        [ 3.1552,  1.5443, -2.4330,  2.2136],
-        [ 0.0614,  0.7001,  2.6028,  4.5609],
-        [ 4.1000,  0.1333,  0.2084, -0.3341]
+        [ 0.4487,  8.7236,  3.9089, -2.5803],
+        [ 4.0244,  4.1229, -6.7844,  4.3609],
+        [-0.0294,  0.0581,  5.3719,  8.3293],
+        [ 9.0466, -2.2665,  2.8416, -1.7849]
     ])
 
-    Iso_c = sd_mecha.isotropic.__wrapped__(*models)
+    apply_exp_1 = False
+    apply_high_dim_1 = False
+
+    Iso_c = sd_mecha.isotropic.__wrapped__(*models, apply_exp=apply_exp_1, apply_high_dim=apply_high_dim_1)
+    #print(Iso_c)
     assert torch.allclose(Iso_c, expected, atol=0.0001)
 
     #s_bar = sd_mecha.isotropic.__wrapped__(*models2, return_sbar=True)
