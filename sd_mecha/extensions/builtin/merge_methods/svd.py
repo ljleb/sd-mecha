@@ -79,7 +79,7 @@ def rotate(
     else:
         transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
         if cache is not None:
-            cache["transform"] = transform.to(device="cpu", dtype=torch.bfloat16)
+            cache["transform"] = transform.to(device="cpu", dtype=torch.float16)
 
     if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
         a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
@@ -132,9 +132,9 @@ def truncate_rank(
         else:
             u, s, vh = torch.linalg.svd(a_2d, full_matrices=False, driver=svd_driver)
         if cache is not None:
-            cache["u"] = u.to(device="cpu", dtype=torch.bfloat16)
-            cache["s"] = s.to(device="cpu", dtype=torch.bfloat16)
-            cache["vh"] = vh.to(device="cpu", dtype=torch.bfloat16)
+            cache["u"] = u.to(device="cpu", dtype=torch.float16)
+            cache["s"] = s.to(device="cpu", dtype=torch.float16)
+            cache["vh"] = vh.to(device="cpu", dtype=torch.float16)
             if use_approximate_basis:
                 cache["iters"] = approximate_basis_iters
                 cache["seed"] = approximate_basis_seed
@@ -222,8 +222,8 @@ def orthogonal_matrix_power(q, power, cache=None, key=None):
     else:
         eig_v, eig_vs = torch.linalg.eig(q)
         if cache is not None:
-            cache["eig_v"] = torch.view_as_real(eig_v).to(device="cpu", dtype=torch.bfloat16)
-            cache["eig_vs"] = torch.view_as_real(eig_vs).to(device="cpu", dtype=torch.bfloat16)
+            cache["eig_v"] = torch.view_as_real(eig_v).to(device="cpu", dtype=torch.float16)
+            cache["eig_vs"] = torch.view_as_real(eig_vs).to(device="cpu", dtype=torch.float16)
 
     eig_v_pow = eig_v**power
     result = eig_vs * eig_v_pow.unsqueeze(-2) @ eig_vs.mH
@@ -370,7 +370,7 @@ def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
     res = delta.reshape(original_shape)
 
     if cache is not None:
-        cache["log_stiefel"] = res.to(device="cpu", dtype=torch.bfloat16)
+        cache["log_stiefel"] = res.to(device="cpu", dtype=torch.float16)
         cache["log_stiefel_eps"] = eps
         cache["log_stiefel_iters"] = i + 1
         cache["log_stiefel_converged"] = converged

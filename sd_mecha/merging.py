@@ -302,8 +302,15 @@ def _track_output(fn, output, key, check_finite: bool):
     def track_output(*args, **kwargs):
         try:
             res = fn(*args, **kwargs)
-            if check_finite and isinstance(res, torch.Tensor) and not res.isfinite().all():
-                logging.warning(f"there are non finite values in key '{key}'")
+            if check_finite and isinstance(res, torch.Tensor):
+                try:
+                    all_finite = res.isfinite().all()
+                except RuntimeError:  # for example, fp8_e4m3fn doesn't support .isfinite()
+                    all_finite = res.to(dtype=torch.bfloat16).isfinite().all()
+
+                if not all_finite:
+                    logging.warning(f"there are non finite values in key '{key}'")
+
             output[key] = res
         except StateDictKeyError as k:
             logging.debug(f"skipping key {k}")
