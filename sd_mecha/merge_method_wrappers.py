@@ -227,7 +227,7 @@ def dropout(
         subtract(model, a)
         for model in models
     ]
-    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed)
+    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_emphasis=overlap_emphasis, seed=seed)
     return merge_methods.add_difference(a, ba_delta, alpha=alpha)
 
 

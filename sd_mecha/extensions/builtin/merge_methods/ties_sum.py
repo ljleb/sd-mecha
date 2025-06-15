@@ -225,7 +225,7 @@ def dropout(  # aka n-supermario
     else:
         rescalar = (1.0 - probability) ** rescale
         rescalar = rescalar if math.isfinite(rescalar) else 1
-    return final_delta / masks.sum(0).clamp(1) / rescalar
+    return final_delta / sum(tuple(masks)).clamp(1) / rescalar
 
 
 def overlapping_sets_pmf(n, p, overlap: float, overlap_emphasis):

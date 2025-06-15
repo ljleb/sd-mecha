@@ -36,7 +36,6 @@ def n_average(
 def slerp(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 0.5,
 ) -> Return(Tensor):
     a_normalized = a / a.norm()
