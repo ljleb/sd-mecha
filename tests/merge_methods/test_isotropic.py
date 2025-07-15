@@ -39,7 +39,7 @@ def test_isotropic():
     apply_exp_1 = False
     apply_high_dim_1 = False
 
-    Iso_c = sd_mecha.isotropic.__wrapped__(*models, apply_exp=apply_exp_1, apply_high_dim=apply_high_dim_1)
+    Iso_c = sd_mecha.isotropic.__wrapped__(*models, z_cof=0.0, apply_exp=apply_exp_1, apply_high_dim=apply_high_dim_1)
     #print(Iso_c)
     assert torch.allclose(Iso_c, expected, atol=0.0001)
 

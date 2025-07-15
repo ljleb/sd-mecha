@@ -146,11 +146,13 @@ def truncate_rank(
 
 # https://arxiv.org/abs/2502.04959
 # Focus on Iso-C until I have idea to write Iso-CTS.
+# z_cof: 0 = iso-c, 1 = not applied, recommended 0.8 or 2.0, by "SVD image reconstruction test"
 # apply_exp: Use exponential mean instead of arithmetic mean. Proposed by ljleb.
 # apply_high_dim: Apply SVD on tensors with dim > 2. Paper apply for dim==2. SVD does not accept dim < 2.
 @merge_method
 def isotropic(
     *deltas: Parameter(Tensor, "delta"),
+    z_cof: Parameter(float) = 0.0,
     apply_exp: Parameter(bool) = False,
     apply_high_dim: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
@@ -171,8 +173,14 @@ def isotropic(
     # Can it be any kind of mean?
     S_mean = S_ta.log().mean().exp() if apply_exp else S_ta.mean()
 
+    S_Var = S_ta.var()
+
+    Z_ta = (S_ta - S_mean) / S_Var
+
+    S_z = (Z_ta * z_cof) * S_Var + S_mean
+
     # Follow paper's implementation
-    S_bar = torch.ones_like(S_ta) * S_mean
+    S_bar = torch.ones_like(S_ta) * S_z
 
     d_Iso_c = torch.linalg.multi_dot((U_ta, torch.diag(S_bar), Vh_ta)) 
 
@@ -181,11 +189,13 @@ def isotropic(
 
 # https://arxiv.org/abs/2502.04959
 # Instead of sum of vectors, we feed the merged vector.
+# z_cof: 0 = iso-c, 1 = not applied, recommended 0.8 or 2.0, by "SVD image reconstruction test"
 # apply_exp: Use exponential mean instead of arithmetic mean. Proposed by ljleb.
 # apply_high_dim: Apply SVD on tensors with dim > 2. Paper apply for dim==2. SVD does not accept dim < 2.
 @merge_method
 def isotropic_overrided(
     d_ta: Parameter(Tensor, "delta"),
+    z_cof: Parameter(float) = 0.0,
     apply_exp: Parameter(bool) = False,
     apply_high_dim: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
@@ -206,8 +216,14 @@ def isotropic_overrided(
     # Can it be any kind of mean?
     S_mean = S_ta.log().mean().exp() if apply_exp else S_ta.mean()
 
+    S_Var = S_ta.var()
+
+    Z_ta = (S_ta - S_mean) / S_Var
+
+    S_z = (Z_ta * z_cof) * S_Var + S_mean
+
     # Follow paper's implementation
-    S_bar = torch.ones_like(S_ta) * S_mean
+    S_bar = torch.ones_like(S_ta) * S_z
 
     d_Iso_c = torch.linalg.multi_dot((U_ta, torch.diag(S_bar), Vh_ta)) 
 

@@ -165,39 +165,6 @@ def add_difference_ties_extended(
     )
 
 
-# https://arxiv.org/abs/2502.04959
-def add_difference_isotropic(
-    base: RecipeNodeOrValue,
-    *models: RecipeNodeOrValue,
-    alpha: Parameter(Tensor) = 1.0,
-    apply_exp: Parameter(bool) = False,
-    apply_high_dim: Parameter(bool) = False,
-) -> recipe_nodes.RecipeNode:
-    # $$ \theta_{t=1}^T $$
-    base = value_to_node(base)
-    models = tuple(value_to_node(model) for model in models)
-
-    # Create task vectors.
-    # $$ \Delta_t $$
-    models = tuple(
-        subtract(model, base)
-        if model.merge_space == "weight" else
-        model
-        for model in models
-    )
-
-    res, _ = isotropic(
-        *models, apply_exp=apply_exp, apply_high_dim=apply_high_dim
-    )
-
-    # Obtain merged checkpoint
-
-    # $$ \theta_{0}^{(l)} + \alpha * \Delta_{Iso_C}^{(l)} $$
-    return add_difference(
-        base, res,
-        alpha=alpha,
-    )
-
 def copy_region(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     width: Parameter(float) = 1.0,
@@ -316,6 +283,7 @@ def ties_with_dare(
     cos_eps: Parameter(float) = 1e-6,
     apply_median: Parameter(bool) = False,
     apply_isotropic: Parameter(bool) = False,
+    z_cof: Parameter(float) = 0.0,
     apply_exp: Parameter(bool) = False,
     apply_high_dim: Parameter(bool) = False,
     eps: Parameter(float) = 1e-6,
@@ -351,7 +319,7 @@ def ties_with_dare(
 
     if apply_isotropic:
         # This stage will stress a lot.
-        res = isotropic_overrided(res, apply_exp=apply_exp, apply_high_dim=apply_high_dim)
+        res = isotropic_overrided(res, z_cof=z_cof, apply_exp=apply_exp, apply_high_dim=apply_high_dim)
 
     # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
     return merge_methods.add_difference(base, res, alpha=alpha)
