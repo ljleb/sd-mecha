@@ -118,6 +118,7 @@ def truncate_rank(
 
     original_shape = a.shape
     if (
+        cache is not None and
         "s" in cache and cache["s"].numel() >= target_rank and
         cache.get("iters", approximate_basis_iters) == approximate_basis_iters and
         cache.get("seed", approximate_basis_seed) == approximate_basis_seed
