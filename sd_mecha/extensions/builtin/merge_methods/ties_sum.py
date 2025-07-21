@@ -55,12 +55,13 @@ def find_della_dropout(delta: Tensor, probability: Tensor, della_eps: float, gen
         rank_per_element = torch.from_numpy(rankdata(delta.abs().numpy(force=True), method="ordinal").reshape(delta.shape)).to(device=delta.device)
         ne = delta.numel()
         # center window
-        delta_i = (rank_per_element / ne - ((ne + 1) / (ne * 2))) * della_eps
+        delta_i = (rank_per_element/ne - (ne + 1)/(ne * 2)) * della_eps
+        delta_i = delta_i.nan_to_num(nan=0, posinf=0, neginf=0)
     else:
         delta_i = 0.0
 
     p_min = torch.ones_like(delta) - probability
-    res = torch.bernoulli(torch.clamp(p_min + delta_i, min=1e-20, max=1), generator=generator)
+    res = torch.bernoulli((p_min + delta_i).clamp(min=0, max=1), generator=generator)
     return res
 
 
@@ -224,7 +225,7 @@ def dropout(  # aka n-supermario
     else:
         rescalar = (1.0 - probability) ** rescale
         rescalar = rescalar if math.isfinite(rescalar) else 1
-    return final_delta / masks.sum(0).clamp(1) / rescalar
+    return final_delta / sum(tuple(masks)).clamp(1) / rescalar
 
 
 def overlapping_sets_pmf(n, p, overlap: float, overlap_emphasis):

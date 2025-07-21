@@ -222,8 +222,8 @@ def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
 
 
 class StructuralModelConfig(ModelConfig):
-    def __init__(self, keys: Mapping[StateDictKey, KeyMetadata]):
-        self._keys_cache = keys
+    def __init__(self, keys: Mapping[StateDictKey, TensorMetadata]):
+        self._keys_cache = {k: KeyMetadata(v.shape, v.dtype) for k, v in keys.items()}
         self._metadata_cache = None
         self._aliases_cache = None
 

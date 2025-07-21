@@ -36,7 +36,6 @@ def n_average(
 def slerp(
     a: Parameter(Tensor),
     b: Parameter(Tensor),
-    *,
     alpha: Parameter(Tensor) = 0.5,
 ) -> Return(Tensor):
     a_normalized = a / a.norm()
@@ -56,11 +55,11 @@ def slerp(
 
 @merge_method
 def add_difference(
-    a: Parameter(StateDict[Tensor], "weight"),
+    a: Parameter(StateDict[Tensor]),
     b: Parameter(StateDict[Tensor], "delta"),
     alpha: Parameter(Tensor) = 1.0,
     **kwargs,
-) -> Return(Tensor, "weight"):
+) -> Return(Tensor):
     key = kwargs["key"]
     if alpha.numel() == 1 and math.isclose(alpha.item(), 0.0):
         return a[key]

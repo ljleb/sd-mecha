@@ -73,14 +73,7 @@ def add_perpendicular(
     )
 
 
-# latex notes in reference to original implementation: https://arxiv.org/abs/2306.01708
-# - `base`: $$ \theta_{init} $$
-# - `*models`: $$ \{\theta_{init}\}_{t=1}^n $$
-# - `models` after `subtract`: $$ \tau_t $$
-# - `alpha`: $$ \lambda $$
-# - `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ )
-# - `res`: $$ \lambda * \tau_m $$
-# - `return`: $$ \theta_m $$
+# implementation of: https://arxiv.org/abs/2306.01708
 # Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 # Special mode "TIES-STOCK" has been implemented by setting `apply_stock` > 0.0
 def add_difference_ties(
@@ -89,12 +82,9 @@ def add_difference_ties(
     alpha: Parameter(Tensor) = 1.0,
     k: Parameter(float) = 1.0,
 ) -> recipe_nodes.RecipeNode:
-    # $$ \{\theta_{init}\}_{t=1}^n $$
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)
 
-    # Create task vectors.
-    # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
         if model.merge_space == "weight" else
@@ -102,15 +92,11 @@ def add_difference_ties(
         for model in models
     )
 
-    # step 1 + step 2 + step 3
     res = ties_sum(
         *models,
         k=k,
     )
 
-    # Obtain merged checkpoint
-
-    # $$ \theta_{init} + \lambda * \tau_m $$
     return add_difference(
         base, res,
         alpha=alpha,
@@ -130,12 +116,9 @@ def add_difference_ties_extended(
     maxiter: Parameter(int) = 100,
     ftol: Parameter(float) = 1e-20,
 ) -> recipe_nodes.RecipeNode:
-    # $$ \{\theta_{init}\}_{t=1}^n $$
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)
 
-    # Create task vectors.
-    # $$ \tau_t $$
     models = tuple(
         subtract(model, base)
         if model.merge_space == "weight" else
@@ -143,7 +126,6 @@ def add_difference_ties_extended(
         for model in models
     )
 
-    # step 1 + step 2 + step 3
     res = ties_sum_extended(
         *models,
         k=k,
@@ -156,9 +138,6 @@ def add_difference_ties_extended(
         ftol=ftol,
     )
 
-    # Obtain merged checkpoint
-
-    # $$ \theta_{init} + \lambda * \tau_m $$
     return add_difference(
         base, res,
         alpha=alpha,
@@ -250,30 +229,22 @@ def dropout(
         subtract(model, a)
         for model in models
     ]
-    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_skew=overlap_emphasis, seed=seed)
+    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_emphasis=overlap_emphasis, seed=seed)
     return merge_methods.add_difference(a, ba_delta, alpha=alpha)
 
 
 ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
 
 
-# latex notes in reference to original implementation: https://arxiv.org/abs/2311.03099
+# implementation of: https://arxiv.org/abs/2311.03099
 # Notice that this is "TIES Merging w/ DARE", which is "Prune > Merge (TIES) > Rescale"
 # See https://slgero.medium.com/merge-large-language-models-29897aeb1d1a for details
-# - `base`: $$ \theta_{PRE} $$
-# - `*models`: $$ \theta_{SFT}^{t_k} $$
-# - `deltas`: $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
-# - `probability`: $$ p $$
-# - `res`: $$ \hat{\delta}^t = \tilde{\delta}^t / (1-p) $$
-# - `alpha`: $$ \lambda $$
-# - `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ ) in TIES paper
-# - `return`: $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
-# Special mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
+# mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
 def ties_with_dare(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
-    probability: Parameter(float) = 0.9,
     della_eps: Parameter(float) = 0.0,
+    probability: Parameter(float) = 0.9,
     rescale: Parameter(bool) = True,
     alpha: Parameter(Tensor) = 1.0,
     seed: Parameter(int) = None,
@@ -290,7 +261,6 @@ def ties_with_dare(
     maxiter: Parameter(int) = 100,
     ftol: Parameter(float) = 1e-20,
 ) -> recipe_nodes.RecipeNode:
-    # $$ \delta^t = \theta_{SFT}^{t} - \theta_{PRE} \in \mathbb{R}^d $$
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)
     deltas = tuple(
@@ -300,9 +270,9 @@ def ties_with_dare(
         for model in models
     )
 
-    # $$ \tilde{\delta}^{t_k} $$
     res = ties_sum_with_dropout(
         *deltas,
+        della_eps=della_eps,
         probability=probability,
         della_eps=della_eps,
         rescale=rescale,
@@ -340,9 +310,6 @@ def n_model_stock(
         for model in models
     )
 
-    # This is hacky: Both w_avg and w_h will be calculated there.
-    # Notice that t and cos_theta is vector instead of single value.
-    # Conceptually it could compatable with TIES, but algorithm should be rewritten.
     res = model_stock(
         *deltas,
         cos_eps=cos_eps,

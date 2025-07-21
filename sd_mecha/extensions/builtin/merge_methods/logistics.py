@@ -108,3 +108,10 @@ def omit_component(
         raise StateDictKeyError(key)
     else:
         return a[key]
+
+
+@merge_method
+def stack(
+    *values: Parameter(Tensor),
+) -> Return(Tensor):
+    return torch.stack(values)
