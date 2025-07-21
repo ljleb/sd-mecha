@@ -274,7 +274,6 @@ def ties_with_dare(
         *deltas,
         della_eps=della_eps,
         probability=probability,
-        della_eps=della_eps,
         rescale=rescale,
         k=k,
         vote_sgn=vote_sgn,
