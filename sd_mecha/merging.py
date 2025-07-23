@@ -310,6 +310,7 @@ def _track_output(fn, output, key, check_finite: bool):
 
                 if not all_finite:
                     logging.warning(f"there are non finite values in key '{key}'")
+                    res = torch.nan_to_num(res)
 
             output[key] = res
         except StateDictKeyError as k:
