@@ -80,11 +80,14 @@ def compose_lora(state_dict: StateDictKeyHelper, target_shape: torch.Size):
 
 
 def compose_lokr(state_dict: StateDictKeyHelper, target_shape: torch.Size):
+    lora_dim = 1.0
+
     w1 = state_dict.get_tensor("lokr_w1", raise_on_missing=False)
     if w1 is None:
         w1a = state_dict.get_tensor("lokr_w1_a")
         w1b = state_dict.get_tensor("lokr_w1_b")
         w1 = w1a @ w1b
+        lora_dim = float(w1b.size(0))
 
     w2 = state_dict.get_tensor("lokr_w2", raise_on_missing=False)
     if w2 is None:
@@ -99,13 +102,7 @@ def compose_lokr(state_dict: StateDictKeyHelper, target_shape: torch.Size):
             w2_b_flat = w2b.flatten(1) if w2b.dim() > 1 else w2b
             w2 = w2a @ w2_b_flat
 
-    lora_dim = 1.0
-    w1_b = state_dict.get_tensor("lokr_w1_b", raise_on_missing=False)
-    w2_b = state_dict.get_tensor("lokr_w2_b", raise_on_missing=False)
-    if w1_b is not None:
-        lora_dim = float(w1_b.size(0))
-    elif w2_b is not None:
-        lora_dim = float(w2_b.size(0))
+        lora_dim = float(w2b.size(0))
 
     alpha = state_dict.get_tensor("alpha", raise_on_missing=False)
     if alpha is None or not alpha.isfinite():
