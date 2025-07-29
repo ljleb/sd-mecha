@@ -642,6 +642,9 @@ class MergeNodeWrapperStateDict(StateDict):
     def __iter__(self):
         return iter(self.keys())
 
+    def __contains__(self, item):
+        return item in self.compute_keys()
+
     def keys(self) -> Iterable[str]:
         return self.compute_keys().keys()
 

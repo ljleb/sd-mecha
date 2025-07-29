@@ -1,3 +1,11 @@
+def _load_builtin_extensions():
+    import sd_mecha.extensions.builtin.model_configs
+    import sd_mecha.extensions.builtin.lycoris
+
+
+_load_builtin_extensions()
+
+
 from .merging import merge, open_input_dicts, infer_model_configs
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
@@ -30,6 +38,8 @@ from sd_mecha.extensions.builtin.merge_methods import (
     omit_component,
     exchange_ema,
     stack,
+    sdxl_sgm_split_lerp_rebasin,
+    sdxl_sgm_split_randn_permutation,
 )
 from .merge_method_wrappers import (
     add_difference,
@@ -45,11 +55,3 @@ from .merge_method_wrappers import (
 )
 from .helpers import model, literal, Defaults, set_log_level
 from . import recipe_nodes, extensions
-
-
-def _load_builtin_extensions():
-    import sd_mecha.extensions.builtin.model_configs
-    import sd_mecha.extensions.builtin.lycoris
-
-
-_load_builtin_extensions()
