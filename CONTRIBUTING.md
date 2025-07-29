@@ -10,5 +10,5 @@ Target the `dev` branch to submit PRs:
  ```sh
  git clone -b dev https://github.com/ljleb/sd-mecha.git
  cd sd-mecha
- git checkout -b my-branch dev
+ git checkout -b my-branch
  ```
