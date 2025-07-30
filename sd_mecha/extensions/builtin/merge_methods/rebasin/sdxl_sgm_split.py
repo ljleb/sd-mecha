@@ -127,7 +127,9 @@ def sdxl_sgm_split_rebasin(
     Iterative weight-matching over key-closure groups with one permutation per hyperedge.
     """
     key: str = kwargs["key"]
-    cache: Dict = kwargs.get("cache") or {}
+    cache: Dict = kwargs.get("cache")
+    if cache is None:
+        raise RuntimeError("A cache must be passed to this merge method.")
 
     # ---------------- one-time scaffolding in kwargs["cache"] ----------------
     if "rebasin" not in cache:
