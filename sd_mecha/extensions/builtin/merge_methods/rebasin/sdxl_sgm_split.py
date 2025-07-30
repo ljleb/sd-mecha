@@ -91,7 +91,7 @@ for key, meta in sgm_split_config.metadata().items():
             fc2_key = key.replace(".time_embed.0.", ".time_embed.2.")
             perm_graph.add(key, 0, fc2_key, 1)
 
-        if ".label_emb.0.0." in key and key.endswith(".weight"):  # unet timestep embed
+        if ".label_emb.0.0." in key and key.endswith(".weight"):  # unet label embed
             bias_key = key.replace(".weight", ".bias")
             perm_graph.add(key, 0, bias_key, 0)
 
