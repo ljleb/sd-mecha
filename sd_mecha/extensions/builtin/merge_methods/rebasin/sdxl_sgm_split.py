@@ -118,13 +118,14 @@ def _solve_lap_max(sim: Tensor) -> Tensor:
 @merge_method
 def sdxl_sgm_split_rebasin(
     a: Parameter(StateDict[Tensor], model_config=sgm_split_config),
-    b: Parameter(StateDict[Tensor], model_config=sgm_split_config),
-    alpha: Parameter(Tensor) = 0.5,
-    rebasin_iters: Parameter(int) = 4,
+    ref: Parameter(StateDict[Tensor], model_config=sgm_split_config),
+    rebasin_iters: Parameter(int) = 10,
     **kwargs,
 ) -> Return(Tensor, model_config=sgm_split_config):
     """
     Iterative weight-matching over key-closure groups with one permutation per hyperedge.
+
+    Returns a permuted to be as close as possible to ref.
     """
     key: str = kwargs["key"]
     cache: Dict = kwargs.get("cache")
@@ -158,7 +159,7 @@ def sdxl_sgm_split_rebasin(
     gid = key_to_gid.get(key)
     if gid is None:
         # No permutation constraints on this key.
-        return (1 - alpha) * a[key] + alpha * b[key]
+        return a[key]
 
     if gid not in locks_by_group:
         locks_by_group[gid] = threading.Lock()
@@ -170,25 +171,25 @@ def sdxl_sgm_split_rebasin(
             return gcache.pop(key)
 
         # --------- local memoization of StateDict indexing (critical) --------
-        memoA: Dict[str, Tensor] = {}
-        memoB: Dict[str, Tensor] = {}
+        memo_a: Dict[str, Tensor] = {}
+        memo_ref: Dict[str, Tensor] = {}
 
-        def LA(k: str) -> Tensor:
-            t = memoA.get(k)
+        def load_a(k: str) -> Tensor:
+            t = memo_a.get(k)
             if t is None:
                 t = a[k]
-                memoA[k] = t
+                memo_a[k] = t
             return t
 
-        def LB(k: str) -> Tensor:
-            t = memoB.get(k)
+        def load_ref(k: str) -> Tensor:
+            t = memo_ref.get(k)
             if t is None:
-                t = b[k]
-                memoB[k] = t
+                t = ref[k]
+                memo_ref[k] = t
             return t
 
-        device = LA(key).device
-        dtype = LA(key).dtype
+        device = load_a(key).device
+        dtype = load_a(key).dtype
 
         # Current axis-permutation map for each key (accumulated from edge perms)
         key_axis_perm: Dict[str, Dict[int, torch.Tensor]] = {}
@@ -198,9 +199,9 @@ def sdxl_sgm_split_rebasin(
             nodes = hedge_nodes[eid]
             # Determine size N and check consistency within this hyperedge
             k0, ax0 = nodes[0]
-            N = LA(k0).shape[ax0]
+            N = load_a(k0).shape[ax0]
             for k, ax in nodes[1:]:
-                if LA(k).shape[ax] != N:
+                if load_a(k).shape[ax] != N:
                     raise ValueError(f"Hyperedge {eid} inconsistent size: {k} axis {ax} != {N}")
             if eid not in perm_by_edge:
                 perm_by_edge[eid] = torch.arange(N, device=device, dtype=torch.long)
@@ -223,22 +224,22 @@ def sdxl_sgm_split_rebasin(
             for eid in groups_edges[gid]:
                 nodes = hedge_nodes[eid]
                 k0, ax0 = nodes[0]
-                N = LA(k0).shape[ax0]
+                N = load_a(k0).shape[ax0]
 
                 # Build similarity with all *other-axis* permutations applied.
                 S = torch.zeros((N, N), device=device, dtype=dtype)
                 for k, axis_cur in nodes:
-                    Av = _front_flat(LA(k), axis_cur)
+                    Av = _front_flat(load_a(k), axis_cur)
 
-                    tB = LB(k)
+                    t_ref = load_ref(k)
                     # Build index applying perms on all axes except current
-                    idx = [slice(None)] * tB.dim()
+                    idx = [slice(None)] * t_ref.dim()
                     axes_perms = key_axis_perm.get(k, {})
                     for ax_idx, p in axes_perms.items():
                         if ax_idx == axis_cur:
                             continue
                         idx[ax_idx] = p
-                    B_other = tB[tuple(idx)]
+                    B_other = t_ref[tuple(idx)]
                     Bv = _front_flat(B_other, axis_cur)
 
                     S.addmm_(Av, Bv.T)
@@ -254,16 +255,17 @@ def sdxl_sgm_split_rebasin(
             if not changed:
                 break
 
-        # ---------------- produce aligned & blended outputs ------------------
+        # ---------------- produce aligned outputs ------------------
         out: Dict[str, Tensor] = {}
         for k, _ax in groups_nodes[gid]:
-            tA = LA(k)
-            tB = LB(k)
-            idx = [slice(None)] * tB.dim()
+            tA = load_a(k)
+            idx_inv = [slice(None)] * tA.dim()
             for ax_idx, p in key_axis_perm.get(k, {}).items():
-                idx[ax_idx] = p
-            B_aligned = tB[tuple(idx)]
-            out[k] = (1 - alpha) * tA + alpha * B_aligned
+                inv = torch.empty_like(p)
+                inv[p] = torch.arange(len(p), device=p.device)
+                idx_inv[ax_idx] = inv
+            A_aligned = tA[tuple(idx_inv)]
+            out[k] = A_aligned
 
         merged_by_group[gid] = out
         return out.pop(key)
