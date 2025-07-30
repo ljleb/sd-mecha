@@ -116,7 +116,7 @@ def _solve_lap_max(sim: Tensor) -> Tensor:
 
 
 @merge_method
-def sdxl_sgm_split_lerp_rebasin(
+def sdxl_sgm_split_rebasin(
     a: Parameter(StateDict[Tensor], model_config=sgm_split_config),
     b: Parameter(StateDict[Tensor], model_config=sgm_split_config),
     alpha: Parameter(Tensor) = 0.5,
@@ -271,7 +271,7 @@ _RP_INIT_LOCK = threading.Lock()
 
 
 @merge_method
-def sdxl_sgm_split_randn_permutation(
+def sdxl_sgm_split_randperm(
     a: Parameter(StateDict[Tensor], model_config=sgm_split_config),
     seed: Parameter(int) = None,
     **kwargs,

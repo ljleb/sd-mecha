@@ -38,8 +38,8 @@ from sd_mecha.extensions.builtin.merge_methods import (
     omit_component,
     exchange_ema,
     stack,
-    sdxl_sgm_split_lerp_rebasin,
-    sdxl_sgm_split_randn_permutation,
+    sdxl_sgm_split_rebasin,
+    sdxl_sgm_split_randperm,
 )
 from .merge_method_wrappers import (
     add_difference,
