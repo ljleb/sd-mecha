@@ -168,7 +168,7 @@ def sdxl_sgm_split_rebasin(
     with lock:
         gcache = merged_by_group.get(gid)
         if gcache is not None and key in gcache:
-            return gcache.pop(key)
+            return gcache[key]
 
         # --------- local memoization of StateDict indexing (critical) --------
         memo_a: Dict[str, Tensor] = {}
@@ -268,7 +268,7 @@ def sdxl_sgm_split_rebasin(
             out[k] = A_aligned
 
         merged_by_group[gid] = out
-        return out.pop(key)
+        return out[key]
 
 
 _RP_INIT_LOCK = threading.Lock()
