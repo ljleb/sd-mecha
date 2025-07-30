@@ -10,6 +10,8 @@ from sd_mecha.extensions.builtin.merge_methods import (
     ties_sum_extended,
     clamp,
     model_stock,
+    isotropic,
+    isotropic_overrided,
 )
 
 
@@ -251,6 +253,10 @@ def ties_with_dare(
     apply_stock: Parameter(bool) = False,
     cos_eps: Parameter(float) = 1e-6,
     apply_median: Parameter(bool) = False,
+    apply_isotropic: Parameter(bool) = False,
+    z_cof: Parameter(float) = 0.0,
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
     eps: Parameter(float) = 1e-6,
     maxiter: Parameter(int) = 100,
     ftol: Parameter(float) = 1e-20,
@@ -280,8 +286,12 @@ def ties_with_dare(
         ftol=ftol,
     )
 
-    return merge_methods.add_difference(base, res, alpha=alpha)
+    if apply_isotropic:
+        # This stage will stress a lot.
+        res = isotropic_overrided(res, z_cof=z_cof, apply_exp=apply_exp, apply_high_dim=apply_high_dim)
 
+    # $$ \theta_M = \theta_{PRE} + \lambda \cdot \Sigma_{k=1}^{K} \tilde{\delta}^{t_k} $$
+    return merge_methods.add_difference(base, res, alpha=alpha)
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
 # https://github.com/arcee-ai/mergekit/blob/main/mergekit/merge_methods/model_stock.py
