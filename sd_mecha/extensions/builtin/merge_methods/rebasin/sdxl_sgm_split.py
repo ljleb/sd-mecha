@@ -119,7 +119,7 @@ def _solve_lap_max(sim: Tensor) -> Tensor:
 def sdxl_sgm_split_rebasin(
     a: Parameter(StateDict[Tensor], model_config=sgm_split_config),
     ref: Parameter(StateDict[Tensor], model_config=sgm_split_config),
-    rebasin_iters: Parameter(int) = 10,
+    iters: Parameter(int) = 10,
     **kwargs,
 ) -> Return(Tensor, model_config=sgm_split_config):
     """
@@ -221,7 +221,7 @@ def sdxl_sgm_split_rebasin(
                     d[ax] = perm.clone()
 
         # ---------------- coordinate-descent over hyperedges -----------------
-        for _ in range(max(1, rebasin_iters)):
+        for _ in range(max(1, iters)):
             changed = False
             for eid in groups_edges[gid]:
                 nodes = hedge_nodes[eid]
