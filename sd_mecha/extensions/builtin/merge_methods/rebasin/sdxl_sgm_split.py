@@ -84,41 +84,6 @@ for key, meta in sgm_split_config.metadata().items():
             fc2_key = key.replace(".net.0.proj.0.", ".net.2.")
             perm_graph.add(key, 0, fc2_key, 1)
 
-        # if ".in_layers.2." in key and ".output_blocks." not in key and key.endswith(".weight"):  # unet input res block
-        #     bias_key = key.replace(".weight", ".bias")
-        #     perm_graph.add(key, 0, bias_key, 0)
-        #
-        #     emb_key = key.replace(".in_layers.2.", ".emb_layers.1.")
-        #     perm_graph.add(key, 0, emb_key, 0)
-        #     emb_bias_key = emb_key.replace(".weight", ".bias")
-        #     perm_graph.add(emb_key, 0, emb_bias_key, 0)
-        #
-        #     out_key = key.replace(".in_layers.2.", ".out_layers.0.")
-        #     perm_graph.add(key, 0, out_key, 0)
-        #     out_bias_key = out_key.replace(".weight", ".bias")
-        #     perm_graph.add(out_key, 0, out_bias_key, 0)
-        #     out3_key = key.replace(".in_layers.2.", ".out_layers.3.")
-        #     perm_graph.add(out_key, 0, out3_key, 1)
-
-        # if ".in_layers.2.0." in key and ".output_blocks." in key and key.endswith(".weight"):  # unet output res block
-        #     bias_key = key.replace(".in_layers.2.0.weight", ".in_layers.2.bias")
-        #     perm_graph.add(key, 0, bias_key, 0)
-        #
-        #     p2_key = key.replace(".in_layers.2.0.", ".in_layers.2.1.")
-        #     perm_graph.add(key, 0, p2_key, 0)
-        #
-        #     emb_key = key.replace(".in_layers.2.0.", ".emb_layers.1.")
-        #     perm_graph.add(key, 0, emb_key, 0)
-        #     emb_bias_key = emb_key.replace(".weight", ".bias")
-        #     perm_graph.add(emb_key, 0, emb_bias_key, 0)
-        #
-        #     out_key = key.replace(".in_layers.2.0.", ".out_layers.0.")
-        #     perm_graph.add(key, 0, out_key, 0)
-        #     out_bias_key = out_key.replace(".weight", ".bias")
-        #     perm_graph.add(out_key, 0, out_bias_key, 0)
-        #     out3_key = key.replace(".in_layers.2.0.", ".out_layers.3.")
-        #     perm_graph.add(out_key, 0, out3_key, 1)
-
         if ".time_embed.0." in key and key.endswith(".weight"):  # unet timestep embed
             bias_key = key.replace(".weight", ".bias")
             perm_graph.add(key, 0, bias_key, 0)

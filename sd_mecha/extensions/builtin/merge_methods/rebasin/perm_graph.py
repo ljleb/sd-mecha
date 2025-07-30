@@ -88,7 +88,7 @@ class PermGraph:
 
     def components(self):
         hyperedges = self.hyperedges()
-        hedge_nodes = [sorted(list(h)) for h in hyperedges]
+        hedge_nodes = [sorted(list(h.items())) for h in hyperedges]
         hedge_keys = [{k for (k, _a) in h} for h in hedge_nodes]
         key_to_edges = {}
         for eid, ks in enumerate(hedge_keys):
