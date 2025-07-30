@@ -80,7 +80,7 @@ def compose_lora(state_dict: StateDictKeyHelper, target_shape: torch.Size):
 
 
 def compose_lokr(state_dict: StateDictKeyHelper, target_shape: torch.Size):
-    lora_dim = 1.0
+    lora_dim = 4.0  # lokr default
 
     w1 = state_dict.get_tensor("lokr_w1", raise_on_missing=False)
     if w1 is None:
