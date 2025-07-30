@@ -162,7 +162,9 @@ def sdxl_sgm_split_rebasin(
         return a[key]
 
     if gid not in locks_by_group:
-        locks_by_group[gid] = threading.Lock()
+        with _RP_INIT_LOCK:
+            if gid not in locks_by_group:
+                locks_by_group[gid] = threading.Lock()
     lock = locks_by_group[gid]
 
     with lock:
