@@ -37,3 +37,4 @@ from .ties_sum import (
     dropout,
 )
 from .rebasin import sdxl_sgm_split_rebasin, sdxl_sgm_split_randperm
+from .align_attention import sdxl_sgm_align_attention
