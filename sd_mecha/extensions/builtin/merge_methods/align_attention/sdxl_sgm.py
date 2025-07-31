@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
-from align_attention import balance_head_energy, permute_and_align_heads, bundle_weight_bias, split_weight_bias
+from .algorithms import balance_head_energy, permute_heads, align_heads, bundle_weight_bias, split_weight_bias
 
 
 @merge_method
@@ -9,7 +9,7 @@ def sdxl_sgm_align_attention(
     a: Parameter(StateDict[Tensor], model_config="sdxl-sgm"),
     ref: Parameter(StateDict[Tensor], model_config="sdxl-sgm"),
     **kwargs,
-) -> Return(Tensor):
+) -> Return(Tensor, model_config="sdxl-sgm"):
     cache = kwargs.get("cache")
     if cache is None:
         raise RuntimeError("Merge method `sdxl_sgm_align_attention` must be used with a cache.")
@@ -46,8 +46,8 @@ def sdxl_sgm_align_attention(
         key_o = key.replace(".in_proj_bias", ".out_proj.weight")
 
         a_w = a[key_weight]
-        a_b = a[key_weight]
-        b_w = ref[key_bias]
+        a_b = a[key_bias]
+        b_w = ref[key_weight]
         b_b = ref[key_bias]
 
         dim = a_w.shape[0] // 3
@@ -80,14 +80,12 @@ def sdxl_sgm_align_attention(
         return a[key]
 
     a_q, a_k = balance_head_energy(a_q, a_k)
-    b_q, b_k = balance_head_energy(b_q, b_k)
-    a_q, a_k = permute_and_align_heads(a_q, a_k, b_q, b_k)
-    del b_q, b_k
-
+    # b_q_bal, b_k_bal = balance_head_energy(b_q, b_k)
     a_v, a_o = balance_head_energy(a_v, a_o)
-    b_v, b_o = balance_head_energy(b_v, b_o)
-    a_v, a_o = permute_and_align_heads(a_v, a_o, b_v, b_o)
-    del b_v, b_o
+    # b_v_bal, b_o_bal = balance_head_energy(b_v, b_o)
+    a_q, a_k, a_v, a_o = permute_heads(a_q, a_k, a_v, a_o, b_q, b_k, b_v, b_o)
+    a_q, a_k = align_heads(a_q, a_k, b_q, b_k)
+    a_v, a_o = align_heads(a_v, a_o, b_v, b_o)
 
     if is_clip_l_attn:
         a_q, a_q_bias = split_weight_bias(a_q.flatten(end_dim=1))
