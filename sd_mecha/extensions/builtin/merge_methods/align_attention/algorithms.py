@@ -1,54 +1,21 @@
 import torch
 from scipy.optimize import linear_sum_assignment
 from typing import Tuple
+from ..svd import svd_lowrank
 
 
 def balance_head_energy(
     q: torch.Tensor,
     k: torch.Tensor,
-    eps: float = 1e-8,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Per-head SPD balance.
+    rank = min(q.shape[-2:])
+    qh, s, k = canonical_svd(q.mH @ k, rank=rank)
+    q = qh.mH
+    s_sqrt = s.sqrt()
 
-    Parameters
-    ----------
-    q, k : (num_heads, head_dim, feature_dim) weight blocks
-    eps : min eigenvalue for manipulating full rank SPD factors
-
-    Returns
-    -------
-    q_bal, k_bal : tensors in the same shape, now satisfying
-                   (q qᵀ)(k kᵀ) = I per head.
-    """
-    # row-Gram matrices
-    a = q @ q.mH
-    b = k @ k.mH
-
-    # A^{±1/2}
-    lam_a, vec_a = torch.linalg.eigh(a)
-    lam_a = lam_a.clamp_min(eps)
-
-    a_sqrt = vec_a @ torch.diag_embed(lam_a.sqrt()) @ vec_a.mH
-    a_inv_sqrt = vec_a @ torch.diag_embed(lam_a.rsqrt()) @ vec_a.mH
-
-    # C = A^{1/2} B A^{1/2};  C^{1/2}
-    c = a_sqrt @ b @ a_sqrt
-    lam_c, vec_c = torch.linalg.eigh(c)
-    lam_c = lam_c.clamp_min(eps)
-    c_sqrt = vec_c @ torch.diag_embed(lam_c.sqrt()) @ vec_c.mH
-
-    # S = A^{-1/2} C^{1/2} A^{-1/2}      (symmetric SPD)
-    s = a_inv_sqrt @ c_sqrt @ a_inv_sqrt
-
-    # M = S^{1/2}   (still symmetric SPD ⇒ M^{-1} = M^{-H})
-    lam_s, vec_s = torch.linalg.eigh(s)
-    m = vec_s @ torch.diag_embed(lam_s.sqrt()) @ vec_s.mH
-
-    q_bal = m @ q
-    k_bal = torch.linalg.solve(m, k)      # m^{-1} k  == m^{-H} k
-
-    return q_bal, k_bal
+    q *= s_sqrt.unsqueeze(-1)
+    k *= s_sqrt.unsqueeze(-1)
+    return q, k
 
 
 def permute_heads(
@@ -63,17 +30,14 @@ def permute_heads(
     """
     device = q_a.device
 
-    oqk_a = _orientation(q_a, k_a)
-    oqk_b = _orientation(q_b, k_b)
-    ovo_a = _orientation(v_a, o_a)
-    ovo_b = _orientation(v_b, o_b)
+    sim_q = subspace_alignment(q_a, q_b)
+    sim_k = subspace_alignment(k_a, k_b)
+    sim_v = subspace_alignment(v_a, v_b)
+    sim_o = subspace_alignment(o_a, o_b)
 
-    # similarity matrix  sim_{ij} = Re tr(O_aiᵀ O_bj)
-    sim_qk = torch.einsum("ihw,jhw->ij", oqk_a.conj(), oqk_b).real
-    sim_vo = torch.einsum("ihw,jhw->ij", ovo_a.conj(), ovo_b).real
-    sim = sim_qk + sim_vo
-    perm = linear_sum_assignment((-sim).cpu().numpy())[1]  # maximize similarity
-    perm = torch.as_tensor(perm, device=device)            # A → B order
+    sim = sim_q + sim_k + sim_v + sim_o
+    perm = linear_sum_assignment((-sim).cpu().numpy())[1]
+    perm = torch.as_tensor(perm, device=device)
 
     q_a_perm = q_a[perm]
     k_a_perm = k_a[perm]
@@ -108,12 +72,13 @@ def align_heads(
     return q_a_aligned, k_a_aligned
 
 
-def _orientation(w1: torch.Tensor, w2: torch.Tensor) -> torch.Tensor:
-    """O = U1 U2ᵀ  (thin SVD, batched)."""
-    svd_driver = "gesvd" if w1.is_cuda else None
-    u1 = torch.linalg.svd(w1, full_matrices=False, driver=svd_driver).U
-    u2 = torch.linalg.svd(w2, full_matrices=False, driver=svd_driver).U
-    return u1 @ u2.mH                        # (H, h, h)
+def subspace_alignment(a: torch.Tensor, b: torch.Tensor, eps=1e-12) -> torch.Tensor:
+    driver = "gesvd" if a.is_cuda else None
+    a_n = a / a.norm(dim=-1, keepdim=True).clamp(min=eps)
+    b_n = b / b.norm(dim=-1, keepdim=True).clamp(min=eps)
+    h = a_n[:, None] @ b_n[None, :].mH
+    s = torch.linalg.svdvals(h, driver=driver)
+    return s.log().mean(dim=-1)
 
 
 def bundle_weight_bias(w, b):
@@ -126,3 +91,24 @@ def split_weight_bias(wb):
     b = wb[..., -1]
     w = wb[..., :-1]
     return w, b
+
+
+def canonical_svd(a: torch.Tensor, *, rank=None):
+    if rank is not None:
+        u, s, vh = svd_lowrank(a, rank)
+    else:
+        driver = "gesvd" if a.is_cuda else None
+        u, s, vh = torch.linalg.svd(a, full_matrices=False, driver=driver)
+
+    if u.dtype.is_complex:
+        phases = torch.angle(u.diagonal(offset=0, dim1=-2, dim2=-1))
+        flips = torch.exp(-1j * phases)
+    else:
+        pivots = u.diagonal(offset=0, dim1=-2, dim2=-1)
+        flips = torch.sign(pivots)
+        flips = flips + (flips == 0)
+
+    u_can = u * flips.unsqueeze(-2)
+    vh_can = vh * flips.unsqueeze(-1)
+
+    return u_can, s, vh_can
