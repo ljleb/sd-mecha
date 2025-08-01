@@ -12,7 +12,7 @@ import threading
 import typing
 import torch
 from .extensions import model_configs, model_formats
-from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
+from .extensions.merge_methods import value_to_node, MergeMethod, StateDict, T as MergeMethodT
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, StructuralModelConfig, KeyMetadata
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
