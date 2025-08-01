@@ -7,15 +7,13 @@ import logging
 import operator
 import os
 import pathlib
-import sys
 import threading
-import typing
 import torch
 from .extensions import model_configs, model_formats
-from .extensions.merge_methods import MergeMethod, StateDict, T as MergeMethodT, value_to_node
+from .extensions.merge_methods import value_to_node
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, StructuralModelConfig, KeyMetadata
-from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
+from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
 from collections import OrderedDict
@@ -23,8 +21,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
-from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar
-from .typing_ import is_subclass
+from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple
+from .recipe_executor import create_recipe_executor
 
 
 def merge(
@@ -167,6 +165,7 @@ def merge(
                 if key in recipe_metadata:
                     del recipe_metadata[key]
 
+        recipe_executor = create_recipe_executor(recipe)
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
 
         with (
@@ -183,11 +182,11 @@ def merge(
             fix_torch_threading()
             futures = []
             for key in recipe_metadata:
-                fn = recipe.accept
+                fn = lambda key_=key: recipe_executor.merge_key(key_)
                 fn = _track_output(fn, output_dict, key, check_finite)
                 fn = _track_progress(fn, key, recipe_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
-                futures.append(executor.submit(fn, KeyMergeVisitor(key)))
+                futures.append(executor.submit(fn))
 
             for future in as_completed(futures):
                 if future.exception() is not None:
@@ -531,154 +530,6 @@ class CloseInputDictsVisitor(RecipeVisitor):
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         for model in (*node.args, *node.kwargs.values()):
             model.accept(self)
-
-
-@dataclasses.dataclass
-class KeyMergeVisitor(RecipeVisitor):
-    key: str
-
-    def visit_literal(self, node: LiteralRecipeNode):
-        value = node.value
-        if isinstance(node.value, Mapping):
-            value = self.__visit_sd(node.value, node.model_config)
-        if isinstance(value, NonDictLiteralValue):
-            return value
-        if isinstance(value, RecipeNode):
-            return value.accept(self)
-        raise TypeError(f"Unexpected literal node value of type {type(value)}")
-
-    def visit_model(self, node: recipe_nodes.ModelRecipeNode) -> torch.Tensor:
-        return self.__visit_sd(node.state_dict, node.model_config)
-
-    def __visit_sd(self, state_dict, model_config):
-        aliases = model_config.aliases().get(self.key, [])
-        keys = [self.key, *aliases]
-
-        for i, key in enumerate(keys):
-            try:
-                return state_dict[key]
-            except KeyError as e:
-                if i == len(keys) - 1:
-                    raise StateDictKeyError(self.key) from e
-
-    def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
-        merged_args, merged_kwargs = self.__visit_deeper_first(node.args, node.kwargs, node.merge_method)
-        return node.merge_method.merge_key(
-            merged_args,
-            merged_kwargs,
-            self.key,
-            node.cache,
-        )
-
-    def __visit_deeper_first(
-        self,
-        node_args: Tuple[recipe_nodes.RecipeNode, ...],
-        node_kwargs: Dict[str, recipe_nodes.RecipeNode],
-        merge_method: MergeMethod,
-    ):
-        def depth_of_value(index) -> int:
-            nodes = node_args if isinstance(index, int) else node_kwargs
-            return nodes[index].accept(recipe_nodes.ModelDepthRecipeVisitor())
-
-        error_holder = ErrorHolder()
-        merged = {}
-        input_types = merge_method.get_input_types().as_dict(len(node_args))
-        indices = itertools.chain(range(len(node_args)), node_kwargs.keys())
-
-        for index in sorted(indices, key=depth_of_value, reverse=True):
-            nodes = node_args if isinstance(index, int) else node_kwargs
-            if is_subclass(input_types[index], StateDict):
-                expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, self)
-            else:
-                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, self), input_types[index])
-
-        merged_args = [merged.get(index) for index in range(len(node_args))]
-        merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
-        error_holder.try_raise()
-        return merged_args, merged_kwargs
-
-
-class ErrorHolder:
-    def __init__(self):
-        self.exc_info = None
-
-    def intercept(self, fn, *args, **kwargs):
-        try:
-            return fn(*args, **kwargs)
-        except Exception:
-            self.exc_info = sys.exc_info()
-            return None
-
-    def try_raise(self):
-        if self.exc_info:
-            raise self.get_error()
-
-    def get_error(self):
-        if self.exc_info:
-            return self.exc_info[1].with_traceback(self.exc_info[2])
-        else:
-            return None
-
-
-class MergeNodeWrapperStateDict(StateDict):
-    def __init__(
-        self,
-        merge_node: recipe_nodes.MergeRecipeNode,
-        expected_type: type,
-        original_merge_visitor: KeyMergeVisitor,
-    ):
-        self.merge_node = merge_node
-        self.expected_type = expected_type
-        self.original_merge_visitor = original_merge_visitor
-
-    def __getitem__(self, key):
-        key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
-        return cast_node_value(self.merge_node.accept(key_merger), self.expected_type)
-
-    def __len__(self):
-        return len(self.compute_keys())
-
-    def __iter__(self):
-        return iter(self.keys())
-
-    def __contains__(self, item):
-        return item in self.compute_keys()
-
-    def keys(self) -> Iterable[str]:
-        return self.compute_keys().keys()
-
-    @property
-    def model_config(self) -> ModelConfig:
-        return self.merge_node.model_config
-
-    def compute_keys(self):
-        return self.model_config.keys()
-
-
-def cast_node_value(value, expected_type):
-    if value is None:
-        return value
-
-    try:
-        if issubclass(typing.get_origin(expected_type) or expected_type, StateDict):
-            expected_type = (typing.get_args(expected_type) + (MergeMethodT,))[0]
-    except TypeError:
-        pass
-
-    if isinstance(expected_type, TypeVar) or isinstance(value, expected_type):
-        return value
-    if isinstance(expected_type, str):
-        raise RuntimeError(f"cannot implicitly convert {type(value)} to {expected_type}")
-    if issubclass(expected_type, int):
-        return int(value)
-    if issubclass(expected_type, float):
-        return float(value)
-    if issubclass(expected_type, bool):
-        return bool(value)
-    if issubclass(expected_type, torch.Tensor):
-        return torch.tensor(value, dtype=torch.float32)
-    return value
 
 
 @dataclasses.dataclass

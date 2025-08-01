@@ -28,6 +28,10 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
     def keys(self) -> Iterable[str]:
         pass
 
+    @abc.abstractmethod
+    def __contains__(self, item):
+        pass
+
 
 @dataclasses.dataclass
 class ParameterData:
@@ -169,24 +173,31 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, fn: Callable, identifier: str):
+    def __init__(self, fn: Callable | type, identifier: str):
         self.__wrapped__ = fn
-        self.__f_spec = inspect.getfullargspec(self.__wrapped__)
-        self.__f_hints = typing.get_type_hints(self.__wrapped__)
-        self.identifier = identifier
-        self.has_varkwargs = True
-        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
-        self.__validate_f()
+        if inspect.isfunction(fn):
+            self.__f_spec = inspect.getfullargspec(fn)
+            self.__f_hints = typing.get_type_hints(fn)
+        elif inspect.isclass(fn):
+            if not hasattr(fn, "__call__"):
+                raise TypeError("class merge methods must define a __call__ method")
+            fn = fn.__call__
+            self.__f_spec = inspect.getfullargspec(fn)
+            self_arg = self.__f_spec.args.pop(0)
+            self.__f_hints = typing.get_type_hints(fn)
+            self.__f_hints.pop(self_arg, None)
 
-    def __validate_f(self):
+        self.identifier = identifier
+        self.has_varkwargs = self.__f_spec.varkw is not None
+        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+        self.__validate()
+
+    def __validate(self):
         names = self.get_param_names()
         params = self.get_params()  # validates param type annotations
         defaults = self.get_default_args()
         input_merge_spaces = self.get_input_merge_spaces()
         input_configs = self.get_input_configs()
-
-        if self.__f_spec.varkw is None:
-            self.has_varkwargs = False
 
         for param_idx in params.as_dict():
             is_default_arg = (
@@ -237,9 +248,22 @@ class MergeMethod:
         return input_args, input_kwargs
 
     def __call__(self, *args, **kwargs):
-        return self.create_recipe(*args, **kwargs)
+        mm = self
+        group_keys_fn = None
+        if inspect.isclass(self.__wrapped__):
+            instance = self.__wrapped__()
+            mm = MergeMethod(instance.__call__, self.identifier)
+            if hasattr(instance, "group_keys"):
+                group_keys_fn = instance.group_keys
 
-    def create_recipe(self, *args, **kwargs):
+        return mm.create_recipe(args, kwargs, group_keys_fn=group_keys_fn)
+
+    def create_recipe(self, args, kwargs, *, group_keys_fn=None):
+        if not (istype(self.__wrapped__) for istype in (inspect.isfunction, inspect.ismethod)):
+            raise TypeError(
+                "cannot create recipe: the underlying __wrapped__ object was not correctly converted to a function"
+            )
+
         params = self.get_param_names()
         defaults = self.get_default_args()
         first_default_arg = len(params.args) - len(defaults.args)
@@ -285,7 +309,7 @@ class MergeMethod:
             for k, arg in (defaults.kwargs | kwargs).items()
         }
 
-        return MergeRecipeNode(self, args, kwargs)
+        return MergeRecipeNode(self, args, kwargs, group_keys_fn)
 
     def get_input_types(self) -> FunctionArgs[type]:
         params = self.get_params()
@@ -459,7 +483,7 @@ class MergeMethod:
         return self.identifier
 
 
-F = TypeVar("F", bound=Callable)
+F = TypeVar("F", bound=(Callable, type))
 
 
 def merge_method(
@@ -496,11 +520,11 @@ def merge_method(
 
 
 def __recipe_impl(
-    fn: Callable, *,
+    fn: F, *,
     identifier: Optional[str] = None,
     register: bool,
     is_conversion: bool,
-):
+) -> MergeRecipeNode:
     if identifier is None:
         identifier = fn.__name__
     fn_object = MergeMethod(fn, identifier)
