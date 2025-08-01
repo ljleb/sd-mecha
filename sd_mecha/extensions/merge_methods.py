@@ -1,5 +1,7 @@
 import abc
+import copy
 import dataclasses
+import functools
 import itertools
 import fuzzywuzzy.process
 import inspect
@@ -11,7 +13,7 @@ from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
 from types import SimpleNamespace
-from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping
+from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Set
 from ..typing_ import is_subclass
 
 
@@ -175,7 +177,8 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 class MergeMethod:
     def __init__(self, fn: Callable | type, identifier: str):
         self.__wrapped__ = fn
-        if inspect.isfunction(fn):
+        self.wrapped_is_class = inspect.isclass(fn)
+        if inspect.isfunction(fn) or inspect.ismethod(fn):
             self.__f_spec = inspect.getfullargspec(fn)
             self.__f_hints = typing.get_type_hints(fn)
         elif inspect.isclass(fn):
@@ -220,6 +223,16 @@ class MergeMethod:
             if not any(k.merge_space for k in params.as_dict().values()):
                 raise RuntimeError("when using a merge space symbol as output, it must also be used by at least one input parameter")
 
+    def instantiate(self):
+        if self.wrapped_is_class:
+            return self.__wrapped__()
+        return None
+
+    def get_key_group(self, key: str) -> Set[str]:
+        if hasattr(self.__wrapped__, "get_key_group"):
+            return self.__wrapped__.get_key_group(key)
+        return set()
+
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"
 
@@ -229,9 +242,13 @@ class MergeMethod:
         input_kwargs: Dict[str, torch.Tensor | StateDict],
         key: str,
         cache: Optional[dict],
+        context: Optional[Any]
     ):
         args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, cache)
-        return self.__wrapped__(*args, **kwargs)
+        fn = self.__wrapped__
+        if self.wrapped_is_class:
+            fn = functools.partial(fn.__call__, context)
+        return fn(*args, **kwargs)
 
     def __get_args_kwargs(
         self,
@@ -248,22 +265,9 @@ class MergeMethod:
         return input_args, input_kwargs
 
     def __call__(self, *args, **kwargs):
-        mm = self
-        group_keys_fn = None
-        if inspect.isclass(self.__wrapped__):
-            instance = self.__wrapped__()
-            mm = MergeMethod(instance.__call__, self.identifier)
-            if hasattr(instance, "group_keys"):
-                group_keys_fn = instance.group_keys
+        return self.create_recipe(args, kwargs)
 
-        return mm.create_recipe(args, kwargs, group_keys_fn=group_keys_fn)
-
-    def create_recipe(self, args, kwargs, *, group_keys_fn=None):
-        if not (istype(self.__wrapped__) for istype in (inspect.isfunction, inspect.ismethod)):
-            raise TypeError(
-                "cannot create recipe: the underlying __wrapped__ object was not correctly converted to a function"
-            )
-
+    def create_recipe(self, args, kwargs):
         params = self.get_param_names()
         defaults = self.get_default_args()
         first_default_arg = len(params.args) - len(defaults.args)
@@ -309,7 +313,7 @@ class MergeMethod:
             for k, arg in (defaults.kwargs | kwargs).items()
         }
 
-        return MergeRecipeNode(self, args, kwargs, group_keys_fn)
+        return MergeRecipeNode(self, args, kwargs)
 
     def get_input_types(self) -> FunctionArgs[type]:
         params = self.get_params()
