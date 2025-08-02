@@ -1,6 +1,6 @@
 import torch
 from torch import Tensor
-from sd_mecha import merge_method, StateDict, Return, Parameter
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Return, Parameter
 from sd_mecha.extensions import model_configs
 from .convert_huggingface_sd_vae_to_original import convert_vae
 

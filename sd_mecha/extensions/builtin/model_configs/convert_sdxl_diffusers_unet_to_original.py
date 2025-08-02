@@ -1,4 +1,5 @@
-from sd_mecha import merge_method, Parameter, Return, StateDict, StateDictKeyError
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
+from sd_mecha.streaming import StateDictKeyError
 from sd_mecha.extensions import model_configs
 from torch import Tensor
 
