@@ -104,6 +104,9 @@ def compose_lokr(state_dict: StateDictKeyHelper, target_shape: torch.Size):
 
         lora_dim = w2b.shape[0]
 
+    while w1.dim() < w2.dim():
+        w1 = w1.unsqueeze(-1)
+
     delta = torch.kron(w1, w2)
 
     alpha = state_dict.get_tensor("alpha", raise_on_missing=False)
