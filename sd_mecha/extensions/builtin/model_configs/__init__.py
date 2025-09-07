@@ -17,4 +17,3 @@ from .convert_sdxl_diffusers_unet_to_original import convert_sdxl_diffusers_unet
 from .convert_sd1_kohya_to_original import convert_sd1_kohya_to_original
 from . import convert_sdxl_blocks
 from . import convert_sd1_blocks
-from . import convert_sdxl_sgm_split
