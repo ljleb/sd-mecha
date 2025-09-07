@@ -77,6 +77,9 @@ def ties_sum_extended(
     maxiter: Parameter(int) = 100,
     ftol: Parameter(float) = 1e-20,
 ) -> Return(Tensor, "delta"):
+    if not models:
+        return 0
+
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
     if apply_median:
@@ -86,7 +89,7 @@ def ties_sum_extended(
         filtered_delta = filtered_delta.sum(dim=0)
         filtered_delta = filtered_delta * t / param_counts
 
-    return torch.nan_to_num(filtered_delta)
+    return torch.nan_to_num(filtered_delta, nan=0, posinf=0, neginf=0)
 
 
 # src: https://arxiv.org/abs/2306.01708
@@ -96,8 +99,11 @@ def ties_sum(
     k: Parameter(float) = 1.0,
     vote_sgn: Parameter(bool) = False,
 ) -> Return(Tensor, "delta"):
+    if not models:
+        return 0
+
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
-    return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts)
+    return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts, nan=0, posinf=0, neginf=0)
 
 
 def ties_sum_deltas(
@@ -105,6 +111,9 @@ def ties_sum_deltas(
     k: float = 0.2,
     vote_sgn: bool = False,
 ):
+    if models[0].numel() == 0:
+        return models[0], 1
+
     deltas = torch.stack([filter_top_k(m, k) for m in models], dim=0)
     signs = torch.sign(deltas)
     final_sign = torch.sign(torch.sum(deltas if vote_sgn else signs, dim=0))
@@ -116,6 +125,9 @@ def ties_sum_deltas(
 
 
 def filter_top_k(a: Tensor, k: float):
+    if a.numel() == 0:
+        return a
+
     k = max(int((1 - k) * a.numel()), 1)
     k_value, _ = a.flatten().abs().float().kthvalue(k)
     top_k_filter = (a.abs() >= k_value).float()
