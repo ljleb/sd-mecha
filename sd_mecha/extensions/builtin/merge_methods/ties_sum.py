@@ -107,7 +107,6 @@ def ties_sum(
         return models[0]
 
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
-
     return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts, nan=0, posinf=0, neginf=0)
 
 
