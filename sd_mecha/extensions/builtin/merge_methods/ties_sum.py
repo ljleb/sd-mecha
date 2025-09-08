@@ -116,9 +116,6 @@ def ties_sum_deltas(
     k: float = 0.2,
     vote_sgn: bool = False,
 ):
-    if models[0].numel() == 0:
-        return models[0], 1
-
     deltas = torch.stack([filter_top_k(m, k) for m in models], dim=0)
     signs = torch.sign(deltas)
     final_sign = torch.sign(torch.sum(deltas if vote_sgn else signs, dim=0))
