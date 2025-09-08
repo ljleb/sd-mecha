@@ -1,24 +1,3 @@
-"""
-## Comment / LaTeX translation ##
-- View in https://upmath.me/
-### add_difference_ties ###
-- `base`: $$ \theta_{init} $$
-- `*models`: $$ \{\theta_{init}\}_{t=1}^n $$
-- `models` after `subtract`: $$ \tau_t $$
-- `alpha`: $$ \lambda $$
-- `k`: $$ k $$ ( From $$ \% $$ to $$ 1 $$ )
-- `res`: $$ \lambda * \tau_m $$
-- `return`: $$ \theta_m $$
-### ties_sum ###
-- `delta`: $$ \hat{\tau}_t $$
-- `signs`: $$ \gamma_t $$ 
-- `final_sign`: $$ \gamma_m^p = sgn(\sum_{t=1}^n \hat{\tau}_t^p) $$ 
-- `delta_filters`: $$ \{ \gamma_t^p = \gamma_m^p \} $$
-- `param_counts`: $$ |A^p| $$
-- `filtered_delta`: $$ \sum_{t\in{A^p}} \hat{\tau}_t^p $$
-- `return`: $$ \lambda * \tau_m $$
-"""
-
 import torch
 import sd_mecha
 
@@ -56,3 +35,24 @@ def test_ties():
         vote_sgn=True,
     )
     assert not torch.allclose(actual, actual2)
+
+
+def test_ties_zero_dim():
+    k = 0.5
+
+    models = [
+        torch.tensor([]),
+        torch.tensor([])
+    ]
+
+    actual = sd_mecha.ties_sum.__wrapped__(*models, k=k)
+    assert actual.numel() == 0
+
+
+def test_ties_no_models():
+    k = 0.5
+
+    models = []
+
+    actual = sd_mecha.ties_sum.__wrapped__(*models, k=k)
+    assert actual == 0.0

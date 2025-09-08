@@ -1,3 +1,11 @@
+def _load_builtin_extensions():
+    import sd_mecha.extensions.builtin.model_configs
+    import sd_mecha.extensions.builtin.lycoris
+
+
+_load_builtin_extensions()
+
+
 from .merging import merge, open_input_dicts, infer_model_configs
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
@@ -43,13 +51,5 @@ from .merge_method_wrappers import (
     ties_with_dare,
     n_model_stock,
 )
-from .helpers import model, literal, Defaults, set_log_level
+from .helpers import model, literal, Defaults, set_log_level, skip_key
 from . import recipe_nodes, extensions
-
-
-def _load_builtin_extensions():
-    import sd_mecha.extensions.builtin.model_configs
-    import sd_mecha.extensions.builtin.lycoris
-
-
-_load_builtin_extensions()

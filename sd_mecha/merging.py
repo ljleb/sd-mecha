@@ -642,6 +642,9 @@ class MergeNodeWrapperStateDict(StateDict):
     def __iter__(self):
         return iter(self.keys())
 
+    def __contains__(self, item):
+        return item in self.compute_keys()
+
     def keys(self) -> Iterable[str]:
         return self.compute_keys().keys()
 
@@ -671,6 +674,8 @@ def cast_node_value(value, expected_type):
         return int(value)
     if issubclass(expected_type, float):
         return float(value)
+    if issubclass(expected_type, bool):
+        return bool(value)
     if issubclass(expected_type, torch.Tensor):
         return torch.tensor(value, dtype=torch.float32)
     return value
