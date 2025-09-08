@@ -127,9 +127,6 @@ def ties_sum_deltas(
 
 
 def filter_top_k(a: Tensor, k: float):
-    if a.numel() == 0:
-        return a
-
     k = max(int((1 - k) * a.numel()), 1)
     k_value, _ = a.flatten().abs().float().kthvalue(k)
     top_k_filter = (a.abs() >= k_value).float()
