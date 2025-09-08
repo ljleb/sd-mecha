@@ -79,6 +79,8 @@ def ties_sum_extended(
 ) -> Return(Tensor, "delta"):
     if not models:
         return 0
+    if models[0].numel() == 0:
+        return models[0]
 
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
 
@@ -101,10 +103,10 @@ def ties_sum(
 ) -> Return(Tensor, "delta"):
     if not models:
         return 0
+    if models[0].numel() == 0:
+        return models[0]
 
     filtered_delta, param_counts = ties_sum_deltas(*models, k=k, vote_sgn=vote_sgn)
-    if filtered_delta.numel() == 0:
-        return filtered_delta
 
     return torch.nan_to_num(filtered_delta.sum(dim=0) / param_counts, nan=0, posinf=0, neginf=0)
 
