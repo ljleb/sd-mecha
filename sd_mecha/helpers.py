@@ -2,7 +2,7 @@ import logging
 import pathlib
 import torch
 
-from . import StateDictKeyError
+from .streaming import StateDictKeyError
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig
 from .merging import merge
