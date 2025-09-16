@@ -1,3 +1,2 @@
-torch
-safetensors
+-r requirements.txt
 tkinterdnd2
