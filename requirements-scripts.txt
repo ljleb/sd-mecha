@@ -1,0 +1,3 @@
+python
+safetensors
+tkinterdnd2
