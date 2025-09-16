@@ -37,6 +37,8 @@ from sd_mecha.extensions.builtin.merge_methods import (
     pick_component,
     omit_component,
     exchange_ema,
+    isotropic,
+    isotropic_overrided,
     stack,
 )
 from .merge_method_wrappers import (

@@ -145,6 +145,92 @@ def truncate_rank(
 
     return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
 
+# https://arxiv.org/abs/2502.04959
+# Focus on Iso-C until I have idea to write Iso-CTS.
+# z_cof: 0 = iso-c, 1 = not applied, recommended 0.8 or 2.0, by "SVD image reconstruction test"
+# apply_exp: Use exponential mean instead of arithmetic mean. Proposed by ljleb.
+# apply_high_dim: Apply SVD on tensors with dim > 2. Paper apply for dim==2. SVD does not accept dim < 2.
+@merge_method
+def isotropic(
+    *deltas: Parameter(Tensor, "delta"),
+    z_cof: Parameter(float) = 0.0,
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
+) -> Return(Tensor, "delta"):
+
+    original_shape = deltas[0].shape
+
+    # Paper's code also exlude text_projection, but it may be fine?
+    if ((len(original_shape) > 2) and not apply_high_dim) or (len(original_shape) < 2):
+        # Fallback: Paper code use arithmetic mean
+        return (sum(deltas) / len(deltas)).reshape(original_shape)
+
+    # Workaround for dim > 2
+    d_ta = sum(deltas).flatten(start_dim=1)
+
+    # S_ta will be different from S_bar
+    U_ta, S_ta, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
+
+    # Can it be any kind of mean?
+    S_mean = S_ta.log().mean().exp() if apply_exp else S_ta.mean()
+
+    S_Var = S_ta.var()
+
+    Z_ta = (S_ta - S_mean) / S_Var
+
+    S_z = (Z_ta * z_cof) * S_Var + S_mean
+
+    # Follow paper's implementation
+    S_bar = torch.ones_like(S_ta) * S_z
+
+    d_Iso_c = torch.linalg.multi_dot((U_ta, torch.diag(S_bar), Vh_ta)) 
+
+    # Need reshape for d_Iso_c
+    return d_Iso_c.reshape(original_shape)
+
+# https://arxiv.org/abs/2502.04959
+# Instead of sum of vectors, we feed the merged vector.
+# z_cof: 0 = iso-c, 1 = not applied, recommended 0.8 or 2.0, by "SVD image reconstruction test"
+# apply_exp: Use exponential mean instead of arithmetic mean. Proposed by ljleb.
+# apply_high_dim: Apply SVD on tensors with dim > 2. Paper apply for dim==2. SVD does not accept dim < 2.
+@merge_method
+def isotropic_overrided(
+    d_ta: Parameter(Tensor, "delta"),
+    z_cof: Parameter(float) = 0.0,
+    apply_exp: Parameter(bool) = False,
+    apply_high_dim: Parameter(bool) = False,
+) -> Return(Tensor, "delta"):
+    
+    #Parameter checking
+    original_shape = d_ta.shape
+
+    # Paper's code also exlude text_projection, but it may be fine?
+    if ((len(original_shape) > 2) and not apply_high_dim) or (len(original_shape) < 2):
+        return d_ta
+    
+    # Workaround for dim > 2
+    d_ta = d_ta.flatten(start_dim=1)
+
+    # S_ta will be different from S_bar
+    U_ta, S_ta, Vh_ta = torch.linalg.svd(d_ta, full_matrices=False)
+
+    # Can it be any kind of mean?
+    S_mean = S_ta.log().mean().exp() if apply_exp else S_ta.mean()
+
+    S_Var = S_ta.var()
+
+    Z_ta = (S_ta - S_mean) / S_Var
+
+    S_z = (Z_ta * z_cof) * S_Var + S_mean
+
+    # Follow paper's implementation
+    S_bar = torch.ones_like(S_ta) * S_z
+
+    d_Iso_c = torch.linalg.multi_dot((U_ta, torch.diag(S_bar), Vh_ta)) 
+
+    # Need reshape for d_Iso_c
+    return d_Iso_c.reshape(original_shape)
+
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     n, p = a.shape[-2:]
