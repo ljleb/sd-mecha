@@ -1,24 +1,18 @@
-import safetensors
 import os
 import sys
-import tkinter as tk
-from tkinter import ttk
 import subprocess
+import tkinter as tk
 try:
     from tkinterdnd2 import TkinterDnD
     BaseClass = TkinterDnD.Tk
 except ImportError:
-    import tkinter as tk
     BaseClass = tk.Tk
 
-# IMPORTANT:
-# Requires torch installation in the environment
 
-
-class LoRAKeySaver(BaseClass):
+class KeySaver(BaseClass):
     def __init__(self):
         super().__init__()
-        self.title("LoRA Key Saver")
+        self.title("Key Saver")
         self.geometry("1000x700")
         self.minsize(800, 600)  # Lock minimum size
 
@@ -42,7 +36,7 @@ class LoRAKeySaver(BaseClass):
         self.grid_columnconfigure(0, weight=1)
 
         # Row 0: Input label
-        self.input_label = tk.Label(self, text="LoRA File Paths", font=self.large_font, bg=self.bg_color, fg=self.fg_color)
+        self.input_label = tk.Label(self, text="Safetensors Paths", font=self.large_font, bg=self.bg_color, fg=self.fg_color)
         self.input_label.grid(row=0, column=0, sticky="w", padx=10, pady=(10,0))
 
         # Row 1: Text input for paths
@@ -76,7 +70,7 @@ class LoRAKeySaver(BaseClass):
         self.button_frame.grid_columnconfigure(0, weight=1)
         self.button_frame.grid_columnconfigure(1, weight=1)
 
-        self.run_btn = tk.Button(self.button_frame, text="Process LoRAs", command=self.run_processing, font=self.button_font, height=3,
+        self.run_btn = tk.Button(self.button_frame, text="Process Safetensors", command=self.run_processing, font=self.button_font, height=3,
                                 bg=self.button_bg, fg=self.button_fg, activebackground="#555555", activeforeground=self.button_fg)
         self.run_btn.grid(row=0, column=0, padx=(0,5), sticky="ew")
 
@@ -155,20 +149,15 @@ class LoRAKeySaver(BaseClass):
             self.summary_text.insert(tk.END, "No files selected for processing.")
             return
 
-        cli_script_path = os.path.join(os.path.dirname(__file__), "cli_lora_keys.py")
-        command = ["python", cli_script_path] + items
-
+        cli_script_path = os.path.join(os.path.dirname(__file__), "dump_keys.py")
+        python_executable = sys.executable
+        out_dir = os.path.join(os.getcwd(), "output")
+        command = [python_executable, cli_script_path, "-r", "--out-dir", out_dir] + items
         try:
-            # Determine the Python executable from the current environment
-            python_executable = sys.executable
-            command = [python_executable, cli_script_path] + items
-
             # Run the CLI script
             result = subprocess.run(command, capture_output=True, text=True, check=False)
-            
-            summary_output = result.stdout
-            if result.stderr:
-                summary_output += "\nErrors:\n" + result.stderr
+
+            summary_output = result.stdout + result.stderr
 
             self.summary_text.delete("1.0", tk.END)
             self.summary_text.insert(tk.END, summary_output)
@@ -184,7 +173,7 @@ class LoRAKeySaver(BaseClass):
 
         except FileNotFoundError:
             self.summary_text.delete("1.0", tk.END)
-            self.summary_text.insert(tk.END, "Error: Python executable or cli_lora_keys.py not found. Make sure Python is in your PATH and cli_lora_keys.py exists.")
+            self.summary_text.insert(tk.END, "Error: dump_keys.py not found. Make sure it is placed in the same directory as dump_keys_gui.py.")
         except Exception as e:
             self.summary_text.delete("1.0", tk.END)
             self.summary_text.insert(tk.END, f"An unexpected error occurred: {e}")
@@ -193,8 +182,6 @@ class LoRAKeySaver(BaseClass):
         self.listbox.delete(0, tk.END)
 
 
-
 if __name__ == "__main__":
-    # GUI mode
-    app = LoRAKeySaver()
+    app = KeySaver()
     app.mainloop()

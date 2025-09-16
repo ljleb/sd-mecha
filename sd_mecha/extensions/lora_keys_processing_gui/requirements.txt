@@ -1,2 +1,0 @@
-safetensors
-tkinterdnd2
