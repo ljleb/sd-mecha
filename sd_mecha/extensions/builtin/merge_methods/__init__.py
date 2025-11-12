@@ -36,3 +36,13 @@ from .ties_sum import (
     geometric_median,
     dropout,
 )
+from .algebra import (
+    scale,
+    add,
+)
+from .mask import (
+    scale_by_mask,
+)
+from .norm import (
+    scale_to_match_rms,
+)
