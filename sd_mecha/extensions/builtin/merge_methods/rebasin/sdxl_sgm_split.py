@@ -133,7 +133,7 @@ def sdxl_sgm_split_rebasin(
     a: Parameter(StateDict[Tensor], model_config=sgm_split_config), # type: ignore
     ref: Parameter(StateDict[Tensor], model_config=sgm_split_config), # type: ignore
     iters: Parameter(int) = 10, # type: ignore
-    max_match_size: Parameter(int) = None, # type: ignore
+    max_match_size: Parameter(int | None) = None, # type: ignore
     **kwargs,
 ) -> Return(Tensor, model_config=sgm_split_config): # type: ignore
     """
@@ -368,3 +368,4 @@ def sdxl_sgm_split_randperm(
                 permutations[h_key] = permutation
 
         return torch.index_select(v, dim, permutations[key].to(device=v.device))
+
