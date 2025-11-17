@@ -110,6 +110,8 @@ def _front_flat(t: Tensor, axis: int) -> Tensor:
 
 def _solve_lap_max(sim_cpu: Tensor) -> Tensor:
     """Return perm p s.t. sum_i sim[i, p[i]] is maximized. sim on CPU."""
+    if sim_cpu.device.type != "cpu":
+        sim_cpu = sim_cpu.to("cpu")
     if sim_cpu.dtype.itemsize < 2:
         sim_cpu = sim_cpu.float()
     r, c = linear_sum_assignment((-sim_cpu).numpy(force=True))
@@ -117,13 +119,12 @@ def _solve_lap_max(sim_cpu: Tensor) -> Tensor:
 
 def _apply_other_axis_perms(t: Tensor, axis_cur: int, axes_perms: Dict[int, Tensor]) -> Tensor:
     """Apply all axis permutations except for axis_cur to tensor t."""
-    if not axes_perms:
-        return t
     out = t
     for ax_idx, p in axes_perms.items():
         if ax_idx == axis_cur:
             continue
-        out = torch.index_select(out, ax_idx, p.to(device=out.device))
+        # p is a 1D LongTensor containing the order for axis ax_idx
+        out = torch.index_select(out, ax_idx, p)
     return out
 
 
@@ -145,7 +146,7 @@ def sdxl_sgm_split_rebasin(
     if cache is None:
         raise RuntimeError("A cache must be passed to this merge method.")
 
-    # ---------------- one-time scaffolding in kwargs["cache"] ----------------
+    # One-time global scaffolding
     if "rebasin" not in cache:
         with _GLOBAL_INIT_LOCK:
             if "rebasin" not in cache:
@@ -157,7 +158,7 @@ def sdxl_sgm_split_rebasin(
                     "hedge_nodes": hedge_nodes,       # eid -> list[(key, axis)]
                     "locks_by_group": {},             # gid -> Lock
                     "perm_by_edge": {},               # eid -> LongTensor (CPU)
-                    "solved_groups": set(),           # gid -> solved boolean flag
+                    "solved_groups": set(),           # set[gid] that are solved
                 }
 
     rc = cache["rebasin"]
@@ -171,7 +172,7 @@ def sdxl_sgm_split_rebasin(
 
     gid = key_to_gid.get(key)
     if gid is None:
-        # No permutation constraints on this key.
+        # No permutation constraints for this key.
         return a[key]
 
     if gid not in locks_by_group:
@@ -179,62 +180,59 @@ def sdxl_sgm_split_rebasin(
             if gid not in locks_by_group:
                 locks_by_group[gid] = threading.Lock()
     lock = locks_by_group[gid]
-    
+
     with lock, torch.inference_mode():
-        # If group already solved, return stored perms to align the key
+        # If already solved, align this key with cached permutations.
         if gid in solved_groups:
-            return _align_single_key(a, key, perm_by_edge, hedge_nodes, groups_edges)
+            return _align_single_key(a, key, gid, perm_by_edge, hedge_nodes, groups_edges)
 
-
-        # --------- local memoization of StateDict indexing (critical) --------
+        # Local memoization for speed
         memo_a: Dict[str, Tensor] = {}
         memo_ref: Dict[str, Tensor] = {}
 
         def load_a(k: str) -> Tensor:
-            t = memo_a.get(k)
-            if t is None:
-                t = a[k]
-                memo_a[k] = t
-            return t
+            v = memo_a.get(k)
+            if v is None:
+                v = a[k]
+                memo_a[k] = v
+            return v
 
         def load_ref(k: str) -> Tensor:
-            t = memo_ref.get(k)
-            if t is None:
-                t = ref[k]
-                memo_ref[k] = t
-            return t
+            v = memo_ref.get(k)
+            if v is None:
+                v = ref[k]
+                memo_ref[k] = v
+            return v
 
         device = load_a(key).device
 
-        # Current axis-permutation map for each key (accumulated from edge perms)
-        key_axis_perm: Dict[str, Dict[int, torch.Tensor]] = {}
+        # Accumulated axis permutations per key (CPU tensors)
+        key_axis_perm: Dict[str, Dict[int, Tensor]] = {}
 
-        # Initialize missing permutations for edges in this group
+        # Initialize missing permutations per edge in group
         for eid in groups_edges[gid]:
             nodes = hedge_nodes[eid]
-            # Determine size N and check consistency within this hyperedge
             k0, ax0 = nodes[0]
             N = int(load_a(k0).shape[ax0])
-            for k, ax in nodes[1:]:
-                if int(load_a(k).shape[ax]) != N:
-                    raise ValueError(f"Hyperedge {eid} inconsistent size: {k} axis {ax} != {N}")
+            # sanity: all nodes in edge share same axis size
+            for k_i, ax_i in nodes[1:]:
+                if int(load_a(k_i).shape[ax_i]) != N:
+                    raise ValueError(f"Hyperedge {eid} inconsistent size: {k_i} axis {ax_i} != {N}")
             if eid not in perm_by_edge:
-                # Store perms on CPU by default (smaller cache footprint)
                 perm_by_edge[eid] = torch.arange(N, device=torch.device("cpu"), dtype=torch.long)
 
-        # Seed key_axis_perm from existing edge perms (for other axes)
+        # Seed local key_axis_perm from cache
         for eid in groups_edges[gid]:
-            perm_cpu = perm_by_edge[eid]
-            for k, ax in hedge_nodes[eid]:
-                d = key_axis_perm.setdefault(k, {})
-                if ax in d:
-                    # Enforce equality if multiple edges reference same (k, ax)
-                    if d[ax].numel() != perm_cpu.numel() or not torch.equal(d[ax].cpu(), perm_cpu):
-                        raise ValueError(f"Conflicting permutations for ({k}, axis={ax}) across edges.")
+            p_cpu = perm_by_edge[eid]
+            for k_i, ax_i in hedge_nodes[eid]:
+                d = key_axis_perm.setdefault(k_i, {})
+                if ax_i in d:
+                    if d[ax_i].numel() != p_cpu.numel() or not torch.equal(d[ax_i].cpu(), p_cpu):
+                        raise ValueError(f"Conflicting permutations for ({k_i}, axis={ax_i}) across edges.")
                 else:
-                    d[ax] = perm_cpu.clone()
+                    d[ax_i] = p_cpu.clone()
 
-        # ---------------- coordinate-descent over hyperedges -----------------
+        # Coordinate descent over hyperedges
         for _ in range(max(1, int(iters))):
             changed = False
             for eid in groups_edges[gid]:
@@ -242,102 +240,93 @@ def sdxl_sgm_split_rebasin(
                 k0, ax0 = nodes[0]
                 N = int(load_a(k0).shape[ax0])
 
-                # Optional safety valve for extremely large matches
+                # Optional cap to avoid huge N x N LAP when desired
                 if max_match_size is not None and N > int(max_match_size):
-                    # Identity; ensure key_axis_perm reflects identity on this edge's axes.
-                    ident_cpu = torch.arange(N, device=torch.device("cpu"), dtype=torch.long)
-                    if not torch.equal(perm_by_edge[eid], ident_cpu):
-                        perm_by_edge[eid] = ident_cpu
-                        for k, axis_cur in nodes:
-                            key_axis_perm.setdefault(k, {})[axis_cur] = ident_cpu.clone()
+                    ident = torch.arange(N, device=torch.device("cpu"), dtype=torch.long)
+                    if not torch.equal(perm_by_edge[eid], ident):
+                        perm_by_edge[eid] = ident
+                        for k_i, ax_i in nodes:
+                            key_axis_perm.setdefault(k_i, {})[ax_i] = ident.clone()
                         changed = True
                     continue
-                
-                # Build similarity S in float32 on the merge device, then copy to CPU for Hungarian
-                S = torch.zeros((N, N), device=device, dtype=torch.float32)
-                for k, axis_cur in nodes:
-                    Av = _front_flat(load_a(k), axis_cur).to(dtype=torch.float32)
 
-                    t_ref = load_ref(k)
-                    # Apply perms on all axes except current
-                    axes_perms = key_axis_perm.get(k, {})  # CPU tensors
-                    # Bring permutations to device only for indexing when needed
-                    axes_perms_dev = {ax: p.to(device=t_ref.device) for ax, p in axes_perms.items() if ax != axis_cur}
-                    if axes_perms_dev:
-                        B_other = _apply_other_axis_perms(t_ref, axis_cur, axes_perms_dev)
-                    else:
-                        B_other = t_ref
+                # Build S on device in float32, then run Hungarian on CPU
+                S = torch.zeros((N, N), device=device, dtype=torch.float32)
+                for k_i, axis_cur in nodes:
+                    Av = _front_flat(load_a(k_i), axis_cur).to(dtype=torch.float32)
+
+                    t_ref = load_ref(k_i)
+                    # Prepare index permutations (to ref device) for axes != current
+                    axes_perms_dev: Dict[int, Tensor] = {}
+                    for ax_idx, p_cpu in key_axis_perm.get(k_i, {}).items():
+                        if ax_idx == axis_cur:
+                            continue
+                        axes_perms_dev[ax_idx] = p_cpu.to(device=t_ref.device)
+
+                    B_other = _apply_other_axis_perms(t_ref, axis_cur, axes_perms_dev) if axes_perms_dev else t_ref
                     Bv = _front_flat(B_other, axis_cur).to(dtype=torch.float32)
 
-                    # Accumulate Av @ Bv.T
-                    # This is on device (GPU if merge_device="cuda")
+                    # Accumulate similarity
                     S.addmm_(Av, Bv.T, beta=1.0, alpha=1.0)
 
-                # Solve Hungarian on CPU; keep perms cached on CPU
                 new_perm = _solve_lap_max(S.detach().to("cpu"))
                 if not torch.equal(new_perm, perm_by_edge[eid]):
                     changed = True
                     perm_by_edge[eid] = new_perm
-                    # Update key_axis_perm for this edge's axes (store CPU)
-                    for k, axis_cur in nodes:
-                        key_axis_perm.setdefault(k, {})[axis_cur] = new_perm
+                    for k_i, ax_i in nodes:
+                        key_axis_perm.setdefault(k_i, {})[ax_i] = new_perm
 
             if not changed:
                 break
-            
-        # Mark group solved
+
+        # Mark group solved and align requested key
         solved_groups.add(gid)
-        
-        # Produce aligned tensor for requested key ONLY
-        return _align_single_key(a, key, perm_by_edge, hedge_nodes, groups_edges)
+        return _align_single_key(a, key, gid, perm_by_edge, hedge_nodes, groups_edges)
+
 
 def _align_single_key(
     a: StateDict[Tensor],
     key: str,
+    gid: int,
     perm_by_edge: Dict[int, Tensor],
     hedge_nodes: List[List[Tuple[str, int]]],
     groups_edges: List[Set[int]],
 ) -> Tensor:
+    """Apply solved permutations to tensor 'a[key]' and return aligned tensor."""
     tA = a[key]
     device = tA.device
     idx_inv = [slice(None)] * tA.dim()
-    
-    # Aggregate axis perms from all edges that contain this key
-    axes_perms_for_key: Dict[int, Tensor] = {}
-    for eid in groups_edges[perm_graph.components()[0].get(key, -1)] if False else []:
-        # Intentionally disabled
-        pass
-    
-    # Build permutations for this key from the edges directly
-    for eid, nodes in enumerate(hedge_nodes):
-        for k, ax in nodes:
-            if k != key:
+
+    # Collect inverse permutations on all axes for this key from edges in its group
+    for eid in groups_edges[gid]:
+        nodes = hedge_nodes[eid]
+        p_cpu = perm_by_edge.get(eid)
+        if p_cpu is None:
+            continue
+        for k_i, ax_i in nodes:
+            if k_i != key:
                 continue
-            p_cpu = perm_by_edge(eid)
-            if p_cpu is None:
-                continue
-            # Apply inverse permutation to align 'a' to reference
             p_dev = p_cpu.to(device=device)
             inv = torch.empty_like(p_dev)
             inv[p_dev] = torch.arange(len(p_dev), device=device)
-            idx_inv[ax] = inv
-    
-    aligned = tA[tuple(idx_inv)]
-    return aligned
+            idx_inv[ax_i] = inv
+
+    return tA[tuple(idx_inv)]
 
 
 @merge_method
 def sdxl_sgm_split_randperm(
-    a: Parameter(StateDict[Tensor], model_config=sgm_split_config), # type: ignore
-    seed: Parameter(int) = None, # type: ignore
-    **kwargs, # type: ignore
-) -> Return(Tensor, model_config=sgm_split_config): # type: ignore
+    a: Parameter(StateDict[Tensor], model_config=sgm_split_config),
+    seed: Parameter(int) = None,
+    **kwargs,
+) -> Return(Tensor, model_config=sgm_split_config):
+    """Baseline: apply a shared random permutation per hyperedge group (deterministic with seed)."""
     key: str = kwargs["key"]
     cache: Dict = kwargs.get("cache")
     if cache is None:
         raise RuntimeError("A cache must be passed to this merge method.")
 
-    # ---------- one-time topology & locks & maps (safe double-checked) ----------
+    # One-time topology & locks & maps (safe double-checked)
     if "hyperedge_by_key" not in cache:
         with _RP_INIT_LOCK:
             if "hyperedge_by_key" not in cache:
@@ -375,8 +364,7 @@ def sdxl_sgm_split_randperm(
                 generator = None
             size = v.shape[dim]
             permutation = torch.randperm(size, generator=generator, device=v.device)
-            for h_key, h_dim in hyperedge_by_key[key].items():
+            for h_key, _h_dim in hyperedge_by_key[key].items():
                 permutations[h_key] = permutation
 
         return torch.index_select(v, dim, permutations[key].to(device=v.device))
-
