@@ -108,7 +108,7 @@ def _front_flat(t: Tensor, axis: int) -> Tensor:
     return t.reshape(t.shape[0], -1).contiguous()
 
 
-def _solve_lap_max(sim: Tensor) -> Tensor:
+def _solve_lap_max(sim_cpu: Tensor) -> Tensor:
     """Return perm p s.t. sum_i sim[i, p[i]] is maximized. sim on CPU."""
     if sim_cpu.dtype.itemsize < 2:
         sim_cpu = sim_cpu.float()
@@ -379,3 +379,4 @@ def sdxl_sgm_split_randperm(
                 permutations[h_key] = permutation
 
         return torch.index_select(v, dim, permutations[key].to(device=v.device))
+
