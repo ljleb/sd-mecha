@@ -5,6 +5,10 @@ __pycache__
 /dist
 /config
 /venv
+/.venv
+/.vscode
 /model_configs/venvs
 
 /examples/*_test.py
+
+pyproject.lock
