@@ -248,7 +248,12 @@ class StructuralModelConfig(ModelConfig):
         return self._metadata_cache
 
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
-        return {}
+        if self._aliases_cache is None:
+            self._aliases_cache = OrderedDict(
+                (k, v.aliases)
+                for k, v in self.keys().items()
+            )
+        return self._aliases_cache
 
 
 class InferModelConfig(ModelConfig):
