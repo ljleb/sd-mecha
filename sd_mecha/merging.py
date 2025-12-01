@@ -156,15 +156,16 @@ def merge(
 
     with open_input_dicts(recipe, model_dirs, buffer_size_per_file, omit_extra_keys, check_mandatory_keys):
         if strict_weight_space and recipe.merge_space != "weight":
-            raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}'")
+            raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}' space")
 
-        recipe_metadata = recipe.model_config.metadata()
+        recipe_metadata = recipe.model_config.keys()
         if not omit_extra_keys:
             recipe, recipe_metadata = copy_extra_keys(recipe)
 
         if omit_ema and "ema" in recipe.model_config.components():
             for key in recipe.model_config.components()["ema"].keys():
                 if key in recipe_metadata:
+                    # remove ema keys from merge plan
                     del recipe_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
@@ -182,9 +183,9 @@ def merge(
         ):
             fix_torch_threading()
             futures = []
-            for key in recipe_metadata:
+            for key, key_metadata in recipe_metadata.items():
                 fn = recipe.accept
-                fn = _track_output(fn, output_dict, key, check_finite)
+                fn = _track_output(fn, output_dict, key, key_metadata, check_finite)
                 fn = _track_progress(fn, key, recipe_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 futures.append(executor.submit(fn, KeyMergeVisitor(key)))
@@ -213,7 +214,7 @@ def fix_torch_threading():
 def copy_extra_keys(recipe: RecipeNode):
     config = recipe.model_config
     merge_space = recipe.merge_space
-    metadata = config.metadata()
+    metadata = config.keys()
     aliases = {k_alias: k for k, k_aliases in config.aliases().items() for k_alias in k_aliases}
 
     forwardable_nodes_visitor = ForwardableNodesVisitor(config, merge_space)
@@ -229,7 +230,7 @@ def copy_extra_keys(recipe: RecipeNode):
 class ForwardableNodesVisitor(RecipeVisitor):
     target_config: ModelConfig
     target_merge_space: MergeSpace
-    forwardable_nodes: List[Tuple[RecipeNode, Mapping[str, TensorMetadata]]] = dataclasses.field(default_factory=list)
+    forwardable_nodes: List[Tuple[RecipeNode, Mapping[str, KeyMetadata]]] = dataclasses.field(default_factory=list)
 
     def visit_literal(self, node: LiteralRecipeNode):
         if not isinstance(node.value, Mapping) or not node.value:
@@ -245,14 +246,20 @@ class ForwardableNodesVisitor(RecipeVisitor):
             not any(node in n[0] for n in self.forwardable_nodes)
         ):
             metadata = OrderedDict(
-                (k, TensorMetadata(v.shape, v.dtype))
+                (k, KeyMetadata(v.shape, v.dtype))
                 for k, v in node.value.items()
             )
             self.forwardable_nodes.append((node, metadata))
 
     def visit_model(self, node: ModelRecipeNode):
         if node.model_config == self.target_config and not any(node in n[0] for n in self.forwardable_nodes):
-            self.forwardable_nodes.append((node, OrderedDict(node.state_dict.metadata())))
+            self.forwardable_nodes.append((
+                node,
+                OrderedDict(
+                    (k, KeyMetadata(v.shape, v.dtype))
+                    for k, v in node.state_dict.metadata()
+                )
+            ))
 
     def visit_merge(self, node: MergeRecipeNode):
         for arg in (*node.args, *node.kwargs.values()):
@@ -262,7 +269,7 @@ class ForwardableNodesVisitor(RecipeVisitor):
 @contextlib.contextmanager
 def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
-    merged_header: Mapping[str, TensorMetadata],
+    merged_header: Mapping[str, KeyMetadata],
     recipe: RecipeNode,
     model_dirs: Iterable[pathlib.Path],
     buffer_size_per_thread: int,
@@ -283,7 +290,7 @@ def _get_output_dict(
             serialized_recipe = None
         streamed_output = OutSafetensorsDict(
             output,
-            merged_header,
+            OrderedDict((k, TensorMetadata(v.shape, v.dtype)) for k, v in merged_header.items()),
             serialized_recipe,
             buffer_size_per_thread,
         )
@@ -297,19 +304,19 @@ def _get_output_dict(
         yield output
 
 
-def _track_output(fn, output, key, check_finite: bool):
+def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool):
     @functools.wraps(fn)
     def track_output(*args, **kwargs):
         try:
             res = fn(*args, **kwargs)
-            if check_finite and isinstance(res, torch.Tensor):
+            if check_finite and not key_metadata.optional and isinstance(res, torch.Tensor):
                 try:
                     all_finite = res.isfinite().all()
                 except RuntimeError:  # for example, fp8_e4m3fn doesn't support .isfinite()
                     all_finite = res.to(dtype=torch.bfloat16).isfinite().all()
 
                 if not all_finite:
-                    logging.warning(f"there are non finite values in key '{key}'")
+                    logging.warning(f"there are non finite values in key '{key_metadata}'")
 
             output[key] = res
         except StateDictKeyError as k:
@@ -374,7 +381,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
     strip_extra_keys: bool
     check_mandatory_keys: bool
     dicts_cache: MutableMapping[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
-    structural_metadata: MutableMapping[str, KeyMetadata] = dataclasses.field(default_factory=OrderedDict)
+    structural_metadata: MutableMapping[str, TensorMetadata] = dataclasses.field(default_factory=OrderedDict)
     param_config: Optional[ModelConfig] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
@@ -386,9 +393,9 @@ class LoadInputDictsVisitor(RecipeVisitor):
             if isinstance(v, RecipeNode):
                 v.accept(self)
             elif isinstance(v, torch.Tensor):
-                metadata[k] = KeyMetadata(v.shape, v.dtype, optional=True)
+                metadata[k] = TensorMetadata(v.shape, v.dtype)
             elif k not in metadata:
-                metadata[k] = KeyMetadata(None, None, optional=True)
+                metadata[k] = TensorMetadata(None, None)
 
         node.model_config = self.__determine_model_config(metadata, node.model_config)
         check_model_config(node.value, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, "<in-memory state dict>")
@@ -434,7 +441,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
 
         return self.dicts_cache[cache_key], path
 
-    def __determine_model_config(self, metadata: MutableMapping[str, KeyMetadata], config_hint: Optional[ModelConfig]) -> ModelConfig:
+    def __determine_model_config(self, metadata: MutableMapping[str, TensorMetadata], config_hint: Optional[ModelConfig]) -> ModelConfig:
         config = config_hint
         if config is None or config == model_configs.INFER:
             inferred_model_configs = infer_model_configs(metadata)
@@ -454,7 +461,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
                         del self.structural_metadata[k]
                     elif (
                         self.structural_metadata[k].shape is None or
-                        metadata[k].shape is not None and metadata[k].metadata().shape.numel() > self.structural_metadata[k].metadata().shape.numel()
+                        metadata[k].shape is not None and metadata[k].shape.numel() > self.structural_metadata[k].shape.numel()
                     ):
                         self.structural_metadata[k] = metadata[k]
             config = StructuralModelConfig(self.structural_metadata)

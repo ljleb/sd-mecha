@@ -223,6 +223,7 @@ def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
 
 class StructuralModelConfig(ModelConfig):
     def __init__(self, keys: Mapping[StateDictKey, TensorMetadata]):
+        self._metadata_cache = keys
         self._keys_cache = {k: KeyMetadata(v.shape, v.dtype) for k, v in keys.items()}
         self._metadata_cache = None
         self._aliases_cache = None
@@ -244,20 +245,10 @@ class StructuralModelConfig(ModelConfig):
         return self._keys_cache
 
     def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
-        if self._metadata_cache is None:
-            self._metadata_cache = OrderedDict(
-                (k, v.metadata())
-                for k, v in self.keys().items()
-            )
         return self._metadata_cache
 
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
-        if self._aliases_cache is None:
-            self._aliases_cache = OrderedDict(
-                (k, v.aliases)
-                for k, v in self.keys().items()
-            )
-        return self._aliases_cache
+        return {}
 
 
 class InferModelConfig(ModelConfig):
