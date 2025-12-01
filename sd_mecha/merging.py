@@ -309,7 +309,7 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
     def track_output(*args, **kwargs):
         try:
             res = fn(*args, **kwargs)
-            if check_finite and not key_metadata.optional and isinstance(res, torch.Tensor):
+            if check_finite and isinstance(res, torch.Tensor):
                 try:
                     all_finite = res.isfinite().all()
                 except RuntimeError:  # for example, fp8_e4m3fn doesn't support .isfinite()
