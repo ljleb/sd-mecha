@@ -1,0 +1,132 @@
+# Typical Use Cases
+
+Different tasks can be performed with sd-mecha. Here are typical use cases.
+
+## Merge Models
+
+A traditional merge method is `weighted_sum`. Let's use it as an illustrative example:
+
+```python
+import sd_mecha
+
+a = sd_mecha.model("path/to/model_a.safetensors")  # 1.
+b = sd_mecha.model("path/to/model_b.safetensors")  # 2.
+
+recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)  # 3.
+
+sd_mecha.merge(recipe, output="path/to/model_out.safetensors")  # 4.
+```
+
+Here is what happens at each step:
+
+1. `sd_mecha.model("path/to/model_a.safetensors")`: creates a handle to a safetensors model on disk. It will not load the model right away, only a reference to it
+2. `sd_mecha.model("path/to/model_b.safetensors")`: does the same as 1. but with a different model
+3. `sd_mecha.weighted_sum(a, b, alpha=0.5)`: creates a `weighted_sum` recipe node with `a` and `b` as children. It will not merge the models right away
+4. `sd_mecha.merge(recipe, output="path/to/model_out.safetensors")`: merges the recipe graph by streaming one key at a time to disk
+
+The `sd_mecha` module has multiple merge methods builtin (i.e. `sd_mecha.add_difference`, `sd_mecha.train_difference_mask`).
+See the [builtin merge methods listing](3-merge-methods-listing.md) for a comprehensive list of builtin merge methods and their associated descriptions.
+
+## Convert Models
+
+Some models have multiple different formats in which they can be represented.
+For example, SDXL has the SGM format, the diffusers format, and a bunch of others used to represent SDXL PEFT adapters.
+This is known to be a somewhat unwieldy part of handling models in the merging community.
+It prevents otherwise compatible models from easily being used together in state dict recipes.
+
+While there is code out there that converts between different formats of the same model, all conversion functions are scattered across different repositories.
+Furthermore, none of these conversion utilities are remotely efficient when it comes to system resources utilization.
+
+To simplify this process and to make it much less eager to deplete system resources, `sd_mecha` defines a simple conversion mechanism: `sd_mecha.convert()`.
+Here's an example of how you can use it. A typical use case is to merge a LoRA to a base model:
+
+```python
+import sd_mecha
+
+base = sd_mecha.model("path/to/base.safetensors")  # 1.
+lora = sd_mecha.model("path/to/lora.safetensors")  # 2.
+diff = sd_mecha.convert(lora, base)  # 3.
+recipe = base + diff | base  # 4.
+
+sd_mecha.merge(recipe)
+```
+
+Here is what happens at each step (skipping `merge_and_save` which was covered in [Merge Models](#merge-models)):
+
+1. `sd_mecha.model("path/to/base.safetensors")`: creates a handle to a base model.
+2. `sd_mecha.model("path/to/lora.safetensors")`: creates a handle to a LoRA adapter. (or any other model that is compatible with the base model up to conversion)
+3. `sd_mecha.convert(lora, base)`: finds the shortest path of pre-registered conversion functions that converts `lora` from its model config to that of `base`, and then sequentially composes a recipe graph over `lora` from these conversion functions.
+4. `base + diff | base`: creates a recipe node that will add the decompressed lora to the base model and fallback to `base` when a key is missing: `+` is a shorthand for `sd_mecha.add_difference` with `alpha=1.0`, and `|` is a shorthand for `sd_mecha.fallback`.
+
+## Blocks Merging (MBW)
+
+Another very common use case is to associate a weight to each "block" of a model, and then merge each "block" according to these weights (also known as [Merge Block Weighted (MBW)](https://note.com/kohya_ss/n/n9a485a066d5b)).
+For this to be possible, we need to define what a "block" is for a given model.
+This is because there is not always a true canonical way to neatly fit all keys of a model into fixed categories.
+For example, sometimes a small group of keys could belong to more than one block.
+
+For convenience, sd-mecha predefines block configs for models that have at least one block convention the community uses often.
+Some of these include:
+
+- SDXL supermerger blocks (`sdxl-supermerger_blocks`)
+- SD1 supermerger blocks (`sd1-supermerger_blocks`)
+
+This is how block-weighted merging works in sd-mecha:
+
+```python
+import sd_mecha
+
+a = sd_mecha.model("path/to/model_a.safetensors")
+b = sd_mecha.model("path/to/model_b.safetensors")
+
+blocks = {
+    "BASE": 0.0,
+    "IN00": 0.5,
+    "IN01": 0.25,
+    "IN02": 0.75,
+    # ...
+}
+blocks = sd_mecha.convert(blocks, a)
+blocks = blocks | 1.0  # optional
+
+recipe = sd_mecha.weighted_sum(a, b, alpha=blocks)
+
+sd_mecha.merge(recipe)
+```
+
+Step by step:
+
+1. `blocks` is a state dictionary of block weights.
+The keys of the blocks are specific to each architecture.
+However, in the case of supermerger, each key name is one of `INxx`, `OUTxx`, (here lower case `x` stands for any digit between `0` and `9`) `M00` and `BASE`. (and `VAE` for SDXL)
+2. `blocks = sd_mecha.convert(blocks, a)`: this converts the blocks to a full state dict of weights compatible with the input models.
+In other words, it broadcasts the block weights to the keys of `a`'s model config. Each key gets one block weight and each block weight is distributed to multiple keys.
+See [Convert Models](#convert-models) for an overview of `sd_mecha.convert`.
+3. `blocks = blocks | 1.0`: specifies that for any key that is missing a corresponding block, the fallback value is `1.0`.
+Note that this is optional if all block weights have been explicitly specified in the literal state dict.
+
+Defining custom blocks is a tad more involved, see [User-Defined Merge Methods > Custom Blocks Config](2-user-defined-merge-methods.md#custom-blocks-config) for more info.
+
+## Replace Model Components
+
+The keys of model configs are always distributed into different *components*. For example, SDXL has 4 components: `diffuser`, `clip_l`, `clip_g` and `vae`.
+Sometimes, all we really want is to replace one self-contained component of a model with a different one. Here is how to achieve this:
+
+```python
+import sd_mecha
+
+a = sd_mecha.model("path/to/model_a.safetensors")
+b = sd_mecha.model("path/to/model_b.safetensors")
+
+a_vae = sd_mecha.pick_component(a, "vae")  # 1.
+recipe = a_vae | b  # 2.
+
+sd_mecha.merge(recipe)
+```
+
+Explanation:
+
+1. `sd_mecha.pick_component(a, "vae")`: picks the `vae` component of model `a`. It discards all keys from other components.
+2. `a_vae | b`: replaces all missing keys (so keys that are not from the vae) with keys from `b`. The `|` operator is a shorthand for `sd_mecha.fallback`.
+
+Next: [User-Defined Merge Methods](2-user-defined-merge-methods.md)
