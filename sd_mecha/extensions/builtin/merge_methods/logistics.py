@@ -47,12 +47,10 @@ cast_dtype_map = {
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
     "int16": torch.int16,
-    "float8_e4m3fn": torch.float8_e4m3fn,
-    "float8_e5m2": torch.float8_e5m2,
     "int8": torch.int8,
     "bool": torch.bool,
 }
-for dtype_str in ("uint8", "uint16", "uint32", "uint64"):
+for dtype_str in ("uint8", "uint16", "uint32", "uint64", "float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz", "float8_e8m0fnu"):
     if hasattr(torch, dtype_str):
         cast_dtype_map[dtype_str] = getattr(torch, dtype_str)
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
