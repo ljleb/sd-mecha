@@ -108,8 +108,9 @@ for i in range(3):
             unet_conversion_map_layer[sd_up_atn_prefix] = hf_up_atn_prefix
 
     if i < 3:
+        # no downsample in down_blocks.3
         hf_downsample_prefix = f"down_blocks.{i}.downsamplers.0.conv."
-        sd_downsample_prefix = f"input_blocks.{3 * (i + 1)}.0.op."
+        sd_downsample_prefix = f"input_blocks.{3*(i+1)}.0.op."
         unet_conversion_map_layer[sd_downsample_prefix] = hf_downsample_prefix
 
         base = f"output_blocks.{3*i + 2}."
