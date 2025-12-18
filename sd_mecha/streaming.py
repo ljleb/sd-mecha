@@ -357,11 +357,17 @@ def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
             torch.bool: bool,
             torch.float64: numpy.float64,
             # XXX: This is ok because both have the same width and byteswap is a no-op anyway
-            torch.float8_e4m3fn: numpy.uint8,
-            torch.float8_e5m2: numpy.uint8,
-            torch.float8_e4m3fnuz: numpy.uint8,
-            torch.float8_e5m2fnuz: numpy.uint8,
         }
+        for dtype_str in (
+                "float8_e4m3fn",
+                "float8_e5m2",
+                "float8_e4m3fnuz",
+                "float8_e5m2fnuz",
+                "float8_e8m0fnu",
+        ):
+            if hasattr(torch, dtype_str):
+                NPDTYPES[getattr(torch, dtype_str)] = numpy.uint8
+
         npdtype = NPDTYPES[tensor.dtype]
         # Not in place as that would potentially modify a live running model
         data = data.view(npdtype).byteswap(inplace=False)
