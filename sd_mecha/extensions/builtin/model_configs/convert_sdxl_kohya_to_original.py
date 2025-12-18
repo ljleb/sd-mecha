@@ -2,8 +2,9 @@ import torch
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Return, Parameter
 from sd_mecha.extensions import model_configs
-from .convert_huggingface_sd_vae_to_original import convert_vae
 from .convert_sdxl_diffusers_unet_to_original import convert_unet
+from .convert_sdxl_diffusers_clip_g_to_original import convert_clip_g
+from .convert_huggingface_sd_vae_to_original import convert_vae
 
 
 sdxl_kohya_config = model_configs.resolve('sdxl-kohya')
@@ -27,33 +28,7 @@ def convert_sdxl_kohya_to_original(
         kohya_key = sgm_key.replace("conditioner.embedders.0.transformer.", "te1.")
         return kohya_sd[kohya_key]
     elif sgm_key.startswith("conditioner.embedders.1."):
-        if sgm_key.endswith("text_projection"):
-            kohya_key = "te2.text_projection.weight"
-        else:
-            kohya_key = sgm_key.replace("conditioner.embedders.1.model.", "te2.text_model.")
-            kohya_key = kohya_key.replace(".token_embedding.", ".embeddings.token_embedding.")
-            kohya_key = kohya_key.replace(".positional_embedding", ".embeddings.position_embedding.weight")
-            kohya_key = kohya_key.replace(".transformer.resblocks.", ".encoder.layers.")
-            kohya_key = kohya_key.replace(".attn.", ".self_attn.")
-            kohya_key = kohya_key.replace(".mlp.c_fc.", ".mlp.fc1.")
-            kohya_key = kohya_key.replace(".mlp.c_proj.", ".mlp.fc2.")
-            kohya_key = kohya_key.replace(".ln_final.", ".final_layer_norm.")
-            kohya_key = kohya_key.replace(".ln_", ".layer_norm")
-
-        if kohya_key.endswith((".in_proj_weight", ".in_proj_bias")):
-            is_bias = kohya_key.endswith("bias")
-            partial_key = kohya_key.replace(".in_proj_weight", "").replace(".in_proj_bias", "")
-            res = torch.vstack([
-                kohya_sd[f"{partial_key}.{k}_proj.{'bias' if is_bias else 'weight'}"]
-                for k in ("q", "k", "v")
-            ])
-        else:
-            res = kohya_sd[kohya_key]
-
-        if sgm_key.endswith("text_projection"):
-            res = res.T
-
-        return res
+        return convert_clip_g(kohya_sd, sgm_key)
     elif sgm_key.startswith("first_stage_model."):
         return convert_vae(kohya_sd, sgm_key)
     else:
@@ -79,33 +54,7 @@ def convert_sdxl_kohya_but_diffusers_to_original(
         kohya_key = sgm_key.replace("conditioner.embedders.0.transformer.", "te1.")
         return kohya_sd[kohya_key]
     elif sgm_key.startswith("conditioner.embedders.1."):
-        if sgm_key.endswith("text_projection"):
-            kohya_key = "te2.text_projection.weight"
-        else:
-            kohya_key = sgm_key.replace("conditioner.embedders.1.model.", "te2.text_model.")
-            kohya_key = kohya_key.replace(".token_embedding.", ".embeddings.token_embedding.")
-            kohya_key = kohya_key.replace(".positional_embedding", ".embeddings.position_embedding.weight")
-            kohya_key = kohya_key.replace(".transformer.resblocks.", ".encoder.layers.")
-            kohya_key = kohya_key.replace(".attn.", ".self_attn.")
-            kohya_key = kohya_key.replace(".mlp.c_fc.", ".mlp.fc1.")
-            kohya_key = kohya_key.replace(".mlp.c_proj.", ".mlp.fc2.")
-            kohya_key = kohya_key.replace(".ln_final.", ".final_layer_norm.")
-            kohya_key = kohya_key.replace(".ln_", ".layer_norm")
-
-        if kohya_key.endswith((".in_proj_weight", ".in_proj_bias")):
-            is_bias = kohya_key.endswith("bias")
-            partial_key = kohya_key.replace(".in_proj_weight", "").replace(".in_proj_bias", "")
-            res = torch.vstack([
-                kohya_sd[f"{partial_key}.{k}_proj.{'bias' if is_bias else 'weight'}"]
-                for k in ("q", "k", "v")
-            ])
-        else:
-            res = kohya_sd[kohya_key]
-
-        if sgm_key.endswith("text_projection"):
-            res = res.T
-
-        return res
+        return convert_clip_g(kohya_sd, sgm_key)
     elif sgm_key.startswith("first_stage_model."):
         return convert_vae(kohya_sd, sgm_key)
     else:
