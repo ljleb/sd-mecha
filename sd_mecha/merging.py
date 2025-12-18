@@ -316,7 +316,7 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
                     all_finite = res.to(dtype=torch.bfloat16).isfinite().all()
 
                 if not all_finite:
-                    logging.warning(f"there are non finite values in key '{key_metadata}'")
+                    logging.warning(f"there are non finite values in key '{key}': {key_metadata}")
 
             output[key] = res
         except StateDictKeyError as k:
