@@ -38,9 +38,6 @@ from sd_mecha.extensions.builtin.merge_methods import (
     omit_component,
     exchange_ema,
     stack,
-    sdxl_sgm_split_rebasin,
-    sdxl_sgm_split_randperm,
-    sdxl_sgm_align_attention,
 )
 from .merge_method_wrappers import (
     add_difference,
@@ -54,5 +51,5 @@ from .merge_method_wrappers import (
     ties_with_dare,
     n_model_stock,
 )
-from .helpers import model, literal, Defaults, set_log_level
+from .helpers import model, literal, Defaults, set_log_level, skip_key
 from . import recipe_nodes, extensions

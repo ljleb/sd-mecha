@@ -19,8 +19,8 @@ def crossover(
     if tilt == 1:
         return torch.lerp(a, b, alpha)
 
-    if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return torch.lerp(a, b, tilt)
+    if len(a.shape) == 0 or torch.allclose(a, b):
+        return torch.lerp(a, b, alpha)
 
     shape = a.shape
 

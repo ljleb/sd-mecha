@@ -8,15 +8,18 @@ from sd_mecha.streaming import StateDictKeyError
 
 
 def _register_all_lycoris_configs():
-    base_configs = model_configs.get_all_base()
-    for base_config in base_configs:
+    for base_config_id in (
+        "sdxl-kohya",
+        "sdxl-kohya_but_diffusers",
+        "sd1-kohya",
+    ):
+        base_config = model_configs.resolve(base_config_id)
         for lyco_config in (
             LycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)),
             LycorisModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
         ):
             model_configs.register_aux(lyco_config)
             lora_config_id = lyco_config.identifier
-            base_config_id = lyco_config.base_config.identifier
 
             @merge_method(identifier=f"convert_'{lora_config_id}'_to_base", is_conversion=True)
             def diffusers_lora_to_base(
@@ -103,6 +106,9 @@ def compose_lokr(state_dict: StateDictKeyHelper, target_shape: torch.Size):
             w2 = w2a @ w2_b_flat
 
         lora_dim = w2b.shape[0]
+
+    while w1.dim() < w2.dim():
+        w1 = w1.unsqueeze(-1)
 
     delta = torch.kron(w1, w2)
 

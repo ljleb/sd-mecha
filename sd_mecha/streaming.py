@@ -357,9 +357,17 @@ def tensor_to_bytes(tensor: torch.Tensor) -> bytes:
             torch.bool: bool,
             torch.float64: numpy.float64,
             # XXX: This is ok because both have the same width and byteswap is a no-op anyway
-            torch.float8_e4m3fn: numpy.uint8,
-            torch.float8_e5m2: numpy.uint8,
         }
+        for dtype_str in (
+                "float8_e4m3fn",
+                "float8_e5m2",
+                "float8_e4m3fnuz",
+                "float8_e5m2fnuz",
+                "float8_e8m0fnu",
+        ):
+            if hasattr(torch, dtype_str):
+                NPDTYPES[getattr(torch, dtype_str)] = numpy.uint8
+
         npdtype = NPDTYPES[tensor.dtype]
         # Not in place as that would potentially modify a live running model
         data = data.view(npdtype).byteswap(inplace=False)
@@ -375,10 +383,21 @@ DTYPE_MAPPING = {
     "BF16": (torch.bfloat16, 2),
     "I16": (torch.int16, 2),
     "I8": (torch.int8, 1),
-    "F8_E4M3": (torch.float8_e4m3fn, 1),
-    "F8_E5M2": (torch.float8_e5m2, 1),
     "BOOL": (torch.bool, 1),
 }
+
+
+for dtype_key, sft_key in (
+    ("F8_E4M3FN", "float8_e4m3fn"),
+    ("F8_E4M3FNUZ", "float8_e4m3fnuz"),
+    ("F8_E5M2", "float8_e5m2"),
+    ("F8_E5M2FNUZ", "float8_e5m2fnuz"),
+    ("F8_E8M0FNU", "float8_e8m0fnu"),
+):
+    if hasattr(torch, dtype_key):
+        DTYPE_MAPPING[sft_key] = (getattr(torch, dtype_key), 1)
+
+
 for i, dtype_str in enumerate(("uint8", "uint16", "uint32", "uint64")):
     if hasattr(torch, dtype_str):
         num_bytes = 2**i
