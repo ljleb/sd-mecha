@@ -40,6 +40,6 @@ class convert_sd1_blocks_to_ldm:
         blocks: Parameter(StateDict[T], model_config="sd1-supermerger_blocks"),
         **kwargs,
     ) -> Return(T, model_config="sd1-ldm"):
-        sgm_key = kwargs["key"]
-        block_key = self.get_key_reads("blocks", sgm_key)[0]
+        ldm_key = kwargs["key"]
+        block_key = self.get_key_reads("blocks", ldm_key)[0]
         return blocks[block_key]
