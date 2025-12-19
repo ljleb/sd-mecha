@@ -190,7 +190,7 @@ def merge(
                 fn = _track_output(fn, output_dict, key, key_metadata, check_finite)
                 fn = _track_progress(fn, key, recipe_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
-                futures.append(executor.submit(fn, KeyMergeVisitor(key, None, merge_methods_context)))
+                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context)))
 
             for future in as_completed(futures):
                 if future.exception() is not None:
@@ -204,7 +204,6 @@ def merge(
 
 
 def fix_torch_threading():
-    global fix_torch_threading
     if torch.cuda.is_available():
         # this greedy loads the torch.linalg module
         # avoids a hard error caused by threads>1 with some torch ops
@@ -546,8 +545,8 @@ class CloseInputDictsVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     key: str
-    parent_id: Optional[Tuple[RecipeNode, str]]
     merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    parent_id: Optional[Tuple[RecipeNode, str]] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
         value = node.value
@@ -589,7 +588,7 @@ class KeyMergeVisitor(RecipeVisitor):
                         context.instance,
                     )
                 finally:
-                    release_visitor = KeyReleaseVisitor(self.key, self.parent_id, self.merge_methods_context)
+                    release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id)
                     node.accept(release_visitor)
                 if isinstance(res, dict):
                     # todo: validate that the entire output key group is present
@@ -635,8 +634,8 @@ class KeyMergeVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class KeyReleaseVisitor(RecipeVisitor):
     key: str
-    parent_id: Optional[Tuple[RecipeNode, str]]
     merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    parent_id: Optional[Tuple[RecipeNode, str]]
 
     def visit_literal(self, node: LiteralRecipeNode):
         value = node.value
@@ -680,7 +679,7 @@ class KeyReleaseVisitor(RecipeVisitor):
             arg_node = node_args[arg_idx] if isinstance(arg_idx, int) else node_kwargs[arg_idx]
             key_reads = merge_method.get_key_reads(arg_name, self.key)
             release_visitors = [
-                KeyReleaseVisitor(key_read, parent_id, self.merge_methods_context)
+                KeyReleaseVisitor(key_read, self.merge_methods_context, parent_id)
                 for key_read in (key_reads or (self.key,))
             ]
             for release_visitor in release_visitors:

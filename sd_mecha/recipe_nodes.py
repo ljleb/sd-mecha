@@ -159,26 +159,6 @@ class ModelRecipeNode(RecipeNode):
             return False
 
 
-@dataclasses.dataclass
-class KeysCache:
-    group_keys_fn: Callable[[str], Iterable[str]]
-    key_groups: Dict[str, Set[str]] = dataclasses.field(default_factory=dict)
-    merged_keys: Dict[str, Any] = dataclasses.field(default_factory=dict)
-    lock: threading.Lock = threading.Lock()
-
-    def group_key(self, key: str) -> Set[str]:
-        with self.lock:
-            if key in self.key_groups:
-                return self.key_groups[key]
-
-            key_group = set(self.group_keys_fn(key))
-            if key not in key_group:
-                raise RuntimeError("a group of keys must contain the key it was requested for")
-
-            self.key_groups.update((key, key_group) for key in key_group)
-            return key_group
-
-
 class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
