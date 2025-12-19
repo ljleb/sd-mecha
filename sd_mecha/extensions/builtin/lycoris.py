@@ -28,7 +28,7 @@ def _register_all_lycoris_configs():
             ) -> Return(torch.Tensor, "delta", base_config_id):
                 key = kwargs["key"]
                 lycoris_keys = lyco_config.to_lycoris_keys(key)
-                all_base_keys = lora.model_config.base_config.keys()
+                all_base_keys = base_config.keys()
                 if not lycoris_keys or key not in all_base_keys:
                     raise StateDictKeyError(key)
 
@@ -43,6 +43,32 @@ def _register_all_lycoris_configs():
                         pass
 
                 raise StateDictKeyError(key)
+
+            @merge_method(identifier=f"extract_lora_'{lora_config_id}'")
+            def base_to_diffusers_lora(
+                base: Parameter(StateDict[torch.Tensor], "delta", base_config_id),
+                rank: Parameter(int) = 8,
+                **kwargs,
+            ) -> Return(StateDict[torch.Tensor], "weight", lora_config_id):
+                lycoris_key = kwargs["key"]
+                if not lycoris_key.endswith(lycoris_algorithms["lora"]):
+                    raise StateDictKeyError(lycoris_key)
+
+                key = lyco_config.lycoris_to_base_keys[lycoris_key]
+                up_key, _, down_key, alpha_key = lyco_config.to_lycoris_keys(key, ("lora",))
+
+                base_value = base[key]
+                svd_driver = "gesvd" if base_value.is_cuda else None
+                u, s, vh = torch.linalg.svd(base[key], full_matrices=False, driver=svd_driver)
+                s = s[..., :rank].sqrt()
+                u = u[..., :rank] * s.unsqueeze(-2)
+                vh = s.unsqueeze(-1) * vh[..., :rank, :]
+
+                return {
+                    up_key: u,
+                    down_key: vh,
+                    alpha_key: torch.full((0,), rank, device=base_value.device, dtype=base_value.dtype),
+                }
 
 
 class StateDictKeyHelper:
@@ -132,6 +158,12 @@ class LycorisModelConfig(LazyModelConfigBase):
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
         self.algorithms = list(sorted(algorithms))
+        self.lycoris_to_base_keys = {
+            lycoris_key: key
+            for key in base_config.keys()
+            for lycoris_keys in _to_lycoris_keys({key: KeyMetadata(None, None)}, algorithms, self.prefix)
+            for lycoris_key in lycoris_keys
+        }
 
     @property
     def identifier(self) -> str:
@@ -145,8 +177,8 @@ class LycorisModelConfig(LazyModelConfigBase):
         }
         return ModelConfigImpl(identifier, components)
 
-    def to_lycoris_keys(self, key: StateDictKey) -> Mapping[StateDictKey, KeyMetadata]:
-        return _to_lycoris_keys({key: KeyMetadata(None, None)}, self.algorithms, self.prefix)
+    def to_lycoris_keys(self, key: StateDictKey, algos: Iterable[str] = None) -> Mapping[StateDictKey, KeyMetadata]:
+        return _to_lycoris_keys({key: KeyMetadata(None, None)}, algos if algos is not None else self.algorithms, self.prefix)
 
 
 def _to_lycoris_keys(

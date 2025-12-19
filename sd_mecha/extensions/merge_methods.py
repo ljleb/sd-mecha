@@ -175,19 +175,21 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, fn: Callable | type, identifier: str):
-        self.__wrapped__ = fn
-        self.wrapped_is_class = inspect.isclass(fn)
-        if inspect.isfunction(fn) or inspect.ismethod(fn):
-            self.__f_spec = inspect.getfullargspec(fn)
-            self.__f_hints = typing.get_type_hints(fn)
-        elif inspect.isclass(fn):
-            if not hasattr(fn, "__call__"):
+    def __init__(self, fn_or_cls: Callable | type, identifier: str):
+        self.__wrapped__ = fn_or_cls
+        self.wrapped_is_class = inspect.isclass(fn_or_cls)
+        if self.wrapped_is_class:
+            if not hasattr(fn_or_cls, "__call__"):
                 raise TypeError("class merge methods must define a __call__ method")
-            fn = fn.__call__
-            self.__f_spec = inspect.getfullargspec(fn)
+            fn = fn_or_cls.__call__
+        else:
+            fn = fn_or_cls
+
+        self.__f_spec = inspect.getfullargspec(fn)
+        self.__f_hints = typing.get_type_hints(fn)
+
+        if self.wrapped_is_class:
             self_arg = self.__f_spec.args.pop(0)
-            self.__f_hints = typing.get_type_hints(fn)
             self.__f_hints.pop(self_arg, None)
 
         self.identifier = identifier
@@ -228,10 +230,15 @@ class MergeMethod:
             return self.__wrapped__()
         return None
 
-    def get_key_group(self, key: str) -> Set[str]:
-        if hasattr(self.__wrapped__, "get_key_group"):
-            return self.__wrapped__.get_key_group(key)
-        return set()
+    def get_key_reads(self, arg_name: str, key: str) -> Optional[Iterable[str, ...]]:
+        if hasattr(self.__wrapped__, "get_key_reads"):
+            return self.__wrapped__.get_key_reads(arg_name, key)
+        return None
+
+    def get_output_key_groups(self) -> Optional[Iterable[Tuple[str, ...]]]:
+        if hasattr(self.__wrapped__, "get_output_groups"):
+            return self.__wrapped__.get_output_groups()
+        return None
 
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"
@@ -242,12 +249,13 @@ class MergeMethod:
         input_kwargs: Dict[str, torch.Tensor | StateDict],
         key: str,
         cache: Optional[dict],
-        context: Optional[Any]
+        context: Optional[Any],
     ):
         args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, cache)
         fn = self.__wrapped__
         if self.wrapped_is_class:
-            fn = functools.partial(fn.__call__, context)
+            assert context is not None, f"class merge method {self.identifier} received self=None"
+            fn = functools.partial(self.__wrapped__.__call__, context)
         return fn(*args, **kwargs)
 
     def __get_args_kwargs(

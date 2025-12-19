@@ -182,7 +182,7 @@ class KeysCache:
 class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
-        merge_method,
+        merge_method: "merge_methods.MergeMethod",
         args: Tuple[RecipeNode, ...],
         kwargs: Dict[str, RecipeNode],
         cache: dict = None,
