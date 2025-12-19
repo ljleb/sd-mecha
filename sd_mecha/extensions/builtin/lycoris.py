@@ -19,7 +19,7 @@ def _register_all_lycoris_configs():
             LycorisModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
         ):
             model_configs.register_aux(lyco_config)
-            lyco_to_base, base_to_lyco = define_conversions(lyco_config)
+            lyco_to_base, base_to_algos = define_conversions(lyco_config)
 
 
 def define_conversions(lyco_config):
@@ -28,27 +28,40 @@ def define_conversions(lyco_config):
     base_config_id = base_config.identifier
 
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
-    def diffusers_lora_to_base(
-        lora: Parameter(StateDict[torch.Tensor], "weight", lyco_config_id),
-        **kwargs,
-    ) -> Return(torch.Tensor, "delta", base_config_id):
-        key = kwargs["key"]
-        lycoris_keys = lyco_config.to_lycoris_keys(key)
-        all_base_keys = lyco_config.base_config.keys()
-        if not lycoris_keys or key not in all_base_keys:
+    class DiffusersLycoToBase:
+        @staticmethod
+        def get_output_groups():
+            return list(base_config.keys())
+
+        @staticmethod
+        def get_key_reads(arg_name: str, base_key: str):
+            if arg_name != "lora":
+                return ()
+
+            return list(lyco_config.to_lycoris_keys(base_key))
+
+        def __call__(
+            self,
+            lora: Parameter(StateDict[torch.Tensor], "weight", lyco_config_id),
+            **kwargs,
+        ) -> Return(torch.Tensor, "delta", base_config_id):
+            key = kwargs["key"]
+            lycoris_keys = lyco_config.to_lycoris_keys(key)
+            all_base_keys = lyco_config.base_config.keys()
+            if not lycoris_keys or key not in all_base_keys:
+                raise StateDictKeyError(key)
+
+            target_shape = all_base_keys[key].shape
+
+            key_prefix = next(iter(lycoris_keys)).split(".")[0]
+            sd_helper = StateDictKeyHelper(lora, key_prefix)
+            for compose_fn in (compose_lora, compose_lokr):
+                try:
+                    return compose_fn(sd_helper, target_shape)
+                except StateDictKeyError:
+                    pass
+
             raise StateDictKeyError(key)
-
-        target_shape = all_base_keys[key].shape
-
-        key_prefix = next(iter(lycoris_keys)).split(".")[0]
-        sd_helper = StateDictKeyHelper(lora, key_prefix)
-        for compose_fn in (compose_lora, compose_lokr):
-            try:
-                return compose_fn(sd_helper, target_shape)
-            except StateDictKeyError:
-                pass
-
-        raise StateDictKeyError(key)
 
     @merge_method(identifier=f"extract_lora_'{lyco_config_id}'")
     class BaseToDiffusersLora:
@@ -96,7 +109,9 @@ def define_conversions(lyco_config):
                 alpha_key: torch.tensor(rank, device=base_value.device, dtype=base_value.dtype),
             }
 
-    return diffusers_lora_to_base, BaseToDiffusersLora
+    return DiffusersLycoToBase, {
+        "lora": BaseToDiffusersLora,
+    }
 
 
 class StateDictKeyHelper:
