@@ -30,10 +30,6 @@ def define_conversions(lyco_config):
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
     class DiffusersLycoToBase:
         @staticmethod
-        def get_output_groups():
-            return list(base_config.keys())
-
-        @staticmethod
         def get_key_reads(arg_name: str, base_key: str):
             if arg_name != "lora":
                 return ()

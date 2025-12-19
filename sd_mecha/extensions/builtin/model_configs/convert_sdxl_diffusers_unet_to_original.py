@@ -16,18 +16,25 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
     identifier=f"convert_'{sdxl_diffusers_unet_config.identifier}'_to_'{sdxl_sgm_config.identifier}'",
     is_conversion=True,
 )
-def convert_sdxl_diffusers_unet_to_original(
-    diffusers_sd: Parameter(StateDict[Tensor], model_config=sdxl_diffusers_unet_config),
-    **kwargs,
-) -> Return(Tensor, model_config=sdxl_sgm_config):
-    return convert_unet(diffusers_sd, kwargs["key"])
+class convert_sdxl_diffusers_unet_to_original:
+    @staticmethod
+    def get_key_reads(_param_name: str, sgm_key: str):
+        if sgm_key.startswith("model.diffusion_model"):
+            return (convert_unet_key(sgm_key),)
+        return ()
+
+    def __call__(
+        self,
+        diffusers_sd: Parameter(StateDict[Tensor], model_config=sdxl_diffusers_unet_config),
+        **kwargs,
+    ) -> Return(Tensor, model_config=sdxl_sgm_config):
+        return diffusers_sd[convert_unet_key(kwargs["key"])]
 
 
-def convert_unet(
-    diffusers_sd: StateDict[Tensor],
+def convert_unet_key(
     sgm_key: str,
     prefix: str = None
-) -> Tensor:
+) -> str:
     if not sgm_key.startswith("model.diffusion_model"):
         raise StateDictKeyError(sgm_key)
 
@@ -45,7 +52,7 @@ def convert_unet(
     if prefix is not None:
         kohya_key = prefix + kohya_key
 
-    return diffusers_sd[kohya_key]
+    return kohya_key
 
 
 unet_conversion_map = {

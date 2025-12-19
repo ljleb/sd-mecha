@@ -70,15 +70,17 @@ def Parameter(
     Returns:
         A special type annotation object used by `@merge_method` to interpret function arguments.
     """
-    supported_types = [StateDict] + list(T.__constraints__)
     if type(None) in (typing.get_args(interface) or ()):
         interface = typing.get_args(interface)[0]
 
-    if not isinstance(interface, TypeVar) and not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
-        raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
+    if not isinstance(interface, TypeVar):
+        supported_types = [StateDict] + list(T.__constraints__)
+        if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
+            raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, (str, MergeSpace)):
         merge_space = (merge_space,)
+
     if isinstance(merge_space, Iterable):
         merge_space = {
             merge_spaces.resolve(m) if isinstance(m, str) else m
@@ -102,7 +104,7 @@ class ReturnType:
 
 
 def Return(
-    interface: type[NonDictLiteralValue] | TypeVar,
+    interface: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
@@ -121,9 +123,9 @@ def Return(
         A type annotation object used by `@merge_method` for the return signature.
     """
     if not isinstance(interface, TypeVar):
-        supported_types = list(T.__constraints__)
+        supported_types = [StateDict] + list(T.__constraints__)
         if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
-            raise TypeError(f"type {interface} should be one of {', '.join(map(str, supported_types))}")
+            raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, str):
         merge_space = merge_spaces.resolve(merge_space)
@@ -195,6 +197,7 @@ class MergeMethod:
         self.identifier = identifier
         self.has_varkwargs = self.__f_spec.varkw is not None
         self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+
         self.__validate()
 
     def __validate(self):
@@ -218,27 +221,42 @@ class MergeMethod:
 
         input_configs_are_explicit = all(config is not None for config in input_configs.as_dict().values())
         if input_configs_are_explicit and self.get_return_config(input_configs.args_varargs(), input_configs.kwargs) is None:
-            raise TypeError("Cannot infer the model config to return from the input model configs")
+            raise TypeError("Cannot infer the model config to return from the input model configs.")
 
         return_data = self.__get_return_data(self.__f_hints.get("return"))  # validates return type annotation
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
             if not any(k.merge_space for k in params.as_dict().values()):
-                raise RuntimeError("when using a merge space symbol as output, it must also be used by at least one input parameter")
+                raise RuntimeError("When using a merge space symbol as output, it must also be used by at least one input parameter.")
+
+        configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {return_data.model_config}).difference({None})
+        is_conversion_implicitly = len(configs_involved) > 1
+        is_get_key_reads_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "get_key_reads", None), staticmethod)
+        if is_conversion_implicitly and not is_get_key_reads_defined:
+            raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'get_key_reads'")
+
+        is_return_dict = is_subclass(return_data.interface, StateDict)
+        is_get_output_groups_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "get_output_groups", None), staticmethod)
+        if is_return_dict and not is_get_output_groups_defined:
+            raise RuntimeError("A multi-output merge method must be a class merge method and define a static member 'get_output_groups'.")
 
     def instantiate(self):
         if self.wrapped_is_class:
             return self.__wrapped__()
         return None
 
-    def get_key_reads(self, arg_name: str, key: str) -> Optional[Iterable[str, ...]]:
+    def get_key_reads(self, arg_name: str, key: str) -> Iterable[str]:
         if hasattr(self.__wrapped__, "get_key_reads"):
             return self.__wrapped__.get_key_reads(arg_name, key)
-        return None
+        return (key,)
 
-    def get_output_key_groups(self) -> Optional[Iterable[Tuple[str, ...]]]:
-        if hasattr(self.__wrapped__, "get_output_groups"):
-            return self.__wrapped__.get_output_groups()
-        return None
+    def get_output_key_groups(self, model_config: ModelConfig) -> Iterable[Tuple[str, ...]]:
+        if not hasattr(self.__wrapped__, "get_output_groups"):
+            return [
+                (key,)
+                for key in model_config.keys()
+            ]
+
+        return self.__wrapped__.get_output_groups()
 
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"
@@ -495,7 +513,7 @@ class MergeMethod:
         return self.identifier
 
 
-F = TypeVar("F", bound=(Callable, type))
+F = TypeVar("F", bound=Callable | type)
 
 
 def merge_method(

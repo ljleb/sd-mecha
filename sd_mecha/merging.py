@@ -10,6 +10,8 @@ import pathlib
 import sys
 import threading
 import typing
+import warnings
+
 import torch
 from .extensions import model_configs, model_formats
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
@@ -198,6 +200,10 @@ def merge(
                         future_to_cancel.cancel()
                     raise future.exception()
                 future.result()
+
+            for node, mm_context in merge_methods_context.items():
+                if mm_context.output_refs:
+                    warnings.warn(f"memory leaked during the merge: {node}, number of entries: {len(mm_context.output_refs)}")
 
             if isinstance(output_dict, MutableMapping):
                 return output_dict
@@ -574,8 +580,8 @@ class KeyMergeVisitor(RecipeVisitor):
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         context = self.merge_methods_context[node]
-        with context.output_ref_context(self.key) as output_ref:
-            try:
+        try:
+            with context.output_ref_context(self.key) as output_ref:
                 if output_ref.cache is not None:
                     res = output_ref.cache
                 else:
@@ -588,15 +594,19 @@ class KeyMergeVisitor(RecipeVisitor):
                         context.instance,
                     )
                     if isinstance(res, dict):
-                        # todo: validate that the entire output key group is present
+                        assert any(not (set(res.keys()) - set(keys)) for keys in node.merge_method.get_output_key_groups(node.model_config)), (
+                            f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
+                        )
                         for key, value in res.items():
                             with context.output_ref_context(key, lock=False) as sibling_output_ref:
                                 # output_ref.cache is set here
                                 sibling_output_ref.set_cache(value)
                         res = res[self.key]
-            finally:
-                release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id)
-                node.accept(release_visitor)
+                    else:
+                        output_ref.set_cache(res)
+        finally:
+            release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id)
+            node.accept(release_visitor)
 
         return res
 
@@ -662,9 +672,9 @@ class KeyReleaseVisitor(RecipeVisitor):
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         context = self.merge_methods_context[node]
         with context.output_ref_context(self.key) as output_ref:
-            if self.parent_id is None or output_ref.held_by(self.parent_id):
-                output_ref.use_once(self.parent_id)
-                self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
+            # if self.parent_id is None or output_ref.held_by(self.parent_id):
+            output_ref.use_once(self.parent_id)
+            self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
 
     def __visit_deeper_first(
         self,
@@ -677,10 +687,9 @@ class KeyReleaseVisitor(RecipeVisitor):
 
         for arg_idx, arg_name in merge_method.get_param_names().as_dict(len(node_args)).items():
             arg_node = node_args[arg_idx] if isinstance(arg_idx, int) else node_kwargs[arg_idx]
-            key_reads = merge_method.get_key_reads(arg_name, self.key)
             release_visitors = [
                 KeyReleaseVisitor(key_read, self.merge_methods_context, parent_id)
-                for key_read in (key_reads or (self.key,))
+                for key_read in merge_method.get_key_reads(arg_name, self.key)
             ]
             for release_visitor in release_visitors:
                 error_holder.intercept(arg_node.accept, release_visitor)
@@ -774,28 +783,44 @@ def cast_node_value(value, expected_type):
 class CastInputDicts(RecipeVisitor):
     device: str | torch.device
     dtype: torch.dtype
+    converted_nodes: Dict[RecipeNode, RecipeNode] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode):
+        if node in self.converted_nodes:
+            return self.converted_nodes[node]
+
         if (
             isinstance(node.value, torch.Tensor | int | float) or
             isinstance(node.value, Mapping) and isinstance(next(iter(node.value.values())), torch.Tensor | int | float)
         ):
-            return node.to(device=self.device, dtype=self.dtype)
+            res = node.to(device=self.device, dtype=self.dtype)
+            self.converted_nodes[node] = res
+            return res
         if isinstance(node.value, Mapping) and isinstance(next(iter(node.value.values())), RecipeNode):
-            return LiteralRecipeNode(
+            res = LiteralRecipeNode(
                 {k: v.accept(self) for k, v in node.value.items()},
                 model_config=node.model_config,
                 merge_space=node.merge_space,
             )
+            self.converted_nodes[node] = res
+            return res
         return node
 
     def visit_model(self, node: ModelRecipeNode):
-        return node.to(device=self.device, dtype=self.dtype)
+        if node in self.converted_nodes:
+            return self.converted_nodes[node]
+        res = node.to(device=self.device, dtype=self.dtype)
+        self.converted_nodes[node] = res
+        return res
 
     def visit_merge(self, node: MergeRecipeNode):
-        return MergeRecipeNode(
+        if node in self.converted_nodes:
+            return self.converted_nodes[node]
+        res = MergeRecipeNode(
             node.merge_method,
             tuple(v.accept(self) for v in node.args),
             {k: v.accept(self) for k, v in node.kwargs.items()},
             node.cache,
         )
+        self.converted_nodes[node] = res
+        return res
