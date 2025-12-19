@@ -179,7 +179,7 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 class MergeMethod:
     def __init__(self, fn_or_cls: Callable | type, identifier: str):
         self.__wrapped__ = fn_or_cls
-        self.wrapped_is_class = inspect.isclass(fn_or_cls)
+        self.wrapped_is_class = inspect.isclass(fn_or_cls)  # todo: test class merge methods
         if self.wrapped_is_class:
             if not hasattr(fn_or_cls, "__call__"):
                 raise TypeError("class merge methods must define a __call__ method")
@@ -241,6 +241,7 @@ class MergeMethod:
 
     def instantiate(self):
         if self.wrapped_is_class:
+            # todo: test instance lifetime
             return self.__wrapped__()
         return None
 

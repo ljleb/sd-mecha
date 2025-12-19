@@ -6,6 +6,7 @@ from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecip
 from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple, Union
 
 
+# todo: test this function
 def create_merge_method_context(recipe: RecipeNode, root_keys: Iterable[str]) -> Dict[RecipeNode, "MergeMethodContext"]:
     ref_ids_visitor = GetOutputRefIdsVisitor(keys_constraint=list(root_keys))
     recipe.accept(ref_ids_visitor)
