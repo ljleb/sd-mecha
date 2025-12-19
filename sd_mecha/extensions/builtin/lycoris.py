@@ -67,7 +67,7 @@ def _register_all_lycoris_configs():
                 return {
                     up_key: u,
                     down_key: vh,
-                    alpha_key: torch.full((0,), rank, device=base_value.device, dtype=base_value.dtype),
+                    alpha_key: torch.tensor(rank, device=base_value.device, dtype=base_value.dtype),
                 }
 
 

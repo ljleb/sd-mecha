@@ -6,16 +6,16 @@ from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple
 
 
 def create_merge_method_context(recipe: RecipeNode, root_keys: Iterable[str]) -> Dict[RecipeNode, "MergeMethodContext"]:
-    ref_counts_visitor = GetOutputRefCountsVisitor(keys_constraint=list(root_keys))
-    recipe.accept(ref_counts_visitor)
-    nodes_ref_counts = ref_counts_visitor.nodes_ref_counts
-    create_context_visitor = CreateMergeMethodContextVisitor(nodes_ref_counts)
+    ref_ids_visitor = GetOutputRefIdsVisitor(keys_constraint=list(root_keys))
+    recipe.accept(ref_ids_visitor)
+    nodes_ref_ids = ref_ids_visitor.nodes_ref_ids
+    create_context_visitor = CreateMergeMethodContextVisitor(nodes_ref_ids)
     return recipe.accept(create_context_visitor)
 
 
 @dataclasses.dataclass
 class CreateMergeMethodContextVisitor(RecipeVisitor):
-    nodes_ref_counts: Dict[RecipeNode, Dict[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=dict)
+    nodes_ref_ids: Dict[RecipeNode, Dict[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode):
         res = {}
@@ -40,9 +40,9 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
 
         res[node] = MergeMethodContext(
             {
-                output_key: MergeMethodOutputRef(ref_count, None, locks[output_key])
-                for output_key, ref_count in self.nodes_ref_counts.get(node, {}).items()
-                if len(ref_count) >= 2
+                output_key: MergeMethodOutputRef(ref_ids, None, locks[output_key])
+                for output_key, ref_ids in self.nodes_ref_ids.get(node, {}).items()
+                if len(ref_ids) >= 2
             },
             node.merge_method.instantiate(),
         )
@@ -51,8 +51,8 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
 
 
 @dataclasses.dataclass
-class GetOutputRefCountsVisitor(RecipeVisitor):
-    nodes_ref_counts: Dict[RecipeNode, Dict[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=dict)
+class GetOutputRefIdsVisitor(RecipeVisitor):
+    nodes_ref_ids: Dict[RecipeNode, Dict[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=dict)
     keys_constraint: Sequence[str] = dataclasses.field(default_factory=list)
 
     def visit_literal(self, node: LiteralRecipeNode):
@@ -76,8 +76,8 @@ class GetOutputRefCountsVisitor(RecipeVisitor):
                 key_reads = node.merge_method.get_key_reads(arg_name, output_key)
                 if key_reads is None:
                     key_reads = (output_key,)
-                if arg_node not in self.nodes_ref_counts:
-                    self.nodes_ref_counts[arg_node] = {}
+                if arg_node not in self.nodes_ref_ids:
+                    self.nodes_ref_ids[arg_node] = {}
 
                 arg_config = arg_node.model_config
                 for key_read in key_reads:
@@ -87,9 +87,9 @@ class GetOutputRefCountsVisitor(RecipeVisitor):
                         f"The input key '{key_read}' does not exist for parameter {arg_name}. (the effective config is {arg_config.identifier})\n"
                         f"The output key that causes this problem is '{output_key}'. (the effective output config is {output_config.identifier})"
                     )
-                    arg_ref_counts = self.nodes_ref_counts[arg_node]
-                    arg_ref_counts.setdefault(key_read, set())
-                    arg_ref_counts[key_read].add((node, output_key))
+                    arg_ref_ids = self.nodes_ref_ids[arg_node]
+                    arg_ref_ids.setdefault(key_read, set())
+                    arg_ref_ids[key_read].add((node, output_key))
 
         for arg_node in (*node.args, *node.kwargs.values()):
             arg_node.accept(dataclasses.replace(self, keys_constraint=list(arg_node.model_config.keys())))
@@ -116,15 +116,15 @@ class MergeMethodContext:
 
 @dataclasses.dataclass
 class MergeMethodOutputRef:
-    refs: Set[Tuple[RecipeNode, str]]
+    ref_ids: Set[Tuple[RecipeNode, str]]
     cache: Any
     lock: threading.Lock | contextlib.AbstractContextManager
     locked: bool = False
 
-    def use_once(self, ref: Optional[Tuple[RecipeNode, str]]) -> Any:
+    def use_once(self, ref_id: Optional[Tuple[RecipeNode, str]]) -> Any:
         assert self.locked
         res = self.cache
-        self.refs.difference_update((ref,))
+        self.ref_ids.difference_update((ref_id,))
         if self.was_freed():
             self.cache = None
             self.lock = contextlib.nullcontext()
@@ -138,7 +138,7 @@ class MergeMethodOutputRef:
         self.cache = cache
 
     def was_freed(self) -> bool:
-        return len(self.refs) <= 0
+        return len(self.ref_ids) <= 0
 
     def __enter__(self):
         self.lock.__enter__()
