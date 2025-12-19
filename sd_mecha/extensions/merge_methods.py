@@ -228,7 +228,7 @@ class MergeMethod:
             if not any(k.merge_space for k in params.as_dict().values()):
                 raise RuntimeError("When using a merge space symbol as output, it must also be used by at least one input parameter.")
 
-        configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {return_data.model_config}).difference({None})
+        configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
         is_get_key_reads_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "get_key_reads", None), staticmethod)
         if is_conversion_implicitly and not is_get_key_reads_defined:

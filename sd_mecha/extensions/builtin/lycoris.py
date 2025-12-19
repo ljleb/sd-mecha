@@ -20,6 +20,7 @@ def _register_all_lycoris_configs():
         ):
             model_configs.register_aux(lyco_config)
             lyco_to_base, base_to_algos = define_conversions(lyco_config)
+            # todo: either assemble lora compression into a shared utility function, or extend conversion mm to arbitrary interfaces
 
 
 def define_conversions(lyco_config):

@@ -1,7 +1,6 @@
 import contextlib
 import dataclasses
 import threading
-
 from sd_mecha.extensions.model_configs import ModelConfig
 from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNode, RecipeVisitor
 from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple, Union
