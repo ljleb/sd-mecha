@@ -38,17 +38,19 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
             res |= arg_node.accept(dataclasses.replace(self, parent_config=arg_node_config))
 
         locks = {}
+        groups_by_key = {}
         node_config = node.model_config or self.parent_config
         for output_key_group in node.merge_method.get_output_key_groups(node_config):
             lock = threading.Lock()
             for output_key in output_key_group:
+                groups_by_key[output_key] = output_key_group
                 locks[output_key] = lock
 
         res[node] = MergeMethodContext(
             {
                 output_key: MergeMethodOutputRef(ref_ids, None, locks[output_key])
                 for output_key, ref_ids in self.nodes_ref_ids.get(node, {}).items()
-                if len(ref_ids) >= 2
+                if len(ref_ids) >= 2 or len(groups_by_key[output_key]) >= 2
             },
             node.merge_method.instantiate(),
         )
