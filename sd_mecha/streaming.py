@@ -141,7 +141,11 @@ class InSafetensorsDict(SafetensorsMapping):
         if start_pos < self.buffer_start_offset or start_pos + length > self.buffer_start_offset + len(self.buffer):
             self.file.seek(start_pos)
             necessary_buffer_size = max(self.default_buffer_size, length)
-            self.buffer = bytearray(necessary_buffer_size)
+            if len(self.buffer) < necessary_buffer_size:
+                self.buffer = bytearray(necessary_buffer_size)
+            else:
+                self.buffer = self.buffer[:necessary_buffer_size]
+
             self.file.readinto(self.buffer)
             self.buffer_start_offset = start_pos
 
@@ -160,7 +164,7 @@ class InSafetensorsDict(SafetensorsMapping):
             with self.lock:
                 self._ensure_buffer(absolute_start_pos, total_bytes)
                 buffer_offset = absolute_start_pos - self.buffer_start_offset
-                return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).reshape(shape)
+                return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).view(shape).clone()
 
 
 class StateDictKeyError(KeyError):
