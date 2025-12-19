@@ -18,7 +18,7 @@ T = TypeVar("T")
 @merge_method(is_conversion=True)
 class convert_sd1_blocks_to_ldm:
     @staticmethod
-    def get_key_reads(_param_name: str, ldm_key: str):
+    def input_keys_for_output(_param_name: str, ldm_key: str):
         block_key = "BASE"
         if ldm_key.startswith("model.diffusion_model."):
             block_key = "OUT11"
@@ -41,5 +41,5 @@ class convert_sd1_blocks_to_ldm:
         **kwargs,
     ) -> Return(T, model_config="sd1-ldm"):
         ldm_key = kwargs["key"]
-        block_key = self.get_key_reads("blocks", ldm_key)[0]
+        block_key = self.input_keys_for_output("blocks", ldm_key)[0]
         return blocks[block_key]

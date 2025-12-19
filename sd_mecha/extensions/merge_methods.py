@@ -230,14 +230,14 @@ class MergeMethod:
 
         configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
-        is_get_key_reads_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "get_key_reads", None), staticmethod)
-        if is_conversion_implicitly and not is_get_key_reads_defined:
-            raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'get_key_reads'")
+        is_input_keys_for_output_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "input_keys_for_output", None), staticmethod)
+        if is_conversion_implicitly and not is_input_keys_for_output_defined:
+            raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'input_keys_for_output'")
 
         is_return_dict = is_subclass(return_data.interface, StateDict)
-        is_get_output_groups_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "get_output_groups", None), staticmethod)
-        if is_return_dict and not is_get_output_groups_defined:
-            raise RuntimeError("A multi-output merge method must be a class merge method and define a static member 'get_output_groups'.")
+        is_output_groups_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "output_groups", None), staticmethod)
+        if is_return_dict and not is_output_groups_defined:
+            raise RuntimeError("A multi-output merge method must be a class merge method and define a static member 'output_groups'.")
 
     def instantiate(self):
         if self.wrapped_is_class:
@@ -245,19 +245,19 @@ class MergeMethod:
             return self.__wrapped__()
         return None
 
-    def get_key_reads(self, arg_name: str, key: str) -> Iterable[str]:
-        if hasattr(self.__wrapped__, "get_key_reads"):
-            return self.__wrapped__.get_key_reads(arg_name, key)
+    def input_keys_for_output(self, arg_name: str, key: str) -> Iterable[str]:
+        if hasattr(self.__wrapped__, "input_keys_for_output"):
+            return self.__wrapped__.input_keys_for_output(arg_name, key)
         return (key,)
 
-    def get_output_key_groups(self, model_config: ModelConfig) -> Iterable[Tuple[str, ...]]:
-        if not hasattr(self.__wrapped__, "get_output_groups"):
+    def output_groups(self, model_config: ModelConfig) -> Iterable[Tuple[str, ...]]:
+        if not hasattr(self.__wrapped__, "output_groups"):
             return [
                 (key,)
                 for key in model_config.keys()
             ]
 
-        return self.__wrapped__.get_output_groups()
+        return self.__wrapped__.output_groups()
 
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"

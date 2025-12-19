@@ -15,7 +15,7 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
 )
 class convert_sdxl_kohya_to_original:
     @staticmethod
-    def get_key_reads(_param_name: str, sgm_key: str):
+    def input_keys_for_output(_param_name: str, sgm_key: str):
         if sgm_key.startswith("model.diffusion_model."):
             return (sgm_key.replace("model.diffusion_model.", "unet."),)
         elif sgm_key.startswith("conditioner.embedders.0."):
@@ -57,7 +57,7 @@ sdxl_kohya_diffusers_config = model_configs.resolve('sdxl-kohya_but_diffusers')
 )
 class convert_sdxl_kohya_but_diffusers_to_original:
     @staticmethod
-    def get_key_reads(_param_name: str, sgm_key: str):
+    def input_keys_for_output(_param_name: str, sgm_key: str):
         if sgm_key.startswith("model.diffusion_model."):
             return (convert_unet_key(sgm_key, prefix="unet."),)
         elif sgm_key.startswith("conditioner.embedders.0."):

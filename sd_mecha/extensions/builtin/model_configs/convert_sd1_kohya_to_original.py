@@ -18,7 +18,7 @@ sd1_ldm = model_configs.resolve("sd1-ldm")
 )
 class convert_sd1_kohya_to_original:
     @staticmethod
-    def get_key_reads(_param_name: str, ldm_key: str):
+    def input_keys_for_output(_param_name: str, ldm_key: str):
         if ldm_key.startswith("model.diffusion_model."):
             return (convert_unet_key(ldm_key),)
         elif ldm_key.startswith("cond_stage_model."):

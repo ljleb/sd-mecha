@@ -18,7 +18,7 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
 )
 class convert_sdxl_diffusers_unet_to_original:
     @staticmethod
-    def get_key_reads(_param_name: str, sgm_key: str):
+    def input_keys_for_output(_param_name: str, sgm_key: str):
         if sgm_key.startswith("model.diffusion_model"):
             return (convert_unet_key(sgm_key),)
         return ()

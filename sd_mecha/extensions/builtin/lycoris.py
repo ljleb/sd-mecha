@@ -31,7 +31,7 @@ def define_conversions(lyco_config):
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
     class DiffusersLycoToBase:
         @staticmethod
-        def get_key_reads(_arg_name: str, base_key: str):
+        def input_keys_for_output(_arg_name: str, base_key: str):
             return list(lyco_config.to_lycoris_keys(base_key))
 
         def __call__(
@@ -60,7 +60,7 @@ def define_conversions(lyco_config):
     @merge_method(identifier=f"extract_lora_'{lyco_config_id}'")
     class BaseToDiffusersLora:
         @staticmethod
-        def get_output_groups():
+        def output_groups():
             def get_output_tuple(base_key: str):
                 up, _, down, alpha = lyco_config.to_lycoris_keys(base_key, ("lora",))
                 return up, down, alpha
@@ -71,7 +71,7 @@ def define_conversions(lyco_config):
             ]
 
         @staticmethod
-        def get_key_reads(arg_name: str, lyco_key: str):
+        def input_keys_for_output(arg_name: str, lyco_key: str):
             if arg_name != "base":
                 return ()
 
@@ -87,7 +87,7 @@ def define_conversions(lyco_config):
             if not lyco_key.endswith(lycoris_algorithms["lora"]):
                 raise StateDictKeyError(lyco_key)
 
-            key, = self.get_key_reads("base", lyco_key)
+            key, = self.input_keys_for_output("base", lyco_key)
             up_key, _, down_key, alpha_key = lyco_config.to_lycoris_keys(key, ("lora",))
 
             base_value = base[key]

@@ -18,7 +18,7 @@ T = TypeVar("T")
 @merge_method(is_conversion=True)
 class convert_sdxl_blocks_to_sgm:
     @staticmethod
-    def get_key_reads(_param_name: str, sgm_key: str):
+    def input_keys_for_output(_param_name: str, sgm_key: str):
         block_key = "BASE"
         if sgm_key.startswith("model.diffusion_model."):
             block_key = "OUT08"
@@ -43,5 +43,5 @@ class convert_sdxl_blocks_to_sgm:
         **kwargs,
     ) -> Return(T, model_config="sdxl-sgm"):
         sgm_key = kwargs["key"]
-        block_key = self.get_key_reads("blocks", sgm_key)[0]
+        block_key = self.input_keys_for_output("blocks", sgm_key)[0]
         return blocks[block_key]

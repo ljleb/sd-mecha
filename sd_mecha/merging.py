@@ -197,7 +197,6 @@ def merge(
                 if future.exception() is not None:
                     for future_to_cancel in futures:
                         future_to_cancel.cancel()
-                    raise future.exception()
                 future.result()
 
             for node, mm_context in merge_methods_context.items():
@@ -358,7 +357,10 @@ def _wrap_thread_context(fn, ctx):
 class ThisThreadExecutor(nullcontext):
     def submit(self, fn, /, *args, **kwargs):
         result = Future()
-        result.set_result(fn(*args, **kwargs))
+        try:
+            result.set_result(fn(*args, **kwargs))
+        except BaseException as e:
+            result.set_exception(e)
         return result
 
 
@@ -593,7 +595,7 @@ class KeyMergeVisitor(RecipeVisitor):
                         context.instance,
                     )
                     if isinstance(res, dict):
-                        assert any(not (set(res.keys()) - set(keys)) for keys in node.merge_method.get_output_key_groups(node.model_config)), (
+                        assert any(not (set(res.keys()) - set(keys)) for keys in node.merge_method.output_groups(node.model_config)), (
                             f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
                         )
                         for key, value in res.items():
@@ -688,7 +690,7 @@ class KeyReleaseVisitor(RecipeVisitor):
             arg_node = node_args[arg_idx] if isinstance(arg_idx, int) else node_kwargs[arg_idx]
             release_visitors = [
                 KeyReleaseVisitor(key_read, self.merge_methods_context, parent_id)
-                for key_read in merge_method.get_key_reads(arg_name, self.key)
+                for key_read in merge_method.input_keys_for_output(arg_name, self.key)
             ]
             for release_visitor in release_visitors:
                 error_holder.intercept(arg_node.accept, release_visitor)
@@ -790,12 +792,12 @@ class CastInputDicts(RecipeVisitor):
 
         if (
             isinstance(node.value, torch.Tensor | int | float) or
-            isinstance(node.value, Mapping) and isinstance(next(iter(node.value.values())), torch.Tensor | int | float)
+            isinstance(node.value, Mapping) and node.value and isinstance(next(iter(node.value.values())), torch.Tensor | int | float)
         ):
             res = node.to(device=self.device, dtype=self.dtype)
             self.converted_nodes[node] = res
             return res
-        if isinstance(node.value, Mapping) and isinstance(next(iter(node.value.values())), RecipeNode):
+        if isinstance(node.value, Mapping) and node.value and isinstance(next(iter(node.value.values())), RecipeNode):
             res = LiteralRecipeNode(
                 {k: v.accept(self) for k, v in node.value.items()},
                 model_config=node.model_config,
