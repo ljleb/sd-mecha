@@ -141,11 +141,7 @@ class InSafetensorsDict(SafetensorsMapping):
         if start_pos < self.buffer_start_offset or start_pos + length > self.buffer_start_offset + len(self.buffer):
             self.file.seek(start_pos)
             necessary_buffer_size = max(self.default_buffer_size, length)
-            if len(self.buffer) < necessary_buffer_size:
-                self.buffer = bytearray(necessary_buffer_size)
-            else:
-                self.buffer = self.buffer[:necessary_buffer_size]
-
+            self.buffer = bytearray(necessary_buffer_size)
             self.file.readinto(self.buffer)
             self.buffer_start_offset = start_pos
 
@@ -216,7 +212,7 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
 
         state = self.thread_states[tid]
 
-        tensor_bytes = tensor_to_bytes(tensor)
+        tensor_bytes = tensor_to_bytes(tensor.cpu().contiguous())
         tensor_size = len(tensor_bytes)
 
         if tensor_size > len(state.buffer) - state.memory_used:

@@ -147,7 +147,7 @@ def merge(
     )
     buffer_size_per_file = total_buffer_size // max(1, total_files_open)
     if threads is None:
-        threads = min(max(total_files_open, 2), os.cpu_count(), 8)
+        threads = min(max(total_files_open, 2), os.cpu_count() or 1, 8)
 
     if threads == 0:
         thread_local_data = SimpleNamespace()

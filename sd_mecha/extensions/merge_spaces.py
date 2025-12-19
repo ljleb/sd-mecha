@@ -50,7 +50,7 @@ def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
     elif isinstance(merge_space, MergeSpaceSymbol):
         return get_identifiers(merge_space.merge_spaces)
     else:
-        raise TypeError(f"expected {MergeSpaceSymbol.__name__} or Tuple[{MergeSpace.__name__}, ...], got {type(merge_space)}")
+        raise TypeError(f"expected {MergeSpaceSymbol.__name__} or Set[{MergeSpace.__name__}, ...], got {type(merge_space)}")
 
 
 def get_all() -> Set[MergeSpace]:
