@@ -575,10 +575,10 @@ class KeyMergeVisitor(RecipeVisitor):
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         context = self.merge_methods_context[node]
         with context.output_ref_context(self.key) as output_ref:
-            if output_ref.cache is not None:
-                res = output_ref.cache
-            else:
-                try:
+            try:
+                if output_ref.cache is not None:
+                    res = output_ref.cache
+                else:
                     merged_args, merged_kwargs = self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
                     res = node.merge_method.merge_key(
                         merged_args,
@@ -587,16 +587,16 @@ class KeyMergeVisitor(RecipeVisitor):
                         node.cache,
                         context.instance,
                     )
-                finally:
-                    release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id)
-                    node.accept(release_visitor)
-                if isinstance(res, dict):
-                    # todo: validate that the entire output key group is present
-                    for key, value in res.items():
-                        with context.output_ref_context(key, lock=False) as sibling_output_ref:
-                            # output_ref.cache is set here
-                            sibling_output_ref.set_cache(value)
-                    res = res[self.key]
+                    if isinstance(res, dict):
+                        # todo: validate that the entire output key group is present
+                        for key, value in res.items():
+                            with context.output_ref_context(key, lock=False) as sibling_output_ref:
+                                # output_ref.cache is set here
+                                sibling_output_ref.set_cache(value)
+                        res = res[self.key]
+            finally:
+                release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id)
+                node.accept(release_visitor)
 
         return res
 
