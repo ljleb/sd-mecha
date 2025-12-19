@@ -43,5 +43,5 @@ class convert_sdxl_blocks_to_sgm:
         **kwargs,
     ) -> Return(T, model_config="sdxl-sgm"):
         sgm_key = kwargs["key"]
-        block_key = self.get_key_reads("blocks", sgm_key)
+        block_key = self.get_key_reads("blocks", sgm_key)[0]
         return blocks[block_key]
