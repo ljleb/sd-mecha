@@ -1,13 +1,10 @@
 import abc
-import dataclasses
 import itertools
 import pathlib
-import threading
-
 import torch
 from .extensions import model_configs, merge_methods, merge_spaces
 from .extensions.merge_spaces import MergeSpace
-from typing import Optional, Dict, Tuple, Union, Callable, Iterable, Set, Any
+from typing import Optional, Dict, Tuple, Union
 
 
 class RecipeNode(abc.ABC):
