@@ -87,7 +87,15 @@ def define_conversions(lyco_config):
             if arg_name != "base":
                 return ()
 
-            return (lyco_config.lycoris_to_base_keys[lyco_key],)
+            base_key = lyco_config.lycoris_to_base_keys.get(lyco_key)
+            return (base_key,) if base_key is not None else ()
+
+        @classmethod
+        def base_key_for_output(cls, lyco_key: str):
+            base_keys = cls.input_keys_for_output(lyco_key, "base")
+            if not base_keys:
+                raise StateDictKeyError(lyco_key)
+            return base_keys[0]
 
     @merge_method(identifier=f"extract_lora_'{lyco_config_id}'")
     class BaseToDiffusersLora(BaseToDiffusersLycoris):
@@ -106,12 +114,9 @@ def define_conversions(lyco_config):
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
             lora_key = kwargs["key"]
-            base_key, = self.input_keys_for_output(lora_key, "base")
+            base_key = self.base_key_for_output(lora_key)
             lora_keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
-            if not lora_keys:
-                raise StateDictKeyError(lora_key)
-
-            if not lora_key.endswith(lora_keys):
+            if lora_key not in lora_keys:
                 raise StateDictKeyError(lora_key)
 
             up_key, down_key, alpha_key = lora_keys
@@ -149,15 +154,12 @@ def define_conversions(lyco_config):
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
             lokr_key = kwargs["key"]
-            base_key, = self.input_keys_for_output(lokr_key, "base")
+            base_key, = self.base_key_for_output(lokr_key)
             lokr_keys = lyco_config.to_lycoris_keys(base_key, ("lokr",))
-            if not lokr_keys:
+            if lokr_key not in lokr_keys:
                 raise StateDictKeyError(lokr_key)
 
             w1_key, w2_key = lokr_keys
-            if not lokr_key.endswith(lokr_keys):
-                raise StateDictKeyError(lokr_key)
-
             base_value = base[base_key]
             shape_original = base_value.shape
             m1, m2, n1, n2 = kron_dims_from_ratio(shape_original, kronecker_ratio)
