@@ -1,5 +1,4 @@
 import abc
-import copy
 import dataclasses
 import functools
 import itertools
@@ -189,12 +188,22 @@ class MergeMethod:
 
         self.__f_spec = inspect.getfullargspec(fn)
         self.__f_hints = typing.get_type_hints(fn)
+        signature = inspect.signature(fn)
+        self.__f_signature = signature.replace(
+            parameters=[
+                p.replace(annotation=_ensure_parameter(p.annotation, p.name) if p.annotation != p.empty else p)
+                for p in signature.parameters.values()
+            ],
+            return_annotation=_ensure_return(signature.return_annotation)
+        )
 
         self.__output_groups = {}
 
         if self.wrapped_is_class:
-            self_arg = self.__f_spec.args.pop(0)
-            self.__f_hints.pop(self_arg, None)
+            if not isinstance(inspect.getattr_static(fn, "__call__"), (classmethod, staticmethod)):
+                self_arg = self.__f_spec.args.pop(0)
+                self.__f_hints.pop(self_arg, None)
+                self.__f_signature = self.__f_signature.replace(parameters=[v for v in self.__f_signature.parameters.values() if v.name != self_arg])
 
             if hasattr(self.__wrapped__, "output_groups"):
                 output_groups = self.__wrapped__.output_groups()
@@ -245,7 +254,7 @@ class MergeMethod:
             raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'input_keys_for_output'")
 
         is_return_dict = is_subclass(return_data.interface, StateDict)
-        is_output_groups_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "output_groups", None), staticmethod)
+        is_output_groups_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "output_groups", None), (staticmethod, classmethod))
         if is_return_dict and not is_output_groups_defined:
             raise RuntimeError("A multi-output merge method must be a class merge method and define a static member 'output_groups'.")
 
@@ -279,7 +288,7 @@ class MergeMethod:
         fn = self.__wrapped__
         if self.wrapped_is_class:
             assert context is not None, f"class merge method {self.identifier} received self=None"
-            fn = functools.partial(self.__wrapped__.__call__, context)
+            return context(*args, **kwargs)
         return fn(*args, **kwargs)
 
     def __get_args_kwargs(
@@ -297,55 +306,29 @@ class MergeMethod:
         return input_args, input_kwargs
 
     def __call__(self, *args, **kwargs) -> MergeRecipeNode:
-        return self.create_recipe(args, kwargs)
+        bound_args = self.__f_signature.bind(*args, **kwargs)
+        bound_args.apply_defaults()
+        return self.create_recipe(bound_args)
 
-    def create_recipe(self, args, kwargs) -> MergeRecipeNode:
-        params = self.get_param_names()
-        defaults = self.get_default_args()
-        first_default_arg = len(params.args) - len(defaults.args)
-
-        first_arg_as_kwarg = min((
-            *(params.args.index(k) for k in kwargs if k in params.args),
-            float('inf'),
-        ))
-
-        def ensure_positive(v: int):
-            if v < 0:
-                raise RuntimeError
-            return v
-
-        max_args = len(params.args) if not params.has_varargs() else float("inf")
-        min_args = len(params.args) - len(defaults.args)
-        n_args = len(args) + len([kwargs[k] for k in params.args if k in kwargs])
-        if not (min_args <= n_args <= max_args):
-            raise TypeError(f"Expected from {min_args} to {max_args} arguments, received {n_args} arguments")
-
-        args = [
-            args[i] if i < min(first_arg_as_kwarg, len(args))
-            else kwargs.pop(params.args[i]) if params.args[i] in kwargs
-            else defaults.args[ensure_positive(i - first_default_arg)]
-            for i in range(len(params.args))
-        ] + list(args[len(params.args):])
-
-        for k in kwargs:
-            if k not in params.kwargs:
-                raise TypeError(f"Unexpected keyword-argument '{k}'")
-
-        for k in params.kwargs:
-            if k not in (*kwargs.keys(), *defaults.kwargs.keys()):
-                raise TypeError(f"Missing keyword-argument '{k}'")
-
+    def create_recipe(self, bound_args: inspect.BoundArguments) -> MergeRecipeNode:
         input_types = self.get_input_types()
+        args = bound_args.args
         args = tuple(
             value_to_node(arg, arg_type)
-            for arg, k, arg_type in zip(args, params.args_varargs(n_args), input_types.args_varargs(n_args))
+            for arg, arg_type in zip(args, input_types.args_varargs(len(args)))
         )
         kwargs = {
             k: value_to_node(arg, input_types.kwargs[k])
-            for k, arg in (defaults.kwargs | kwargs).items()
+            for k, arg in bound_args.kwargs.items()
         }
 
         return MergeRecipeNode(self, args, kwargs)
+
+    def get_signature(self):
+        return self.__f_signature
+
+    def get_return_type(self) -> type:
+        return self.__f_signature.return_annotation
 
     def get_input_types(self) -> FunctionArgs[type]:
         params = self.get_params()
@@ -495,28 +478,36 @@ class MergeMethod:
 
     @staticmethod
     def __get_parameter_data(hint: type, param_name: str):
-        hint_args = [arg for arg in (typing.get_args(hint) or ()) if arg is not type(None)]
-        if hint_args:
-            hint = hint_args[0]
-
-        if hint is Parameter:
-            raise TypeError(f"the type of parameter '{param_name}' should be `sd_mecha.Parameter(...)`, not `sd_mecha.Parameter` (note the lack of parentheses)")
-
-        if not inspect.isclass(hint) or not issubclass(hint, ParameterType):
-            raise TypeError(f"the type of parameter '{param_name}' should be 'sd_mecha.Parameter(...)', not '{getattr(hint, '__name__', hint)}'")
-        return hint.data
+        return _ensure_parameter(hint, param_name).data
 
     @staticmethod
     def __get_return_data(hint: type):
-        if hint is Return:
-            raise TypeError(f"the return type should be 'sd_mecha.Return(...)', not 'sd_mecha.Return' (note the lack of parentheses)")
-
-        if not inspect.isclass(hint) or not issubclass(hint, ReturnType):
-            raise TypeError(f"the return type should be 'sd_mecha.Return(...)', not '{getattr(hint, '__name__', hint)}'")
-        return hint.data
+        return _ensure_return(hint).data
 
     def get_identifier(self) -> str:
         return self.identifier
+
+
+def _ensure_parameter(hint: type, param_name: str):
+    hint_args = [arg for arg in (typing.get_args(hint) or ()) if arg is not type(None)]
+    if hint_args:
+        hint = hint_args[0]
+
+    if hint is Parameter:
+        raise TypeError(f"the type of parameter '{param_name}' should be `sd_mecha.Parameter(...)`, not `sd_mecha.Parameter` (note the lack of parentheses)")
+
+    if not inspect.isclass(hint) or not issubclass(hint, ParameterType):
+        return Parameter(hint)
+    return hint
+
+
+def _ensure_return(hint: type):
+    if hint is Return:
+        raise TypeError(f"the return type should be 'sd_mecha.Return(...)', not 'sd_mecha.Return' (note the lack of parentheses)")
+
+    if not inspect.isclass(hint) or not issubclass(hint, ReturnType):
+        return Return(hint)
+    return hint
 
 
 F = TypeVar("F", bound=Callable | type)
@@ -527,7 +518,8 @@ def merge_method(
     identifier: Optional[str] = None,
     register: bool = True,
     is_conversion: bool = False,
-) -> MergeRecipeNode | Callable[[F], MergeRecipeNode]:
+    strategy: Optional[str] = None,
+) -> MergeMethod | Callable[[F], MergeMethod]:
     """
     Decorator to define a custom merge method.
 
@@ -546,31 +538,47 @@ def merge_method(
         is_conversion (bool):
             If True, marks this merge method as a config-conversion function. That means `convert()`
             will consider it as an implicit transition when converting between different model configs.
+        strategy (str):
+            The strategy to implement. The signature of the merge method must match that of the strategy.
 
     Returns:
         A `MergeMethod` object or a decorator.
     """
     if fn is None:
-        return lambda fn: __recipe_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion)
-    return __recipe_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion)
+        return lambda fn: __merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, strategy=strategy)
+    return __merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, strategy=strategy)
 
 
-def __recipe_impl(
+def __merge_method_impl(
     fn: F, *,
     identifier: Optional[str] = None,
     register: bool,
     is_conversion: bool,
-) -> MergeRecipeNode:
+    strategy: Optional[str] = None,
+) -> MergeMethod:
     if identifier is None:
         identifier = fn.__name__
     fn_object = MergeMethod(fn, identifier)
 
+    if is_conversion and not register:
+        raise ValueError("A conversion merge method must be registered.")
+    if strategy is not None and not register:
+        raise ValueError("A strategy candidate merge method must be registered.")
+
     if register:
+        if identifier in _merge_methods_registry:
+            raise ValueError(f"Another merge method named {identifier} is already registered.")
         _merge_methods_registry[identifier] = fn_object
         if is_conversion:
             _conversion_registry[identifier] = validate_config_conversion(fn_object)
-    elif is_conversion:
-        raise ValueError("A conversion recipe must be registered")
+        if strategy is not None:
+            try:
+                from sd_mecha.extensions import merge_strategies
+                merge_strategies.resolve(strategy).register_candidate(fn_object)
+            except BaseException:
+                del _merge_methods_registry[identifier]
+                _conversion_registry.pop(identifier, None)
+                raise
 
     return fn_object
 
@@ -585,8 +593,9 @@ def validate_config_conversion(merge_method: MergeMethod):
     return merge_method
 
 
-_merge_methods_registry = {}
-_conversion_registry = {}
+_merge_methods_registry: Dict[str, MergeMethod] = {}
+_conversion_registry: Dict[str, MergeMethod] = {}
+_interfaces_registry: Dict[str, List[MergeMethod]] = {}
 
 
 def resolve(identifier: str) -> MergeMethod:

@@ -10,6 +10,7 @@ from .merging import merge, open_input_dicts, infer_model_configs
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
 from .extensions.merge_methods import merge_method, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
+from .extensions.merge_strategies import merge_strategy, apply_strategy
 from .conversion import convert
 from sd_mecha.extensions.builtin.merge_methods import (
     weighted_sum,

@@ -1,7 +1,7 @@
 import math
 import torch
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, Return, StateDict
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
 
 
 @merge_method
@@ -29,7 +29,15 @@ def n_average(
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
-    return sum(model[key] for model in models) / len(models)
+    assert models
+
+    res = None
+    for i, model in enumerate(models, start=1):
+        if res is None:
+            res = model[key]
+        else:
+            res = torch.lerp(res, model[key], 1/i)
+    return res
 
 
 @merge_method

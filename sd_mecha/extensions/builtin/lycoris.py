@@ -4,34 +4,55 @@ import inspect
 import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha.extensions import model_configs
-from sd_mecha.extensions.builtin.merge_methods.kronecker import kron_dims_from_ratio
+from .merge_methods.kronecker import kron_dims_from_ratio
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from sd_mecha.extensions.merge_strategies import merge_strategy
 from sd_mecha.extensions.model_configs import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase, KeyMetadata
 from sd_mecha.streaming import StateDictKeyError
 
 
 def _register_all_lycoris_configs():
-    for base_config_id in (
-        "sdxl-kohya",
-        "sdxl-kohya_but_diffusers",
-        "sd1-kohya",
+    for lyco_id, lyco_prefix in (
+        ("lycoris", "lycoris"),
+        ("kohya", "lora"),
     ):
-        base_config = model_configs.resolve(base_config_id)
-        for lyco_config in (
-            LycorisModelConfig(base_config, "lycoris", "lycoris", list(lycoris_algorithms)),
-            LycorisModelConfig(base_config, "kohya", "lora", list(lycoris_algorithms)),
+        @merge_strategy(identifier=f"extract_{lyco_id}_lora")
+        def extract_lora(
+            base: Parameter(StateDict[torch.Tensor], "delta"),
+            rank: Parameter(int) = 8,
+        ) -> Return(StateDict[torch.Tensor], "weight"):
+            ...
+
+        @merge_strategy(identifier=f"extract_{lyco_id}_lokr")
+        def extract_lokr(
+            base: Parameter(StateDict[torch.Tensor], "delta"),
+            kronecker_ratio: Parameter(float) = 0.5,
+        ) -> Return(StateDict[torch.Tensor], "weight"):
+            ...
+
+        lyco_strategies = {
+            "lora": extract_lora,
+            "lokr": extract_lokr,
+        }
+
+        for base_config_id in (
+            "sdxl-kohya",
+            "sdxl-kohya_but_diffusers",
+            "sd1-kohya",
         ):
+            base_config = model_configs.resolve(base_config_id)
+            lyco_config = LycorisModelConfig(base_config, lyco_id, lyco_prefix, list(lycoris_algorithms))
             model_configs.register_aux(lyco_config)
-            lyco_to_base, base_to_algos = define_conversions(lyco_config)
+            define_conversions(lyco_config, lyco_strategies)
 
 
-def define_conversions(lyco_config):
+def define_conversions(lyco_config, lyco_strategies):
     lyco_config_id = lyco_config.identifier
     base_config = lyco_config.base_config
     base_config_id = base_config.identifier
 
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
-    class DiffusersLycoToBase:
+    class DiffusersLycorisToBase:
         @staticmethod
         def input_keys_for_output(base_key: str, *_args, **_kwargs):
             return list(lyco_config.to_lycoris_keys(base_key))
@@ -67,8 +88,7 @@ def define_conversions(lyco_config):
                 return
 
             spec = inspect.getfullargspec(fn)
-            pos = 1 if inspect.ismethod(fn) else 0
-            assert spec.args[pos] == "base"
+            assert spec.args[1] == "base"
 
         @classmethod
         def output_groups(cls):
@@ -97,7 +117,7 @@ def define_conversions(lyco_config):
                 raise StateDictKeyError(lyco_key)
             return base_keys[0]
 
-    @merge_method(identifier=f"extract_lora_'{lyco_config_id}'")
+    @merge_method(identifier=f"extract_lora_'{lyco_config_id}'", strategy=lyco_strategies["lora"].identifier)
     class BaseToDiffusersLora(BaseToDiffusersLycoris):
         @staticmethod
         def get_output_keys(base_key: str):
@@ -110,12 +130,12 @@ def define_conversions(lyco_config):
         def __call__(
             self,
             base: Parameter(StateDict[torch.Tensor], "delta", base_config_id),
-            rank: Parameter(int) = 8,
+            rank: Parameter(int),
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
             lora_key = kwargs["key"]
             base_key = self.base_key_for_output(lora_key)
-            lora_keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
+            lora_keys = self.get_output_keys(base_key)
             if lora_key not in lora_keys:
                 raise StateDictKeyError(lora_key)
 
@@ -137,7 +157,7 @@ def define_conversions(lyco_config):
                 alpha_key: torch.tensor(rank, device=base_value.device, dtype=base_value.dtype),
             }
 
-    @merge_method(identifier=f"extract_lokr_'{lyco_config_id}'")
+    @merge_method(identifier=f"extract_lokr_'{lyco_config_id}'", strategy=lyco_strategies["lokr"].identifier)
     class BaseToDiffusersLokr(BaseToDiffusersLycoris):
         @staticmethod
         def get_output_keys(base_key: str):
@@ -150,12 +170,12 @@ def define_conversions(lyco_config):
         def __call__(
             self,
             base: Parameter(StateDict[torch.Tensor], "delta", base_config_id),
-            kronecker_ratio: Parameter(float) = 0.5,
+            kronecker_ratio: Parameter(float),
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
             lokr_key = kwargs["key"]
             base_key, = self.base_key_for_output(lokr_key)
-            lokr_keys = lyco_config.to_lycoris_keys(base_key, ("lokr",))
+            lokr_keys = self.get_output_keys(base_key)
             if lokr_key not in lokr_keys:
                 raise StateDictKeyError(lokr_key)
 
@@ -180,11 +200,6 @@ def define_conversions(lyco_config):
                 w2_key: vh.reshape(shape_w2),
             }
 
-    return DiffusersLycoToBase, {
-        "lora": BaseToDiffusersLora,
-        "lokr": BaseToDiffusersLokr,
-    }
-
 
 class StateDictKeyHelper:
     def __init__(self, state_dict: Mapping[str, torch.Tensor], key_prefix):
@@ -194,7 +209,7 @@ class StateDictKeyHelper:
     def get_tensor(self, name, raise_on_missing=True):
         try:
             return self.state_dict[f"{self.key_prefix}.{name}"]
-        except StateDictKeyError:
+        except StateDictKeyError as e:
             if raise_on_missing:
                 raise
             else:
@@ -276,8 +291,7 @@ class LycorisModelConfig(LazyModelConfigBase):
         self.lycoris_to_base_keys = {
             lycoris_key: key
             for key in base_config.keys()
-            for lycoris_keys in _to_lycoris_keys({key: KeyMetadata(None, None)}, algorithms, self.prefix)
-            for lycoris_key in lycoris_keys
+            for lycoris_key in _to_lycoris_keys({key: KeyMetadata(None, None)}, algorithms, self.prefix)
         }
 
     @property

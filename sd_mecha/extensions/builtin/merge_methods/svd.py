@@ -3,7 +3,7 @@ import math
 import torch
 from typing import Optional, Tuple
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, StateDict, Return
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, StateDict, Return
 
 
 @merge_method

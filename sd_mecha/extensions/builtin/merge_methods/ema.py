@@ -1,7 +1,8 @@
-from sd_mecha import merge_method, Parameter, Return, StateDict
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
 from torch import Tensor
 
 
+# todo: make class merge method
 @merge_method
 def exchange_ema(
     model: Parameter(StateDict[Tensor]),

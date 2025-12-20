@@ -1,7 +1,7 @@
 import math
 import torch
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, Return
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return
 from sd_mecha.extensions.builtin.merge_methods.svd import svd_lowrank
 
 

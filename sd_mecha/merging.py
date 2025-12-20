@@ -693,7 +693,7 @@ class KeyReleaseVisitor(RecipeVisitor):
 
     def __visit_deeper_first(
         self,
-        parent_id: Tuple[RecipeNode, str],
+        new_parent_id: Tuple[RecipeNode, str],
         node_args: Tuple[recipe_nodes.RecipeNode, ...],
         node_kwargs: Dict[str, recipe_nodes.RecipeNode],
         merge_method: MergeMethod,
@@ -703,7 +703,7 @@ class KeyReleaseVisitor(RecipeVisitor):
         for input_idx, input_name in merge_method.get_param_names().as_dict(len(node_args)).items():
             input_node = node_args[input_idx] if isinstance(input_idx, int) else node_kwargs[input_idx]
             release_visitors = [
-                KeyReleaseVisitor(input_key, self.merge_methods_context, parent_id, needs_lock=True)
+                KeyReleaseVisitor(input_key, self.merge_methods_context, new_parent_id, needs_lock=True)
                 for input_key in merge_method.input_keys_for_output(self.output_key, input_name)
             ]
             for release_visitor in release_visitors:
@@ -755,7 +755,9 @@ class MergeNodeWrapperStateDict(StateDict):
             )
 
         key_merger = dataclasses.replace(self.original_merge_visitor, output_key=key)
-        return cast_node_value(self.merge_node.accept(key_merger), self.expected_type)
+        res_raw = self.merge_node.accept(key_merger)
+        res = cast_node_value(res_raw, self.expected_type)
+        return res
 
     def __len__(self):
         return len(self.compute_keys())
