@@ -251,7 +251,6 @@ class MergeMethod:
 
     def instantiate(self):
         if self.wrapped_is_class:
-            # todo: test instance lifetime
             return self.__wrapped__()
         return None
 

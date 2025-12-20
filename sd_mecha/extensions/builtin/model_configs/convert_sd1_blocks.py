@@ -41,5 +41,5 @@ class convert_sd1_blocks_to_ldm:
         **kwargs,
     ) -> Return(T, model_config="sd1-ldm"):
         ldm_key = kwargs["key"]
-        block_key = self.input_keys_for_output("blocks", ldm_key)[0]
+        block_key = self.input_keys_for_output(ldm_key, "blocks")[0]
         return blocks[block_key]
