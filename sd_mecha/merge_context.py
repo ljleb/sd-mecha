@@ -137,7 +137,7 @@ class MergeMethodOutputRef:
         return res
 
     def was_freed(self) -> bool:
-        return len(self.remaining_ports) > 0
+        return len(self.remaining_ports) <= 0
 
     def set_cache(self, cache: Any):
         assert self.locked
