@@ -159,7 +159,7 @@ class ModelRecipeNode(RecipeNode):
 class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
-        merge_method,
+        merge_method: "merge_methods.MergeMethod",
         args: Tuple[RecipeNode, ...],
         kwargs: Dict[str, RecipeNode],
         cache: dict = None,
@@ -169,6 +169,7 @@ class MergeRecipeNode(RecipeNode):
         self.kwargs = kwargs
         self.cache = cache
         self.__validate_args()
+        self.__model_config = None
 
     def __validate_args(self):
         if not isinstance(self.merge_space, MergeSpace):
@@ -186,10 +187,12 @@ class MergeRecipeNode(RecipeNode):
 
     @property
     def model_config(self) -> Optional[model_configs.ModelConfig]:
-        return self.merge_method.get_return_config(
-            [v.model_config for v in self.args],
-            {k: v.model_config for k, v in self.kwargs.items()},
-        )
+        if self.__model_config is None:
+            self.__model_config = self.merge_method.get_return_config(
+                [v.model_config for v in self.args],
+                {k: v.model_config for k, v in self.kwargs.items()},
+            )
+        return self.__model_config
 
     def __contains__(self, item):
         return self is item or any(
