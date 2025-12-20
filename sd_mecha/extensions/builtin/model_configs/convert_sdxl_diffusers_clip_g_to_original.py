@@ -4,7 +4,13 @@ import torch
 
 def convert_clip_g(kohya_sd, sgm_key):
     kohya_keys, transpose = convert_clip_g_key(sgm_key)
-    res = torch.vstack([kohya_sd[key] for key in kohya_keys])
+    assert kohya_keys
+    res = [kohya_sd[key] for key in kohya_keys]
+    if len(res) > 1:
+        res = torch.vstack(res)
+    else:
+        res = res[0]
+
     if transpose:
         res = res.T
 
