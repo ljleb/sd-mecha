@@ -296,10 +296,10 @@ class MergeMethod:
             }
         return input_args, input_kwargs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs) -> MergeRecipeNode:
         return self.create_recipe(args, kwargs)
 
-    def create_recipe(self, args, kwargs):
+    def create_recipe(self, args, kwargs) -> MergeRecipeNode:
         params = self.get_param_names()
         defaults = self.get_default_args()
         first_default_arg = len(params.args) - len(defaults.args)
