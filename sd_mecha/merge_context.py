@@ -2,7 +2,6 @@ import contextlib
 import dataclasses
 import threading
 from collections import defaultdict
-
 from sd_mecha.extensions.model_configs import ModelConfig
 from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNode, RecipeVisitor
 from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple, Union
@@ -81,8 +80,8 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
             input_node_config = input_node.model_config or self.parent_config
             res |= input_node.accept(dataclasses.replace(self, parent_config=input_node_config))
 
-        locks = {}
-        groups_by_key = {}
+        locks = defaultdict(lambda: threading.Lock())
+        groups_by_key = defaultdict(lambda: tuple())
         node_config = node.model_config or self.parent_config
         for output_key_group in node.merge_method.output_groups(node_config):
             lock = threading.Lock()
@@ -93,8 +92,8 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
         res[node] = MergeMethodContext(
             {
                 output_key: MergeMethodOutputRef(input_ports, None, locks[output_key])
-                for output_key, input_ports in self.inputs_ports.get(node, {}).items()
-                if len(input_ports) >= 2 or len(groups_by_key.get(output_key, ())) >= 2
+                for output_key, input_ports in self.inputs_ports[node].items()
+                if len(input_ports) >= 2 or len(groups_by_key[output_key]) >= 2
             },
             node.merge_method.instantiate(),
         )
@@ -115,7 +114,7 @@ class MergeMethodContext:
         elif lock:
             with output_ref:
                 yield output_ref
-            if output_ref.was_freed():
+            if not output_ref.is_held():
                 self.output_refs.pop(key, None)
         else:
             with output_ref.assumed_locked():
@@ -133,23 +132,19 @@ class MergeMethodOutputRef:
         assert self.locked
         res = self.cache
         self.remaining_ports.discard(port)
-        if self.was_freed():
+        if not self.is_held():
             self.cache = None
         return res
 
-    def held_by(self, port: Tuple[RecipeNode, str]) -> bool:
-        assert self.locked
-        return port in self.remaining_ports
+    def is_held(self) -> bool:
+        return len(self.remaining_ports) > 0
 
     def set_cache(self, cache: Any):
         assert self.locked
-        if self.was_freed():
+        if not self.is_held():
             return
         assert self.cache is None, f"cache was already set: {self.cache}, trying to assign {cache}"
         self.cache = cache
-
-    def was_freed(self) -> bool:
-        return len(self.remaining_ports) <= 0
 
     @contextlib.contextmanager
     def assumed_locked(self):

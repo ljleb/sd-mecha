@@ -10,7 +10,6 @@ import pathlib
 import sys
 import threading
 import typing
-import warnings
 import torch
 from .extensions import model_configs, model_formats
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
@@ -94,6 +93,7 @@ def merge(
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
     """
+    # todo: add a validation option to make sure conversion merge methods don't break their contract
     if output is ...:
         output = None
     if fallback_model is ...:
@@ -201,7 +201,7 @@ def merge(
 
             for node, mm_context in merge_methods_context.items():
                 if mm_context.output_refs:
-                    warnings.warn(f"memory leaked during the merge: {node}, number of entries: {len(mm_context.output_refs)}")
+                    logging.warning(f"memory leaked during the merge: {node}, number of entries: {len(mm_context.output_refs)}")
 
             if isinstance(output_dict, MutableMapping):
                 return output_dict
@@ -581,11 +581,11 @@ class KeyMergeVisitor(RecipeVisitor):
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         context = self.merge_methods_context[node]
-        try:
-            with context.output_ref_context(self.key) as output_ref:
-                if output_ref.cache is not None:
-                    res = output_ref.cache
-                else:
+        with context.output_ref_context(self.key) as output_ref:
+            if output_ref.cache is not None:
+                res = output_ref.use_once(self.parent_id)
+            else:
+                try:
                     merged_args, merged_kwargs = self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
                     res = node.merge_method.merge_key(
                         merged_args,
@@ -594,20 +594,20 @@ class KeyMergeVisitor(RecipeVisitor):
                         node.cache,
                         context.instance,
                     )
-                    if isinstance(res, dict):
-                        assert any(not (set(res.keys()) - set(keys)) for keys in node.merge_method.output_groups(node.model_config)), (
-                            f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
-                        )
-                        for key, value in res.items():
-                            with context.output_ref_context(key, lock=False) as sibling_output_ref:
-                                # output_ref.cache is set here
-                                sibling_output_ref.set_cache(value)
-                        res = res[self.key]
-                    else:
-                        output_ref.set_cache(res)
-        finally:
-            release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id)
-            node.accept(release_visitor)
+                finally:
+                    release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id, needs_lock=False)
+                    node.accept(release_visitor)
+                if isinstance(res, dict):
+                    assert any(not (set(res.keys()) - set(keys)) for keys in node.merge_method.output_groups(node.model_config)), (
+                        f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
+                    )
+                    for key, value in res.items():
+                        with context.output_ref_context(key, lock=False) as sibling_output_ref:
+                            # output_ref.cache is set here
+                            sibling_output_ref.set_cache(value)
+                    res = res[self.key]
+                else:
+                    output_ref.set_cache(res)
 
         return res
 
@@ -647,6 +647,7 @@ class KeyReleaseVisitor(RecipeVisitor):
     key: str
     merge_methods_context: Dict[RecipeNode, MergeMethodContext]
     parent_id: Optional[Tuple[RecipeNode, str]]
+    needs_lock: bool
 
     def visit_literal(self, node: LiteralRecipeNode):
         value = node.value
@@ -672,8 +673,7 @@ class KeyReleaseVisitor(RecipeVisitor):
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         context = self.merge_methods_context[node]
-        with context.output_ref_context(self.key) as output_ref:
-            # if self.parent_id is None or output_ref.held_by(self.parent_id):
+        with context.output_ref_context(self.key, lock=self.needs_lock) as output_ref:
             output_ref.use_once(self.parent_id)
             self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
 
@@ -689,7 +689,7 @@ class KeyReleaseVisitor(RecipeVisitor):
         for arg_idx, arg_name in merge_method.get_param_names().as_dict(len(node_args)).items():
             arg_node = node_args[arg_idx] if isinstance(arg_idx, int) else node_kwargs[arg_idx]
             release_visitors = [
-                KeyReleaseVisitor(key_read, self.merge_methods_context, parent_id)
+                KeyReleaseVisitor(key_read, self.merge_methods_context, parent_id, needs_lock=True)
                 for key_read in merge_method.input_keys_for_output(arg_name, self.key)
             ]
             for release_visitor in release_visitors:
