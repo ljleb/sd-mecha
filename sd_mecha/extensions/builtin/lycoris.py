@@ -105,16 +105,16 @@ def define_conversions(lyco_config):
             rank: Parameter(int) = 8,
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
-            lyco_key = kwargs["key"]
-            base_key, = self.input_keys_for_output(lyco_key, "base")
-            lyco_keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
-            if not lyco_keys:
-                raise StateDictKeyError(lyco_key)
+            lora_key = kwargs["key"]
+            base_key, = self.input_keys_for_output(lora_key, "base")
+            lora_keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
+            if not lora_keys:
+                raise StateDictKeyError(lora_key)
 
-            up_key, down_key, alpha_key = lora_keys = self.get_output_keys(base_key)
-            if not lyco_key.endswith(lora_keys):
-                raise StateDictKeyError(lyco_key)
+            if not lora_key.endswith(lora_keys):
+                raise StateDictKeyError(lora_key)
 
+            up_key, down_key, alpha_key = lora_keys
             base_value = base[base_key]
             original_shape = base_value.shape
             shape_vh = torch.Size((rank, *original_shape[1:]))
@@ -148,15 +148,15 @@ def define_conversions(lyco_config):
             kronecker_ratio: Parameter(float) = 0.5,
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
-            lyco_key = kwargs["key"]
-            base_key, = self.input_keys_for_output(lyco_key, "base")
-            lyco_keys = lyco_config.to_lycoris_keys(base_key, ("lokr",))
-            if not lyco_keys:
-                raise StateDictKeyError(lyco_key)
+            lokr_key = kwargs["key"]
+            base_key, = self.input_keys_for_output(lokr_key, "base")
+            lokr_keys = lyco_config.to_lycoris_keys(base_key, ("lokr",))
+            if not lokr_keys:
+                raise StateDictKeyError(lokr_key)
 
-            w1_key, w2_key = lokr_keys = self.get_output_keys(base_key)
-            if not lyco_key.endswith(lokr_keys):
-                raise StateDictKeyError(lyco_key)
+            w1_key, w2_key = lokr_keys
+            if not lokr_key.endswith(lokr_keys):
+                raise StateDictKeyError(lokr_key)
 
             base_value = base[base_key]
             shape_original = base_value.shape
