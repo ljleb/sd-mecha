@@ -114,7 +114,7 @@ class MergeMethodContext:
         elif lock:
             with output_ref:
                 yield output_ref
-            if not output_ref.is_held():
+            if output_ref.was_freed():
                 self.output_refs.pop(key, None)
         else:
             with output_ref.assumed_locked():
@@ -132,16 +132,16 @@ class MergeMethodOutputRef:
         assert self.locked
         res = self.cache
         self.remaining_ports.discard(port)
-        if not self.is_held():
+        if self.was_freed():
             self.cache = None
         return res
 
-    def is_held(self) -> bool:
+    def was_freed(self) -> bool:
         return len(self.remaining_ports) > 0
 
     def set_cache(self, cache: Any):
         assert self.locked
-        if not self.is_held():
+        if self.was_freed():
             return
         assert self.cache is None, f"cache was already set: {self.cache}, trying to assign {cache}"
         self.cache = cache
