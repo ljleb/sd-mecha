@@ -63,10 +63,10 @@ def define_conversions(lyco_config):
         def output_groups():
             def get_output_tuple(base_key: str):
                 keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
-                if keys:
-                    up, _, down, alpha = keys
-                    keys = (up, down, alpha)
-                return keys
+                if not keys:
+                    return keys
+                up, _, down, alpha = keys
+                return up, down, alpha
 
             return [
                 get_output_tuple(key)
