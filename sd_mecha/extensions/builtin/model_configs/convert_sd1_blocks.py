@@ -18,7 +18,7 @@ T = TypeVar("T")
 @merge_method(is_conversion=True)
 class convert_sd1_blocks_to_ldm:
     @staticmethod
-    def input_keys_for_output(_param_name: str, ldm_key: str):
+    def input_keys_for_output(ldm_key: str, *_args, **_kwargs):
         block_key = "BASE"
         if ldm_key.startswith("model.diffusion_model."):
             block_key = "OUT11"

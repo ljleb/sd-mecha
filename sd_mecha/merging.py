@@ -45,6 +45,7 @@ def merge(
     omit_ema: bool = ...,
     check_mandatory_keys: bool = ...,
     tqdm: type = ...,
+    validate_mm_contract: bool = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
@@ -71,29 +72,31 @@ def merge(
         total_buffer_size (optional):
             Total byte size of the buffers for all safetensors state dicts (input and output).
         model_dirs (optional):
-            One or more directories to search for model files if `recipe` references relative paths.
+            One or more directories to search for model files if `recipe` references relative paths. Defaults to [].
         strict_weight_space (optional):
             If True, verifies that merges occur in "weight" space. If False, merges can happen
-            in other merge spaces (like "delta" or "param").
+            in other merge spaces (like "delta" or "param"). Defaults to True.
         check_finite (optional):
-            If True, warns if any non-finite values appear in the output model.
+            If True, warns if any non-finite values appear in the output model. Defaults to True.
         omit_extra_keys (optional):
-            If True, warns about and removes unrecognized keys from the output model.
+            If True, warns about and removes unrecognized keys from the output model. Defaults to True.
         omit_ema (optional):
             If True, omits ema keys from the output model. Defaults to omit_extra_keys.
         check_mandatory_keys (optional):
-            If True and an input model is missing non-optional keys, raises RuntimeError.
+            If True and an input model is missing non-optional keys, raises RuntimeError. Defaults to False.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
         output (optional):
             Where to store the merged state dict. Can be a filesystem path (string or
             `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
             If it is None or omitted, an empty dict is created and returned when the merge completes.
+        validate_mm_contract (optional):
+            If True, validates that merge methods return the right amount of outputs indicated by `output_groups`
+            and do not read other inputs than those reported by `input_keys_for_output`
 
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
     """
-    # todo: add a validation option to make sure conversion merge methods don't break their contract
     if output is ...:
         output = None
     if fallback_model is ...:
@@ -126,6 +129,8 @@ def merge(
         check_mandatory_keys = False
     if tqdm is ...:
         tqdm = tqdm_original
+    if validate_mm_contract is ...:
+        validate_mm_contract = True
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
@@ -191,7 +196,7 @@ def merge(
                 fn = _track_output(fn, output_dict, key, key_metadata, check_finite)
                 fn = _track_progress(fn, key, recipe_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
-                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context)))
+                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract)))
 
             for future in as_completed(futures):
                 if future.exception() is not None:
@@ -200,8 +205,9 @@ def merge(
                 future.result()
 
             for node, mm_context in merge_methods_context.items():
-                if mm_context.output_refs:
-                    logging.warning(f"memory leaked during the merge: {node}, number of entries: {len(mm_context.output_refs)}")
+                num_leaked = sum(not output_ref.was_freed() for output_ref in mm_context.output_refs.values())
+                if num_leaked:
+                    logging.warning(f"memory leaked during the merge: {node}, number of entries: {num_leaked}")
 
             if isinstance(output_dict, MutableMapping):
                 return output_dict
@@ -551,8 +557,9 @@ class CloseInputDictsVisitor(RecipeVisitor):
 
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
-    key: str
+    output_key: str
     merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    validate_mm_contract: bool
     parent_id: Optional[Tuple[RecipeNode, str]] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
@@ -569,43 +576,45 @@ class KeyMergeVisitor(RecipeVisitor):
         return self.__visit_sd(node.state_dict, node.model_config)
 
     def __visit_sd(self, state_dict, model_config):
-        aliases = model_config.aliases().get(self.key, [])
-        keys = [self.key, *aliases]
+        aliases = model_config.aliases().get(self.output_key, [])
+        possible_keys = [self.output_key, *aliases]
 
-        for i, key in enumerate(keys):
+        for i, possible_key in enumerate(possible_keys):
             try:
-                return state_dict[key]
+                return state_dict[possible_key]
             except KeyError as e:
-                if i == len(keys) - 1:
-                    raise StateDictKeyError(self.key) from e
+                if i == len(possible_keys) - 1:
+                    raise StateDictKeyError(self.output_key) from e
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode) -> torch.Tensor:
         context = self.merge_methods_context[node]
-        with context.output_ref_context(self.key) as output_ref:
+        with context.output_ref_context(self.output_key) as output_ref:
             if output_ref.cache is not None:
                 res = output_ref.use_once(self.parent_id)
             else:
                 try:
-                    merged_args, merged_kwargs = self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
+                    merged_args, merged_kwargs = self.__visit_deeper_first((node, self.output_key), node.args, node.kwargs, node.merge_method)
                     res = node.merge_method.merge_key(
                         merged_args,
                         merged_kwargs,
-                        self.key,
+                        self.output_key,
                         node.cache,
                         context.instance,
                     )
                 finally:
-                    release_visitor = KeyReleaseVisitor(self.key, self.merge_methods_context, self.parent_id, needs_lock=False)
+                    release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.parent_id, needs_lock=False)
                     node.accept(release_visitor)
                 if isinstance(res, dict):
-                    assert any(not (set(res.keys()) - set(keys)) for keys in node.merge_method.output_groups(node.model_config)), (
-                        f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
-                    )
+                    if self.validate_mm_contract:
+                        expected_output_keys = node.merge_method.output_groups(self.output_key)
+                        assert all(k in expected_output_keys for k in res.keys()), (
+                            f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
+                        )
                     for key, value in res.items():
                         with context.output_ref_context(key, lock=False) as sibling_output_ref:
                             # output_ref.cache is set here
                             sibling_output_ref.set_cache(value)
-                    res = res[self.key]
+                    res = res[self.output_key]
                 else:
                     output_ref.set_cache(res)
 
@@ -625,16 +634,21 @@ class KeyMergeVisitor(RecipeVisitor):
         error_holder = ErrorHolder()
         merged = {}
         input_types = merge_method.get_input_types().as_dict(len(node_args))
-        indices = itertools.chain(range(len(node_args)), node_kwargs.keys())
+        input_names = merge_method.get_param_names().as_dict(len(node_args)) if self.validate_mm_contract is not None else None
+        indices = (*range(len(node_args)), *node_kwargs.keys())
 
         for index in sorted(indices, key=depth_of_value, reverse=True):
-            nodes = node_args if isinstance(index, int) else node_kwargs
-            arg_visitor = dataclasses.replace(self, parent_id=new_parent_id)
+            input_node = node_args[index] if isinstance(index, int) else node_kwargs[index]
+            input_visitor = dataclasses.replace(self, parent_id=new_parent_id)
             if is_subclass(input_types[index], StateDict):
+                if self.validate_mm_contract:
+                    nested_input_keys = merge_method.input_keys_for_output(self.output_key, input_names[index])
+                else:
+                    nested_input_keys = None
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, nodes[index], expected_type, arg_visitor)
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, nested_input_keys)
             else:
-                merged[index] = cast_node_value(error_holder.intercept(nodes[index].accept, arg_visitor), input_types[index])
+                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
 
         merged_args = [merged.get(index) for index in range(len(node_args))]
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
@@ -644,7 +658,7 @@ class KeyMergeVisitor(RecipeVisitor):
 
 @dataclasses.dataclass
 class KeyReleaseVisitor(RecipeVisitor):
-    key: str
+    output_key: str
     merge_methods_context: Dict[RecipeNode, MergeMethodContext]
     parent_id: Optional[Tuple[RecipeNode, str]]
     needs_lock: bool
@@ -660,8 +674,8 @@ class KeyReleaseVisitor(RecipeVisitor):
         pass
 
     def __visit_sd(self, state_dict, model_config):
-        aliases = model_config.aliases().get(self.key, [])
-        keys = [self.key, *aliases]
+        aliases = model_config.aliases().get(self.output_key, [])
+        keys = [self.output_key, *aliases]
 
         for i, key in enumerate(keys):
             try:
@@ -673,9 +687,9 @@ class KeyReleaseVisitor(RecipeVisitor):
 
     def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
         context = self.merge_methods_context[node]
-        with context.output_ref_context(self.key, lock=self.needs_lock) as output_ref:
+        with context.output_ref_context(self.output_key, lock=self.needs_lock) as output_ref:
             output_ref.use_once(self.parent_id)
-            self.__visit_deeper_first((node, self.key), node.args, node.kwargs, node.merge_method)
+            self.__visit_deeper_first((node, self.output_key), node.args, node.kwargs, node.merge_method)
 
     def __visit_deeper_first(
         self,
@@ -686,14 +700,14 @@ class KeyReleaseVisitor(RecipeVisitor):
     ):
         error_holder = ErrorHolder()
 
-        for arg_idx, arg_name in merge_method.get_param_names().as_dict(len(node_args)).items():
-            arg_node = node_args[arg_idx] if isinstance(arg_idx, int) else node_kwargs[arg_idx]
+        for input_idx, input_name in merge_method.get_param_names().as_dict(len(node_args)).items():
+            input_node = node_args[input_idx] if isinstance(input_idx, int) else node_kwargs[input_idx]
             release_visitors = [
-                KeyReleaseVisitor(key_read, self.merge_methods_context, parent_id, needs_lock=True)
-                for key_read in merge_method.input_keys_for_output(arg_name, self.key)
+                KeyReleaseVisitor(input_key, self.merge_methods_context, parent_id, needs_lock=True)
+                for input_key in merge_method.input_keys_for_output(self.output_key, input_name)
             ]
             for release_visitor in release_visitors:
-                error_holder.intercept(arg_node.accept, release_visitor)
+                error_holder.intercept(input_node.accept, release_visitor)
 
         error_holder.try_raise()
 
@@ -726,13 +740,21 @@ class MergeNodeWrapperStateDict(StateDict):
         merge_node: recipe_nodes.MergeRecipeNode,
         expected_type: type,
         original_merge_visitor: KeyMergeVisitor,
+        input_keys_constraints: Optional[Tuple[str, ...]],
     ):
         self.merge_node = merge_node
         self.expected_type = expected_type
         self.original_merge_visitor = original_merge_visitor
+        self.input_keys_constraints = input_keys_constraints
 
     def __getitem__(self, key):
-        key_merger = dataclasses.replace(self.original_merge_visitor, key=key)
+        if self.input_keys_constraints is not None:
+            assert key in self.input_keys_constraints, (
+                f"merge method {self.merge_node.merge_method.identifier} tried to fetch key '{key}' "
+                f"but only requested these keys through input_keys_for_output(): {self.input_keys_constraints}"
+            )
+
+        key_merger = dataclasses.replace(self.original_merge_visitor, output_key=key)
         return cast_node_value(self.merge_node.accept(key_merger), self.expected_type)
 
     def __len__(self):

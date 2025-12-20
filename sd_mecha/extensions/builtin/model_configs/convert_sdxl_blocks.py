@@ -18,7 +18,7 @@ T = TypeVar("T")
 @merge_method(is_conversion=True)
 class convert_sdxl_blocks_to_sgm:
     @staticmethod
-    def input_keys_for_output(_param_name: str, sgm_key: str):
+    def input_keys_for_output(sgm_key: str, *_args, **_kwargs):
         block_key = "BASE"
         if sgm_key.startswith("model.diffusion_model."):
             block_key = "OUT08"

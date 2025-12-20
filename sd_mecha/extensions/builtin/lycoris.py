@@ -31,7 +31,7 @@ def define_conversions(lyco_config):
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
     class DiffusersLycoToBase:
         @staticmethod
-        def input_keys_for_output(_arg_name: str, base_key: str):
+        def input_keys_for_output(base_key: str, *_args, **_kwargs):
             return list(lyco_config.to_lycoris_keys(base_key))
 
         def __call__(
@@ -62,8 +62,11 @@ def define_conversions(lyco_config):
         @staticmethod
         def output_groups():
             def get_output_tuple(base_key: str):
-                up, _, down, alpha = lyco_config.to_lycoris_keys(base_key, ("lora",))
-                return up, down, alpha
+                keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
+                if keys:
+                    up, _, down, alpha = keys
+                    keys = (up, down, alpha)
+                return keys
 
             return [
                 get_output_tuple(key)
@@ -71,7 +74,7 @@ def define_conversions(lyco_config):
             ]
 
         @staticmethod
-        def input_keys_for_output(arg_name: str, lyco_key: str):
+        def input_keys_for_output(lyco_key: str, arg_name: str, *_args, **_kwargs):
             if arg_name != "base":
                 return ()
 

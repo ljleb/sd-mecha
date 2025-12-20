@@ -190,9 +190,19 @@ class MergeMethod:
         self.__f_spec = inspect.getfullargspec(fn)
         self.__f_hints = typing.get_type_hints(fn)
 
+        self.__output_groups = {}
+
         if self.wrapped_is_class:
             self_arg = self.__f_spec.args.pop(0)
             self.__f_hints.pop(self_arg, None)
+
+            if hasattr(self.__wrapped__, "output_groups"):
+                output_groups = self.__wrapped__.output_groups()
+                self.__output_groups = {}
+                for output_group in output_groups:
+                    output_group_set = set(output_group)
+                    for output_key in output_group:
+                        self.__output_groups[output_key] = output_group_set
 
         self.identifier = identifier
         self.has_varkwargs = self.__f_spec.varkw is not None
@@ -245,19 +255,15 @@ class MergeMethod:
             return self.__wrapped__()
         return None
 
-    def input_keys_for_output(self, arg_name: str, key: str) -> Iterable[str]:
+    def input_keys_for_output(self, output_key: str, input_name: str) -> Set[str]:
         if hasattr(self.__wrapped__, "input_keys_for_output"):
-            return self.__wrapped__.input_keys_for_output(arg_name, key)
-        return (key,)
+            return set(self.__wrapped__.input_keys_for_output(output_key, input_name))
+        return {output_key}
 
-    def output_groups(self, model_config: ModelConfig) -> Iterable[Tuple[str, ...]]:
-        if not hasattr(self.__wrapped__, "output_groups"):
-            return [
-                (key,)
-                for key in model_config.keys()
-            ]
-
-        return self.__wrapped__.output_groups()
+    def output_groups(self, output_key: str) -> Set[str]:
+        if output_key in self.__output_groups:
+            return self.__output_groups[output_key]
+        return {output_key}
 
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"

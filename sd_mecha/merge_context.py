@@ -39,22 +39,19 @@ class GetOutputPortsVisitor(RecipeVisitor):
         for input_idx, input_name in param_names.as_dict(len(node.args)).items():
             input_node = node.args[input_idx] if isinstance(input_idx, int) else node.kwargs[input_idx]
             for output_key in self.keys_constraint:
-
                 input_config = input_node.model_config or node.model_config
-                for input_key in node.merge_method.input_keys_for_output(input_name, output_key):
-                    assert (input_config is None or input_key in input_config.keys()) or (output_config is None or output_config.keys()[output_key].optional), (
-                        f"The configuration of merge method {node.merge_method.identifier} is invalid.\n"
-                        f"The input key '{input_key}' does not exist for parameter {input_name}. (the effective config is {input_config.identifier})\n"
-                        f"The output key that causes this problem is '{output_key}'. (the effective output config is {output_config.identifier})"
-                    )
+                for input_key in node.merge_method.input_keys_for_output(output_key, input_name):
+                    if input_config is not None and output_config is not None:
+                        assert input_key in input_config.keys() or output_config.keys()[output_key].optional, (
+                            f"The configuration of merge method {node.merge_method.identifier} is invalid.\n"
+                            f"The input key '{input_key}' does not exist for parameter {input_name}. (the effective config is {input_config})\n"
+                            f"The output key that causes this problem is '{output_key}'. (the effective output config is {output_config})"
+                        )
                     self.inputs_ports[input_node][input_key].add((node, output_key))
 
         for input_node in (*node.args, *node.kwargs.values()):
             input_config = input_node.model_config or node.model_config
-            if input_config is not None:
-                keys = list(input_config.keys())
-            else:
-                keys = self.keys_constraint
+            keys = list(input_config.keys()) if input_config is not None else self.keys_constraint
             input_node.accept(dataclasses.replace(self, keys_constraint=keys))
 
 
@@ -81,19 +78,17 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
             res |= input_node.accept(dataclasses.replace(self, parent_config=input_node_config))
 
         locks = defaultdict(lambda: threading.Lock())
-        groups_by_key = defaultdict(lambda: tuple())
-        node_config = node.model_config or self.parent_config
-        for output_key_group in node.merge_method.output_groups(node_config):
+        for input_key in self.inputs_ports[node].keys():
+            output_key_group = node.merge_method.output_groups(input_key)
             lock = threading.Lock()
             for output_key in output_key_group:
-                groups_by_key[output_key] = output_key_group
                 locks[output_key] = lock
 
         res[node] = MergeMethodContext(
             {
-                output_key: MergeMethodOutputRef(input_ports, None, locks[output_key])
-                for output_key, input_ports in self.inputs_ports[node].items()
-                if len(input_ports) >= 2 or len(groups_by_key[output_key]) >= 2
+                input_key: MergeMethodOutputRef(input_ports, None, locks[input_key])
+                for input_key, input_ports in self.inputs_ports[node].items()
+                if len(input_ports) >= 2 or len(node.merge_method.output_groups(input_key)) >= 2
             },
             node.merge_method.instantiate(),
         )
