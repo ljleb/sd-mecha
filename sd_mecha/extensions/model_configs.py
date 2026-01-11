@@ -398,7 +398,7 @@ def resolve(identifier: str) -> ModelConfig:
     postfix = ""
     if suggestions is not None:
         postfix = f". Nearest match is '{suggestions[0]}'"
-    raise ValueError(f"unknown model implementation: {identifier}{postfix}")
+    raise KeyError(f"unknown model implementation: {identifier}{postfix}")
 
 
 def get_all() -> List[ModelConfig]:

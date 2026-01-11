@@ -64,7 +64,7 @@ def resolve(identifier: str) -> ModelFormat:
         return _model_format_registry[identifier]
     except KeyError as e:
         suggestion = fuzzywuzzy.process.extractOne(str(e), _model_format_registry.keys())[0]
-        raise ValueError(f"unknown model format: {e}. Nearest match is '{suggestion}'")
+        raise KeyError(f"unknown model format: {e}. Nearest match is '{suggestion}'")
 
 
 def get_all() -> List[ModelFormat]:

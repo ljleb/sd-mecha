@@ -1,15 +1,13 @@
 import functools
 import heapq
-import pathlib
-from typing import Dict, Tuple, Any, List, Iterable, Mapping
-from .extensions.merge_methods import value_to_node
+from typing import Mapping
+from .extensions.merge_methods import value_to_node, get_converter_paths
 from .extensions.model_configs import ModelConfig
-from .extensions import merge_methods
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
 from sd_mecha.merging import open_input_dicts, infer_model_configs
 
 
-def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, model_dirs: Iterable[pathlib.Path] = ()):
+def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -> RecipeNodeOrValue:
     """
     Convert a recipe from one model config to another.
 
@@ -22,8 +20,6 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
             A `RecipeNode` or dictionary representing the input model or partial recipe.
         config (str, ModelConfig or RecipeNode):
             The desired output config, or a recipe node that has the desired config.
-        model_dirs (Iterable[Path], optional):
-            Directories to resolve relative model paths.
 
     Returns:
         A new recipe node describing the entire conversion.
@@ -32,20 +28,13 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
         ValueError:
             If no conversion path is found.
     """
-    model_dirs = list(model_dirs)
-    all_converters = merge_methods.get_all_converters()
-    converter_paths: Dict[str, List[Tuple[str, Any]]] = {}
-    for converter in all_converters:
-        input_configs = converter.get_input_configs()
-        return_config = converter.get_return_config(input_configs.args, input_configs.kwargs)
-        src_config = input_configs.args[0].identifier
-        tgt_config = return_config.identifier
-        converter_paths.setdefault(src_config, [])
-        converter_paths.setdefault(tgt_config, [])
-        converter_paths[src_config].append((tgt_config, converter))
+    converter_paths = get_converter_paths()
+
+    if config is None:
+        return recipe
 
     if isinstance(config, RecipeNode):
-        with open_input_dicts(config, model_dirs):
+        with open_input_dicts(config):
             config = config.model_config
 
     tgt_config = config if isinstance(config, str) else config.identifier
@@ -62,7 +51,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode, m
         )
 
     recipe = value_to_node(recipe)
-    with open_input_dicts(recipe, model_dirs):
+    with open_input_dicts(recipe):
         src_config = recipe.model_config.identifier
     if src_config == "structural":
         raise ValueError(

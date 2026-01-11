@@ -1,16 +1,9 @@
 import torch
 from typing import Optional, Dict
 from torch import Tensor
-from .extensions.merge_methods import value_to_node, RecipeNodeOrValue, Parameter
-from . import recipe_nodes
-from sd_mecha.extensions.builtin import merge_methods
-from sd_mecha.extensions.builtin.merge_methods import (
-    subtract,
-    ties_sum,
-    ties_sum_extended,
-    clamp,
-    model_stock,
-)
+from sd_mecha.extensions.merge_methods import value_to_node, RecipeNodeOrValue, Parameter
+from sd_mecha import recipe_nodes
+from . import linear, limiting, ties, svd, slicing
 
 
 def add_difference(
@@ -24,11 +17,11 @@ def add_difference(
 
     if c is not None:
         c = value_to_node(c)
-        b = subtract(
+        b = linear.subtract(
             b, c,
         )
 
-    res = merge_methods.add_difference(
+    res = linear.add_difference(
         a, b,
         alpha=alpha,
     )
@@ -39,7 +32,7 @@ def add_difference(
     if clamp_to_ab:
         if a.merge_space != b.merge_space:
             raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clamp the merge.")
-        res = clamp(
+        res = limiting.clamp(
             res, a, b,
         )
 
@@ -54,18 +47,18 @@ def add_perpendicular(
     b = value_to_node(b)
     c = value_to_node(c)
 
-    a_diff = subtract(
+    a_diff = linear.subtract(
         a, c,
     )
-    b_diff = subtract(
+    b_diff = linear.subtract(
         b, c,
     )
 
-    perp_diff = merge_methods.perpendicular_component(
+    perp_diff = linear.perpendicular_component(
         a_diff, b_diff,
     )
 
-    return merge_methods.add_difference(
+    return linear.add_difference(
         a, perp_diff,
         alpha=alpha,
     )
@@ -84,13 +77,13 @@ def add_difference_ties(
     models = tuple(value_to_node(model) for model in models)
 
     models = tuple(
-        subtract(model, base)
+        linear.subtract(model, base)
         if model.merge_space == "weight" else
         model
         for model in models
     )
 
-    res = ties_sum(
+    res = ties.ties_sum(
         *models,
         k=k,
     )
@@ -118,13 +111,13 @@ def add_difference_ties_extended(
     models = tuple(value_to_node(model) for model in models)
 
     models = tuple(
-        subtract(model, base)
+        linear.subtract(model, base)
         if model.merge_space == "weight" else
         model
         for model in models
     )
 
-    res = ties_sum_extended(
+    res = ties.ties_sum_extended(
         *models,
         k=k,
         vote_sgn=vote_sgn,
@@ -154,14 +147,14 @@ def copy_region(
     if c is not None:
         c = value_to_node(c)
 
-        a = subtract(
+        a = linear.subtract(
             a, c,
         )
-        b = subtract(
+        b = linear.subtract(
             b, c,
         )
 
-    copy_method = [merge_methods.tensor_sum, merge_methods.top_k_tensor_sum][int(top_k)]
+    copy_method = [slicing.tensor_sum, slicing.top_k_tensor_sum][int(top_k)]
     res = copy_method(
         a, b,
         width=width,
@@ -169,7 +162,7 @@ def copy_region(
     )
 
     if c is not None:
-        res = merge_methods.add_difference(
+        res = linear.add_difference(
             c, res,
             alpha=1.0,
         )
@@ -192,21 +185,21 @@ def rotate(
     if c is not None:
         c = value_to_node(c)
 
-        a = subtract(
+        a = linear.subtract(
             a, c,
         )
-        b = subtract(
+        b = linear.subtract(
             b, c,
         )
 
-    res = merge_methods.rotate(
+    res = svd.rotate(
         a, b,
         alignment=alignment,
         alpha=alpha,
     ).set_cache(cache)
 
     if c is not None:
-        res = merge_methods.add_difference(
+        res = linear.add_difference(
             c, res,
             alpha=1.0,
         )
@@ -224,21 +217,18 @@ def dropout(
     seed: Parameter(int) = None,
 ) -> recipe_nodes.RecipeNode:
     deltas = [
-        subtract(model, a)
+        linear.subtract(model, a)
         for model in models
     ]
-    ba_delta = merge_methods.dropout(*deltas, probability=probability, overlap=overlap, overlap_emphasis=overlap_emphasis, seed=seed)
-    return merge_methods.add_difference(a, ba_delta, alpha=alpha)
-
-
-ties_sum_with_dropout = merge_methods.ties_sum_with_dropout
+    ba_delta = ties.dropout(*deltas, probability=probability, overlap=overlap, overlap_emphasis=overlap_emphasis, seed=seed)
+    return linear.add_difference(a, ba_delta, alpha=alpha)
 
 
 # implementation of: https://arxiv.org/abs/2311.03099
 # Notice that this is "TIES Merging w/ DARE", which is "Prune > Merge (TIES) > Rescale"
 # See https://slgero.medium.com/merge-large-language-models-29897aeb1d1a for details
 # mode "TIES-SOUP" has been implemented by setting `vote_sgn` > 0.0
-def ties_with_dare(
+def add_ties_with_dare(
     base: RecipeNodeOrValue,
     *models: RecipeNodeOrValue,
     della_eps: Parameter(float) = 0.0,
@@ -258,13 +248,13 @@ def ties_with_dare(
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)
     deltas = tuple(
-        subtract(model, base)
+        linear.subtract(model, base)
         if model.merge_space == "weight" else
         model
         for model in models
     )
 
-    res = ties_sum_with_dropout(
+    res = ties.ties_sum_with_dropout(
         *deltas,
         della_eps=della_eps,
         probability=probability,
@@ -280,7 +270,7 @@ def ties_with_dare(
         ftol=ftol,
     )
 
-    return merge_methods.add_difference(base, res, alpha=alpha)
+    return linear.add_difference(base, res, alpha=alpha)
 
 
 # Following mergekit's implementation of Model Stock (which official implementation doesn't exist)
@@ -293,15 +283,15 @@ def n_model_stock(
     base = value_to_node(base)
     models = tuple(value_to_node(model) for model in models)
     deltas = tuple(
-        subtract(model, base)
+        linear.subtract(model, base)
         if model.merge_space == "weight" else
         model
         for model in models
     )
 
-    res = model_stock(
+    res = ties.model_stock(
         *deltas,
         cos_eps=cos_eps,
     )
 
-    return merge_methods.add_difference(base, res, alpha=1.0)
+    return linear.add_difference(base, res, alpha=1.0)

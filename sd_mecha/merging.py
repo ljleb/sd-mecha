@@ -11,7 +11,7 @@ import sys
 import threading
 import typing
 import torch
-from .extensions import model_configs, model_formats
+from .extensions import model_configs, model_dirs, model_formats
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
 from .extensions.merge_methods import value_to_node, MergeMethod, StateDict, T as MergeMethodT
 from .extensions.merge_spaces import MergeSpace
@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
-from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar
+from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar, Sequence
 from .typing_ import is_subclass
 
 
@@ -38,7 +38,6 @@ def merge(
     output_dtype: Optional[torch.dtype] = ...,
     threads: Optional[int] = ...,
     total_buffer_size: int = ...,
-    model_dirs: Iterable[pathlib.Path] = ...,
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
     omit_extra_keys: bool = ...,
@@ -71,8 +70,6 @@ def merge(
             Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
         total_buffer_size (optional):
             Total byte size of the buffers for all safetensors state dicts (input and output).
-        model_dirs (optional):
-            One or more directories to search for model files if `recipe` references relative paths. Defaults to [].
         strict_weight_space (optional):
             If True, verifies that merges occur in "weight" space. If False, merges can happen
             in other merge spaces (like "delta" or "param"). Defaults to True.
@@ -113,10 +110,6 @@ def merge(
         threads = None
     if total_buffer_size is ...:
         total_buffer_size = 2**28
-    if model_dirs is ...:
-        model_dirs = ()
-    else:
-        model_dirs = list(model_dirs)
     if strict_weight_space is ...:
         strict_weight_space = True
     if check_finite is ...:
@@ -161,7 +154,7 @@ def merge(
         thread_local_data = threading.local()
         executor = ThreadPoolExecutor(max_workers=threads)
 
-    with open_input_dicts(recipe, model_dirs, buffer_size_per_file, omit_extra_keys, check_mandatory_keys):
+    with open_input_dicts(recipe, buffer_size_per_file, omit_extra_keys, check_mandatory_keys):
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}' space")
 
@@ -185,7 +178,6 @@ def merge(
                 output,
                 recipe_metadata,
                 original_recipe,
-                model_dirs,
                 buffer_size_per_file_per_thread,
             ) as output_dict,
         ):
@@ -283,14 +275,13 @@ def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
     merged_header: Mapping[str, KeyMetadata],
     recipe: RecipeNode,
-    model_dirs: Iterable[pathlib.Path],
     buffer_size_per_thread: int,
 ):
     if isinstance(output, (str, pathlib.Path)):
         if not isinstance(output, pathlib.Path):
             output = pathlib.Path(output)
         if not output.is_absolute():
-            for model_dir in model_dirs:
+            for model_dir in model_dirs.get_all():
                 output = model_dir / output
                 break
         logging.info(f"Saving to {output}")
@@ -373,14 +364,13 @@ class ThisThreadExecutor(nullcontext):
 @contextlib.contextmanager
 def open_input_dicts(
     recipe: recipe_nodes.RecipeNode,
-    model_dirs: Iterable[pathlib.Path] = (),
     buffer_size_per_dict: int = 0,
     omit_extra_keys: bool = True,
     check_mandatory_keys: bool = False,
     empty_cuda_cache: bool = False,
 ):
     try:
-        recipe.accept(LoadInputDictsVisitor(list(model_dirs), buffer_size_per_dict, omit_extra_keys, check_mandatory_keys))
+        recipe.accept(LoadInputDictsVisitor(buffer_size_per_dict, omit_extra_keys, check_mandatory_keys))
         yield recipe
     finally:
         recipe.accept(CloseInputDictsVisitor())
@@ -391,7 +381,6 @@ def open_input_dicts(
 
 @dataclasses.dataclass
 class LoadInputDictsVisitor(RecipeVisitor):
-    model_dirs: Iterable[pathlib.Path]
     buffer_size_per_dict: int
     strip_extra_keys: bool
     check_mandatory_keys: bool
@@ -434,7 +423,7 @@ class LoadInputDictsVisitor(RecipeVisitor):
         if not isinstance(path, pathlib.Path):
             path = pathlib.Path(path)
         if not path.is_absolute():
-            for base_dir in self.model_dirs:
+            for base_dir in model_dirs.get_all():
                 path_attempt = base_dir / path
                 if path_attempt.exists():
                     path = path_attempt
@@ -593,11 +582,16 @@ class KeyMergeVisitor(RecipeVisitor):
                 res = output_ref.use_once(self.parent_id)
             else:
                 try:
-                    merged_args, merged_kwargs = self.__visit_deeper_first((node, self.output_key), node.args, node.kwargs, node.merge_method)
+                    expected_output_keys = node.merge_method.output_groups(self.output_key)
+                    if not expected_output_keys:
+                        raise StateDictKeyError(self.output_key)
+
+                    merged_args, merged_kwargs = self.__visit_deeper_first(node)
                     res = node.merge_method.merge_key(
                         merged_args,
                         merged_kwargs,
                         self.output_key,
+                        expected_output_keys,
                         node.cache,
                         context.instance,
                     )
@@ -606,7 +600,6 @@ class KeyMergeVisitor(RecipeVisitor):
                     node.accept(release_visitor)
                 if isinstance(res, dict):
                     if self.validate_mm_contract:
-                        expected_output_keys = node.merge_method.output_groups(self.output_key)
                         assert all(k in expected_output_keys for k in res.keys()), (
                             f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
                         )
@@ -622,27 +615,28 @@ class KeyMergeVisitor(RecipeVisitor):
 
     def __visit_deeper_first(
         self,
-        new_parent_id: Tuple[RecipeNode, str],
-        node_args: Tuple[recipe_nodes.RecipeNode, ...],
-        node_kwargs: Dict[str, recipe_nodes.RecipeNode],
-        merge_method: MergeMethod,
-    ):
+        node: MergeRecipeNode,
+    ) -> Tuple[
+        Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
+        Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
+    ]:
         def depth_of_value(index) -> int:
-            nodes = node_args if isinstance(index, int) else node_kwargs
+            nodes = node.args if isinstance(index, int) else node.kwargs
             return nodes[index].accept(recipe_nodes.ModelDepthRecipeVisitor())
 
+        new_parent_id = (node, self.output_key)
         error_holder = ErrorHolder()
         merged = {}
-        input_types = merge_method.get_input_types().as_dict(len(node_args))
-        input_names = merge_method.get_param_names().as_dict(len(node_args)) if self.validate_mm_contract is not None else None
-        indices = (*range(len(node_args)), *node_kwargs.keys())
+        input_types = node.merge_method.get_input_types().as_dict(len(node.args))
+        input_names = node.merge_method.get_param_names().as_dict(len(node.args)) if self.validate_mm_contract is not None else None
+        indices = (*range(len(node.args)), *node.kwargs.keys())
 
         for index in sorted(indices, key=depth_of_value, reverse=True):
-            input_node = node_args[index] if isinstance(index, int) else node_kwargs[index]
+            input_node = node.args[index] if isinstance(index, int) else node.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_id=new_parent_id)
             if is_subclass(input_types[index], StateDict):
                 if self.validate_mm_contract:
-                    nested_input_keys = merge_method.input_keys_for_output(self.output_key, input_names[index])
+                    nested_input_keys = node.merge_method.input_keys_for_output(self.output_key, input_names[index])
                 else:
                     nested_input_keys = None
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
@@ -650,10 +644,10 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
 
-        merged_args = [merged.get(index) for index in range(len(node_args))]
+        merged_args = [merged.get(index) for index in range(len(node.args))]
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
         error_holder.try_raise()
-        return merged_args, merged_kwargs
+        return tuple(merged_args), merged_kwargs
 
 
 @dataclasses.dataclass
