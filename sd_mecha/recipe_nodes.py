@@ -4,6 +4,7 @@ import pathlib
 import torch
 from .extensions import model_configs, merge_methods, merge_spaces
 from .extensions.merge_spaces import MergeSpace
+from .keys_map import KeyMap
 from typing import Optional, Dict, Tuple, Union
 
 
@@ -20,6 +21,10 @@ class RecipeNode(abc.ABC):
     @property
     @abc.abstractmethod
     def model_config(self) -> Optional[model_configs.ModelConfig]:
+        pass
+
+    @abc.abstractmethod
+    def effective_keys(self) -> Dict[str, model_configs.KeyMetadata]:
         pass
 
     @abc.abstractmethod
@@ -207,6 +212,11 @@ class MergeRecipeNode(RecipeNode):
 
         self.cache = cache
         return self
+
+    def key_map(self) -> KeyMap:
+        args_configs = [v.model_config for v in self.args]
+        kwargs_configs = {k: v.model_config for k, v in self.kwargs.items()}
+        return self.merge_method.key_map(args_configs, kwargs_configs, self.model_config)
 
 
 class RecipeVisitor(abc.ABC):

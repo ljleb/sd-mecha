@@ -16,6 +16,8 @@ from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
 from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Set, Sequence
+
+from ..keys_map import KeyMapBuilder, KeyMap, KeyRelation
 from ..typing_ import is_subclass, is_instance
 
 
@@ -206,21 +208,13 @@ class MergeMethod:
             return_annotation=_ensure_return(signature.return_annotation)
         )
 
-        self.__output_groups = {}
+        self.__key_map = None
 
         if self.wrapped_is_class:
             if not isinstance(inspect.getattr_static(fn, "__call__"), (classmethod, staticmethod)):
                 self_arg = self.__f_spec.args.pop(0)
                 self.__f_hints.pop(self_arg, None)
                 self.__f_signature = self.__f_signature.replace(parameters=[v for v in self.__f_signature.parameters.values() if v.name != self_arg])
-
-            if hasattr(self.__wrapped__, "output_groups"):
-                output_groups = self.__wrapped__.output_groups()
-                self.__output_groups = {}
-                for output_group in output_groups:
-                    output_group_set = set(output_group)
-                    for output_key in output_group:
-                        self.__output_groups[output_key] = output_group_set
 
         self.identifier = identifier
         self.has_varkwargs = self.__f_spec.varkw is not None
@@ -258,37 +252,42 @@ class MergeMethod:
 
         configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
-        is_input_keys_for_output_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "input_keys_for_output", None), staticmethod)
-        if self.__interface is None:
-            if is_conversion_implicitly and not is_input_keys_for_output_defined:
-                raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'input_keys_for_output'")
-        else:
-            if is_input_keys_for_output_defined:
-                raise RuntimeError("A merge method interface cannot define 'input_keys_for_output'.")
-
         is_return_dict = is_subclass(return_data.interface, StateDict)
-        is_output_groups_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "output_groups", None), (staticmethod, classmethod))
+        is_map_keys_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "map_keys", None), (staticmethod, classmethod))
         if self.__interface is None:
-            if is_return_dict and not is_output_groups_defined:
-                raise RuntimeError("A multi-output merge method must be a class merge method and define a static member 'output_groups'.")
+            if (is_conversion_implicitly or is_return_dict) and not is_map_keys_defined:
+                raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'map_keys(builder)'")
         else:
-            if is_output_groups_defined:
-                raise RuntimeError("A merge method interface cannot define 'output_groups'.")
+            if is_map_keys_defined:
+                raise RuntimeError("A merge method interface cannot define 'map_keys'.")
 
     def instantiate(self):
         if self.wrapped_is_class:
             return self.__wrapped__()
         return None
 
-    def input_keys_for_output(self, output_key: str, input_name: str) -> Set[str]:
-        if hasattr(self.__wrapped__, "input_keys_for_output"):
-            return set(self.__wrapped__.input_keys_for_output(output_key, input_name))
-        return {output_key}
+    def key_map(self, args_configs, kwargs_configs, return_config) -> KeyMap:
+        if self.__key_map is None:
+            input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
+            input_configs = {
+                p.name: input_configs.get(p.name) if input_configs.get(p.name) is not None else p.annotation.data.model_config if p.annotation.data.model_config is not None else return_config
+                for p in self.__f_signature.parameters.values()
+                if p.kind != p.VAR_KEYWORD
+            }
+            if self.wrapped_is_class and hasattr(self.__wrapped__, "map_keys"):
+                builder = KeyMapBuilder(input_configs, return_config)
+                self.__wrapped__.map_keys(builder)
+                self.__key_map = builder.build()
+            else:
+                self.__key_map = KeyMap({
+                    (key,): KeyRelation(
+                        (key,),
+                        {input_name: (key,) for input_name in input_configs},
+                    )
+                    for key in return_config.keys()
+                })
 
-    def output_groups(self, output_key: str) -> Set[str]:
-        if output_key in self.__output_groups:
-            return self.__output_groups[output_key]
-        return {output_key}
+        return self.__key_map
 
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"
@@ -298,11 +297,11 @@ class MergeMethod:
         input_args: Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         input_kwargs: Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         key: str,
-        all_keys: Set[str],
+        key_relation: KeyRelation,
         cache: Optional[dict],
         context: Optional[Any],
-    ):
-        args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, all_keys, cache)
+    ) -> NonDictLiteralValue | Mapping[str, NonDictLiteralValue]:
+        args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, key_relation, cache)
         fn = self.__wrapped__
         if self.wrapped_is_class:
             assert context is not None, f"class merge method {self.identifier} received self=None"
@@ -314,13 +313,13 @@ class MergeMethod:
         input_args: Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         input_kwargs: Mapping[str, float],
         key: str,
-        all_keys: Set[str],
+        key_relation: KeyRelation,
         cache: Optional[dict],
     ) -> Tuple[Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]], Mapping]:
         if self.has_varkwargs:
             input_kwargs |= {
                 "key": key,
-                "keys": all_keys,
+                "key_relation": key_relation,
                 "cache": cache,
             }
         return input_args, input_kwargs
@@ -331,9 +330,6 @@ class MergeMethod:
         return self.create_recipe(bound_args)
 
     def create_recipe(self, bound_args: inspect.BoundArguments) -> MergeRecipeNode:
-        if self.__interface is not None:
-            return self.__interface.dispatch(*bound_args.args, **bound_args.kwargs)
-
         input_types = self.get_input_types()
         args = bound_args.args
         args = tuple(
@@ -344,6 +340,9 @@ class MergeMethod:
             k: value_to_node(arg, input_types.kwargs[k])
             for k, arg in bound_args.kwargs.items()
         }
+
+        if self.__interface is not None:
+            return self.__interface.dispatch(*args, **kwargs)
 
         return MergeRecipeNode(self, args, kwargs)
 
@@ -682,23 +681,21 @@ def _merge_method_impl(
         identifier = fn.__name__
 
     if isinstance(implements, MergeMethod):
-        interface_to_implement = implements = implements.identifier
-    else:
-        interface_to_implement = implements
+        implements = implements.identifier
 
     if not register:
         if is_conversion:
             raise ValueError("A conversion merge method must be registered.")
-        if interface_to_implement is not None:
+        if implements is not None:
             raise ValueError("A merge method overload must be registered.")
         if is_interface:
             raise ValueError("A merge method interface must be registered.")
 
-    if is_interface and interface_to_implement is not None:
+    if is_interface and implements is not None:
         raise ValueError("An merge method interface cannot overload a merge method interface.")
 
-    if interface_to_implement is not None and interface_to_implement not in _module_state.interfaces_registry:
-        raise ValueError(f"The provided merge method interface {interface_to_implement} is not an interface.")
+    if implements is not None and implements not in _module_state.interfaces_registry:
+        raise ValueError(f"The provided merge method interface {implements} is not an interface.")
 
     with _module_state.registry_lock:
         if register:
@@ -713,8 +710,8 @@ def _merge_method_impl(
             _module_state.merge_methods_registry[identifier] = fn_object
             if is_conversion:
                 _register_config_converter(fn_object)
-            if interface_to_implement is not None:
-                _module_state.interfaces_registry[interface_to_implement].register_implementation(fn_object)
+            if implements is not None:
+                _module_state.interfaces_registry[implements].register_implementation(fn_object)
         except BaseException:
             _module_state = module_state_copy
             raise

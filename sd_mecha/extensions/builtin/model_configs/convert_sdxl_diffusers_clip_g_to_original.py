@@ -2,21 +2,6 @@ from typing import Iterable, Tuple
 import torch
 
 
-def convert_clip_g(kohya_sd, sgm_key):
-    kohya_keys, transpose = convert_clip_g_key(sgm_key)
-    assert kohya_keys
-    res = [kohya_sd[key] for key in kohya_keys]
-    if len(res) > 1:
-        res = torch.vstack(res)
-    else:
-        res = res[0]
-
-    if transpose:
-        res = res.T
-
-    return res
-
-
 def convert_clip_g_key(sgm_key: str) -> Tuple[Iterable[str], bool]:
     transpose = False
     if sgm_key.endswith("text_projection"):

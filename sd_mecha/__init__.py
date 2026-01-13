@@ -10,6 +10,7 @@ from .merging import merge, open_input_dicts, infer_model_configs
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
 from .extensions.merge_methods import merge_method, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
+from .extensions import model_dirs
 from .conversion import convert
 from sd_mecha.extensions.builtin.merge_methods import (
     clamp,
@@ -55,4 +56,4 @@ from sd_mecha.extensions.builtin.merge_methods import (
     n_model_stock,
 )
 from .helpers import model, literal, Defaults, set_log_level, skip_key
-from . import recipe_nodes, extensions
+from . import recipe_nodes, extensions, merge_context

@@ -18,17 +18,18 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
 )
 class convert_sdxl_diffusers_unet_to_original:
     @staticmethod
-    def input_keys_for_output(sgm_key: str, *_args, **_kwargs):
-        if sgm_key.startswith("model.diffusion_model"):
-            return (convert_unet_key(sgm_key),)
-        return ()
+    def map_keys(b):
+        for sgm_key in sdxl_sgm_config.keys():
+            if sgm_key.startswith("model.diffusion_model"):
+                b[sgm_key] = b.keys[convert_unet_key(sgm_key)]
 
     def __call__(
         self,
         diffusers_sd: Parameter(StateDict[Tensor], model_config=sdxl_diffusers_unet_config),
         **kwargs,
     ) -> Return(Tensor, model_config=sdxl_sgm_config):
-        return diffusers_sd[convert_unet_key(kwargs["key"])]
+        diffusers_key = kwargs["key_relation"].input_keys["diffusers_sd"][0]
+        return diffusers_sd[diffusers_key]
 
 
 def convert_unet_key(

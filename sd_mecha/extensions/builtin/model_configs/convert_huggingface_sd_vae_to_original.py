@@ -1,14 +1,4 @@
-import torch
-from sd_mecha.extensions.merge_methods import StateDict
 from typing import Tuple
-
-
-def convert_vae(huggingface_sd: StateDict[torch.Tensor], ldm_key: str) -> torch.Tensor:
-    huggingface_key, needs_reshape = convert_vae_key(ldm_key)
-    res = huggingface_sd[huggingface_key]
-    if needs_reshape:
-        res = reshape_weight_for_sd(res)
-    return res
 
 
 def convert_vae_key(ldm_key: str) -> Tuple[str, bool]:
@@ -33,7 +23,6 @@ def convert_vae_key(ldm_key: str) -> Tuple[str, bool]:
 
     huggingface_key = f"vae.{huggingface_key}"
     return huggingface_key, needs_reshape
-
 
 
 def reshape_weight_for_sd(w):

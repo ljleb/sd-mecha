@@ -29,7 +29,7 @@ def _register_all_lycoris_configs():
         ) -> Return(StateDict[torch.Tensor], "weight"):
             ...
 
-        lyco_dispatchers = {
+        lyco_interfaces = {
             "lora": extract_lora,
             "lokr": extract_lokr,
         }
@@ -42,7 +42,7 @@ def _register_all_lycoris_configs():
             base_config = model_configs.resolve(base_config_id)
             lyco_config = LycorisModelConfig(base_config, lyco_id, lyco_prefix, list(lycoris_algorithms))
             model_configs.register_aux(lyco_config)
-            define_conversions(lyco_config, lyco_dispatchers)
+            define_conversions(lyco_config, lyco_interfaces)
 
 
 def define_conversions(lyco_config, lyco_interfaces):
@@ -53,23 +53,22 @@ def define_conversions(lyco_config, lyco_interfaces):
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
     class LycorisToBase:
         @staticmethod
-        def input_keys_for_output(base_key: str, *_args, **_kwargs):
-            return list(lyco_config.to_lycoris_keys(base_key))
+        def map_keys(b):
+            for base_key in base_config.keys():
+                input_keys = tuple(lyco_config.to_lycoris_keys(base_key))
+                if not input_keys:
+                    continue
+                b[base_key] = b.keys[input_keys]
 
         def __call__(
             self,
             lora: Parameter(StateDict[torch.Tensor], "weight", lyco_config_id),
             **kwargs,
         ) -> Return(torch.Tensor, "delta", base_config_id):
-            key = kwargs["key"]
-            lycoris_keys = lyco_config.to_lycoris_keys(key)
-            all_base_keys = lyco_config.base_config.keys()
-            if not lycoris_keys or key not in all_base_keys:
-                raise StateDictKeyError(key)
+            (base_key,), input_keys = kwargs["key_relation"]
+            target_shape = base_config.keys()[base_key].shape
 
-            target_shape = all_base_keys[key].shape
-
-            key_prefix = next(iter(lycoris_keys)).split(".")[0]
+            key_prefix = input_keys["lora"][0].split(".")[0]
             sd_helper = StateDictKeyHelper(lora, key_prefix)
             for compose_fn in (compose_lora, compose_lokr):
                 try:
@@ -77,51 +76,28 @@ def define_conversions(lyco_config, lyco_interfaces):
                 except StateDictKeyError:
                     pass
 
-            raise StateDictKeyError(key)
+            raise StateDictKeyError(base_key)
 
     class BaseToLycoris(abc.ABC):
-        def __init_subclass__(cls, **kwargs):
-            super().__init_subclass__(**kwargs)
-            fn = getattr(cls, "__call__", None)
-            if fn is None:
-                return
-
-            spec = inspect.getfullargspec(fn)
-            assert spec.args[1] == "base"
-
         @classmethod
-        def output_groups(cls):
-            return [
-                cls.get_output_keys(key)
-                for key in base_config.keys()
-            ]
+        def map_keys(cls, b):
+            for base_key in base_config.keys():
+                if output_keys := cls.get_output_keys(base_key):
+                    b[output_keys] = b.keys[base_key]
 
         @staticmethod
         @abc.abstractmethod
         def get_output_keys(base_key: str):
             ...
 
-        @staticmethod
-        def input_keys_for_output(lyco_key: str, *_args, **_kwargs):
-            base_key = lyco_config.lycoris_to_base_keys.get(lyco_key)
-            return (base_key,) if base_key is not None else ()
-
-        @classmethod
-        def base_key_for_output(cls, lyco_key: str):
-            base_keys = cls.input_keys_for_output(lyco_key, "base")
-            if not base_keys:
-                raise StateDictKeyError(lyco_key)
-            return base_keys[0]
-
     @merge_method(identifier=f"extract_lora_'{lyco_config_id}'", implements=lyco_interfaces["lora"])
     class BaseToLora(BaseToLycoris):
         @staticmethod
         def get_output_keys(base_key: str):
             keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
-            if not keys:
-                return keys
-            up, _, down, alpha = keys
-            return up, down, alpha
+            if keys:
+                up, _, down, alpha = keys
+                return up, down, alpha
 
         def __call__(
             self,
@@ -129,13 +105,9 @@ def define_conversions(lyco_config, lyco_interfaces):
             rank: Parameter(StateDict[int], model_config=base_config_id),
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
-            lora_key = kwargs["key"]
-            lora_keys = kwargs["keys"]
-            base_key = self.base_key_for_output(lora_key)
-            if lora_key not in lora_keys:
-                raise StateDictKeyError(lora_key)
+            (up_key, down_key, alpha_key), input_keys = kwargs["key_relation"]
+            base_key = input_keys["base"][0]
 
-            up_key, down_key, alpha_key = lora_keys
             base_value = base[base_key]
             rank_value = rank[base_key]
             original_shape = base_value.shape
@@ -143,7 +115,7 @@ def define_conversions(lyco_config, lyco_interfaces):
             shape_2d = torch.Size((original_shape[0], original_shape[1:].numel()))
 
             svd_driver = "gesvd" if base_value.is_cuda else None
-            u, s, vh = torch.linalg.svd(base[base_key].reshape(shape_2d), full_matrices=False, driver=svd_driver)
+            u, s, vh = torch.linalg.svd(base_value.reshape(shape_2d), full_matrices=False, driver=svd_driver)
             s = s[..., :rank_value].sqrt()
             u = u[..., :rank_value] * s.unsqueeze(-2)
             vh = s.unsqueeze(-1) * vh[..., :rank_value, :]
@@ -170,13 +142,9 @@ def define_conversions(lyco_config, lyco_interfaces):
             kronecker_ratio: Parameter(StateDict[float], model_config=base_config_id),
             **kwargs,
         ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
-            lokr_key = kwargs["key"]
-            lokr_keys = kwargs["keys"]
-            base_key, = self.base_key_for_output(lokr_key)
-            if lokr_key not in lokr_keys:
-                raise StateDictKeyError(lokr_key)
+            (w1_key, w2_key), input_keys = kwargs["key_relation"]
+            base_key = input_keys["base"][0]
 
-            w1_key, w2_key = lokr_keys
             base_value = base[base_key]
             kronecker_ratio_value = kronecker_ratio[base_key]
             shape_original = base_value.shape
@@ -288,8 +256,8 @@ class LycorisModelConfig(LazyModelConfigBase):
         self.algorithms = list(sorted(algorithms))
         self.lycoris_to_base_keys = {
             lycoris_key: key
-            for key in base_config.keys()
-            for lycoris_key in _to_lycoris_keys({key: KeyMetadata(None, None)}, algorithms, self.prefix)
+            for key, meta in base_config.keys().items()
+            for lycoris_key in _to_lycoris_keys({key: dataclasses.replace(meta, shape=None)}, algorithms, self.prefix)
         }
 
     @property
@@ -305,7 +273,7 @@ class LycorisModelConfig(LazyModelConfigBase):
         return ModelConfigImpl(identifier, components)
 
     def to_lycoris_keys(self, key: StateDictKey, algos: Iterable[str] = None) -> Mapping[StateDictKey, KeyMetadata]:
-        return _to_lycoris_keys({key: KeyMetadata(None, None)}, algos if algos is not None else self.algorithms, self.prefix)
+        return _to_lycoris_keys({key: dataclasses.replace(self.base_config.keys()[key], shape=None)}, algos if algos is not None else self.algorithms, self.prefix)
 
 
 def _to_lycoris_keys(
@@ -317,7 +285,7 @@ def _to_lycoris_keys(
 
     for algorithm in algorithms:
         for key, meta in base_keys.items():
-            if key.endswith("bias") or not getattr(meta.metadata().dtype, "is_floating_point", True):
+            if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True) or meta.optional:
                 continue
 
             key = key.split('.')

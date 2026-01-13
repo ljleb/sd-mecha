@@ -13,9 +13,10 @@ import typing
 import torch
 from .extensions import model_configs, model_dirs, model_formats
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
-from .extensions.merge_methods import value_to_node, MergeMethod, StateDict, T as MergeMethodT
+from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, StructuralModelConfig, KeyMetadata
+from .keys_map import KeyRelation
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
@@ -158,7 +159,7 @@ def merge(
         if strict_weight_space and recipe.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}' space")
 
-        recipe_metadata = recipe.model_config.keys()
+        recipe_metadata = recipe.accept(MinimalMetadataVisitor(set(recipe.model_config.keys())))
         if not omit_extra_keys:
             recipe, recipe_metadata = copy_extra_keys(recipe)
 
@@ -213,6 +214,40 @@ def fix_torch_threading():
         torch.linalg.inv(torch.ones((1, 1), device="cuda"))
 
     globals()['fix_torch_threading'] = lambda: None
+
+
+@dataclasses.dataclass
+class MinimalMetadataVisitor(RecipeVisitor):
+    key_constraint: Set[str]
+
+    def visit_literal(self, node: LiteralRecipeNode) -> Mapping[str, KeyMetadata]:
+        meta = node.model_config.keys()
+        if not isinstance(node.value, dict):
+            return meta
+
+        res = {}
+        for k, child_node in node.value.items():
+            if k not in self.key_constraint:
+                continue
+
+            if isinstance(child_node, RecipeNode):
+                res |= child_node.accept(dataclasses.replace(self, key_constraint={k}))
+            else:
+                res[k] = meta[k]
+
+        return res
+
+    def visit_model(self, node: ModelRecipeNode) -> Mapping[str, KeyMetadata]:
+        return {k: v for k, v in node.model_config.keys().items() if k in self.key_constraint}
+
+    def visit_merge(self, node: MergeRecipeNode) -> Mapping[str, KeyMetadata]:
+        res = {}
+        meta = node.model_config.keys()
+        for k in self.key_constraint:
+            if k in node.key_map():
+                res[k] = meta[k]
+
+        return res
 
 
 def copy_extra_keys(recipe: RecipeNode):
@@ -582,16 +617,16 @@ class KeyMergeVisitor(RecipeVisitor):
                 res = output_ref.use_once(self.parent_id)
             else:
                 try:
-                    expected_output_keys = node.merge_method.output_groups(self.output_key)
-                    if not expected_output_keys:
-                        raise StateDictKeyError(self.output_key)
+                    key_map = node.key_map()
+                    assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
+                    key_relation = key_map[self.output_key]
 
-                    merged_args, merged_kwargs = self.__visit_deeper_first(node)
+                    merged_args, merged_kwargs = self.__visit_deeper_first(node, key_relation)
                     res = node.merge_method.merge_key(
                         merged_args,
                         merged_kwargs,
                         self.output_key,
-                        expected_output_keys,
+                        key_relation,
                         node.cache,
                         context.instance,
                     )
@@ -600,7 +635,7 @@ class KeyMergeVisitor(RecipeVisitor):
                     node.accept(release_visitor)
                 if isinstance(res, dict):
                     if self.validate_mm_contract:
-                        assert all(k in expected_output_keys for k in res.keys()), (
+                        assert all(k in key_relation.outputs for k in res.keys()), (
                             f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
                         )
                     for key, value in res.items():
@@ -616,6 +651,7 @@ class KeyMergeVisitor(RecipeVisitor):
     def __visit_deeper_first(
         self,
         node: MergeRecipeNode,
+        key_relation: KeyRelation,
     ) -> Tuple[
         Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
@@ -632,11 +668,12 @@ class KeyMergeVisitor(RecipeVisitor):
         indices = (*range(len(node.args)), *node.kwargs.keys())
 
         for index in sorted(indices, key=depth_of_value, reverse=True):
+            input_name = input_names[index]
             input_node = node.args[index] if isinstance(index, int) else node.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_id=new_parent_id)
             if is_subclass(input_types[index], StateDict):
                 if self.validate_mm_contract:
-                    nested_input_keys = node.merge_method.input_keys_for_output(self.output_key, input_names[index])
+                    nested_input_keys = key_relation.inputs[input_name]
                 else:
                     nested_input_keys = None
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
@@ -644,10 +681,10 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
 
-        merged_args = [merged.get(index) for index in range(len(node.args))]
+        merged_args = tuple(merged.get(index) for index in range(len(node.args)))
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
         error_holder.try_raise()
-        return tuple(merged_args), merged_kwargs
+        return merged_args, merged_kwargs
 
 
 @dataclasses.dataclass
@@ -683,22 +720,26 @@ class KeyReleaseVisitor(RecipeVisitor):
         context = self.merge_methods_context[node]
         with context.output_ref_context(self.output_key, lock=self.needs_lock) as output_ref:
             output_ref.use_once(self.parent_id)
-            self.__visit_deeper_first((node, self.output_key), node.args, node.kwargs, node.merge_method)
+            self.__visit_deeper_first(node)
 
     def __visit_deeper_first(
         self,
-        new_parent_id: Tuple[RecipeNode, str],
-        node_args: Tuple[recipe_nodes.RecipeNode, ...],
-        node_kwargs: Dict[str, recipe_nodes.RecipeNode],
-        merge_method: MergeMethod,
+        node: MergeRecipeNode,
     ):
+        new_parent_id = (node, self.output_key)
         error_holder = ErrorHolder()
 
-        for input_idx, input_name in merge_method.get_param_names().as_dict(len(node_args)).items():
-            input_node = node_args[input_idx] if isinstance(input_idx, int) else node_kwargs[input_idx]
+        key_map = node.key_map()
+        if self.output_key not in key_map:
+            return
+
+        key_relation = key_map[self.output_key]
+
+        for input_idx, input_name in node.merge_method.get_param_names().as_dict(len(node.args)).items():
+            input_node = node.args[input_idx] if isinstance(input_idx, int) else node.kwargs[input_idx]
             release_visitors = [
                 KeyReleaseVisitor(input_key, self.merge_methods_context, new_parent_id, needs_lock=True)
-                for input_key in merge_method.input_keys_for_output(self.output_key, input_name)
+                for input_key in key_relation.inputs[input_name]
             ]
             for release_visitor in release_visitors:
                 error_holder.intercept(input_node.accept, release_visitor)

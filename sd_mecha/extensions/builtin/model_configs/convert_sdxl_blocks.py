@@ -1,6 +1,10 @@
 import re
 from typing import TypeVar
-from sd_mecha.extensions.merge_methods import Return, Parameter, StateDict, merge_method
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from sd_mecha.extensions import model_configs
+
+
+sdxl_sgm_config = model_configs.resolve("sdxl-sgm")
 
 
 re_inp = re.compile(r"\.input_blocks\.(\d+)\.")  # 12
@@ -18,30 +22,31 @@ T = TypeVar("T")
 @merge_method(is_conversion=True)
 class convert_sdxl_blocks_to_sgm:
     @staticmethod
-    def input_keys_for_output(sgm_key: str, *_args, **_kwargs):
-        block_key = "BASE"
-        if sgm_key.startswith("model.diffusion_model."):
-            block_key = "OUT08"
-            if ".time_embed" in sgm_key or ".label_emb" in sgm_key:
-                block_key = "BASE"  # before input blocks
-            elif ".out." in sgm_key:
-                block_key = "OUT08"  # after output blocks
-            elif m := re_inp.search(sgm_key):
-                block_key = f"IN{int(m.groups(1)[0]):02}"
-            elif re_mid.search(sgm_key):
-                block_key = "M00"
-            elif m := re_out.search(sgm_key):
-                block_key = f"OUT{int(m.groups(1)[0]):02}"
-        elif sgm_key.startswith("first_stage_model."):
-            block_key = "VAE"
+    def map_keys(b):
+        for output_key in sdxl_sgm_config.keys():
+            input_key = "BASE"
+            if output_key.startswith("model.diffusion_model."):
+                input_key = "OUT08"
+                if ".time_embed" in output_key or ".label_emb" in output_key:
+                    input_key = "BASE"  # before input blocks
+                elif ".out." in output_key:
+                    input_key = "OUT08"  # after output blocks
+                elif m := re_inp.search(output_key):
+                    input_key = f"IN{int(m.groups(1)[0]):02}"
+                elif re_mid.search(output_key):
+                    input_key = "M00"
+                elif m := re_out.search(output_key):
+                    input_key = f"OUT{int(m.groups(1)[0]):02}"
+            elif output_key.startswith("first_stage_model."):
+                input_key = "VAE"
 
-        return (block_key,)
+            b[output_key] = b.keys[input_key]
 
     def __call__(
         self,
         blocks: Parameter(StateDict[T], model_config="sdxl-supermerger_blocks"),
         **kwargs,
     ) -> Return(T, model_config="sdxl-sgm"):
-        sgm_key = kwargs["key"]
-        block_key = self.input_keys_for_output(sgm_key, "blocks")[0]
+        relation = kwargs["key_relation"]
+        block_key = relation.inputs["blocks"][0]
         return blocks[block_key]

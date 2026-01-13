@@ -1,6 +1,10 @@
 import re
 from typing import TypeVar
-from sd_mecha.extensions.merge_methods import Return, Parameter, StateDict, merge_method
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from sd_mecha.extensions import model_configs
+
+
+sd1_ldm_config = model_configs.resolve("sd1-ldm")
 
 
 re_inp = re.compile(r"\.input_blocks\.(\d+)\.")  # 12
@@ -18,28 +22,29 @@ T = TypeVar("T")
 @merge_method(is_conversion=True)
 class convert_sd1_blocks_to_ldm:
     @staticmethod
-    def input_keys_for_output(ldm_key: str, *_args, **_kwargs):
-        block_key = "BASE"
-        if ldm_key.startswith("model.diffusion_model."):
-            block_key = "OUT11"
-            if ".time_embed" in ldm_key:
-                block_key = "BASE"  # before input blocks
-            elif ".out." in ldm_key:
-                block_key = "OUT11"  # after output blocks
-            elif m := re_inp.search(ldm_key):
-                block_key = f"IN{int(m.groups(1)[0]):02}"
-            elif re_mid.search(ldm_key):
-                block_key = "M00"
-            elif m := re_out.search(ldm_key):
-                block_key = f"OUT{int(m.groups(1)[0]):02}"
+    def map_keys(b):
+        for output_key in sd1_ldm_config.keys():
+            input_key = "BASE"
+            if output_key.startswith("model.diffusion_model."):
+                input_key = "OUT11"
+                if ".time_embed" in output_key:
+                    input_key = "BASE"  # before input blocks
+                elif ".out." in output_key:
+                    input_key = "OUT11"  # after output blocks
+                elif m := re_inp.search(output_key):
+                    input_key = f"IN{int(m.groups(1)[0]):02}"
+                elif re_mid.search(output_key):
+                    input_key = "M00"
+                elif m := re_out.search(output_key):
+                    input_key = f"OUT{int(m.groups(1)[0]):02}"
 
-        return (block_key,)
+            b[output_key] = b.keys[input_key]
 
     def __call__(
         self,
         blocks: Parameter(StateDict[T], model_config="sd1-supermerger_blocks"),
         **kwargs,
     ) -> Return(T, model_config="sd1-ldm"):
-        ldm_key = kwargs["key"]
-        block_key = self.input_keys_for_output(ldm_key, "blocks")[0]
+        relation = kwargs["key_relation"]
+        block_key = relation.inputs["blocks"][0]
         return blocks[block_key]

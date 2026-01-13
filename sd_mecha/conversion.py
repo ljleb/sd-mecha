@@ -52,6 +52,8 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
 
     recipe = value_to_node(recipe)
     with open_input_dicts(recipe):
+        if recipe.model_config is None:
+            return recipe
         src_config = recipe.model_config.identifier
     if src_config == "structural":
         raise ValueError(
@@ -90,15 +92,15 @@ def dijkstra(graph, start, goal):
 
     while heap:
         current_dist, current_node = heapq.heappop(heap)
-        if current_dist > distances[current_node]:
+        if current_dist > distances.get(current_node, float("inf")):
             continue
 
         if current_node == goal:
             break
 
-        for neighbor, edge_id in graph[current_node]:
+        for neighbor, edge_id in graph.get(current_node, ()):
             distance_via_current = current_dist + 1
-            if distance_via_current < distances[neighbor]:
+            if distance_via_current < distances.get(neighbor, float("inf")):
                 distances[neighbor] = distance_via_current
                 predecessors[neighbor] = current_node
                 edge_used[neighbor] = edge_id
