@@ -73,6 +73,10 @@ class SafetensorsMapping(Mapping[str, torch.Tensor], abc.ABC):
     def items(self) -> Iterable[Tuple[str, torch.Tensor]]:
         ...
 
+    @abc.abstractmethod
+    def close(self) -> None:
+        ...
+
 
 class InSafetensorsDict(SafetensorsMapping):
     def __init__(self, file_path: pathlib.Path, buffer_size):

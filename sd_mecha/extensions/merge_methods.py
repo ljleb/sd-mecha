@@ -1,6 +1,5 @@
 import abc
 import dataclasses
-import itertools
 import threading
 from collections import defaultdict
 import fuzzywuzzy.process
@@ -10,13 +9,12 @@ import torch
 import typing
 import textwrap
 import ast
-from sd_mecha.recipe_nodes import RecipeNode, ModelRecipeNode, MergeRecipeNode, LiteralRecipeNode, NonDictLiteralValue, RecipeNodeOrValue, PythonLiteralValue
+from sd_mecha.recipe_nodes import ClosedModelRecipeNode, RecipeNode, MergeRecipeNode, LiteralRecipeNode, NonDictLiteralValue, RecipeNodeOrValue, PythonLiteralValue
 from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
 from types import SimpleNamespace
-from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Set, Sequence
-
+from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Sequence
 from ..keys_map import KeyMapBuilder, KeyMap, KeyRelation
 from ..typing_ import is_subclass, is_instance
 
@@ -183,7 +181,7 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 class MergeMethod:
     def __init__(self, fn_or_cls: Callable | type, identifier: str):
         self.__wrapped__ = fn_or_cls
-        self.wrapped_is_class = inspect.isclass(fn_or_cls)  # todo: test class merge methods
+        self.wrapped_is_class = inspect.isclass(fn_or_cls)
         if self.wrapped_is_class:
             if not hasattr(fn_or_cls, "__call__"):
                 raise TypeError("class merge methods must define a __call__ method")
@@ -207,8 +205,6 @@ class MergeMethod:
             ],
             return_annotation=_ensure_return(signature.return_annotation)
         )
-
-        self.__key_map = None
 
         if self.wrapped_is_class:
             if not isinstance(inspect.getattr_static(fn, "__call__"), (classmethod, staticmethod)):
@@ -241,14 +237,20 @@ class MergeMethod:
                 if param_merge_space != {merge_spaces.resolve("param")}:
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
-        input_configs_are_explicit = all(config is not None for config in input_configs.as_dict().values())
-        if input_configs_are_explicit and self.get_return_config(input_configs.args_varargs(), input_configs.kwargs) is None:
-            raise TypeError("Cannot infer the model config to return from the input model configs.")
-
         return_data = self.__get_return_data(self.__f_hints.get("return"))  # validates return type annotation
+
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
             if not any(k.merge_space for k in params.as_dict().values()):
                 raise RuntimeError("When using a merge space symbol as output, it must also be used by at least one input parameter.")
+
+        if isinstance(return_data.merge_space, MergeSpaceSymbol):
+            param_spaces = self.get_input_merge_spaces().as_dict().values()
+            if not any(isinstance(merge_space, MergeSpaceSymbol) for merge_space in param_spaces):
+                raise RuntimeError(
+                    f"Merge method '{self.identifier}': return merge space is a symbol, "
+                    f"but no parameter uses a merge space symbol. "
+                    f"Use a concrete return merge space or add a symbolic parameter."
+                )
 
         configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
@@ -267,27 +269,31 @@ class MergeMethod:
         return None
 
     def key_map(self, args_configs, kwargs_configs, return_config) -> KeyMap:
-        if self.__key_map is None:
-            input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
-            input_configs = {
-                p.name: input_configs.get(p.name) if input_configs.get(p.name) is not None else p.annotation.data.model_config if p.annotation.data.model_config is not None else return_config
-                for p in self.__f_signature.parameters.values()
-                if p.kind != p.VAR_KEYWORD
-            }
-            if self.wrapped_is_class and hasattr(self.__wrapped__, "map_keys"):
-                builder = KeyMapBuilder(input_configs, return_config)
-                self.__wrapped__.map_keys(builder)
-                self.__key_map = builder.build()
-            else:
-                self.__key_map = KeyMap({
-                    (key,): KeyRelation(
-                        (key,),
-                        {input_name: (key,) for input_name in input_configs},
-                    )
-                    for key in return_config.keys()
-                })
+        input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
+        input_configs = {
+            p.name: input_configs.get(p.name) if input_configs.get(p.name) is not None else p.annotation.data.model_config if p.annotation.data.model_config is not None else return_config
+            for p in self.__f_signature.parameters.values()
+            if p.kind != p.VAR_KEYWORD
+        }
+        if self.wrapped_is_class and hasattr(self.__wrapped__, "map_keys"):
+            builder = KeyMapBuilder(input_configs, return_config)
+            self.__wrapped__.map_keys(builder)
+            res = builder.build()
+        else:
+            res = KeyMap({
+                (key,): KeyRelation(
+                    (key,),
+                    {input_name: (key,) for input_name in input_configs},
+                )
+                for key in return_config.keys()
+            })
+        return res
 
-        return self.__key_map
+    def __eq__(self, other):
+        return isinstance(other, MergeMethod) and self.identifier == other.identifier
+
+    def __hash__(self):
+        return hash(self.identifier)
 
     def __repr__(self):
         return f"<merge method '{self.identifier}'>"
@@ -330,21 +336,20 @@ class MergeMethod:
         return self.create_recipe(bound_args)
 
     def create_recipe(self, bound_args: inspect.BoundArguments) -> MergeRecipeNode:
-        input_types = self.get_input_types()
-        args = bound_args.args
+        types = self.get_input_types()
         args = tuple(
             value_to_node(arg, arg_type)
-            for arg, arg_type in zip(args, input_types.args_varargs(len(args)))
+            for arg, arg_type in zip(bound_args.args, types.args_varargs(len(bound_args.args)))
         )
         kwargs = {
-            k: value_to_node(arg, input_types.kwargs[k])
+            k: value_to_node(arg, types.kwargs[k])
             for k, arg in bound_args.kwargs.items()
         }
 
         if self.__interface is not None:
             return self.__interface.dispatch(*args, **kwargs)
 
-        return MergeRecipeNode(self, args, kwargs)
+        return MergeRecipeNode(self, self.__f_signature.bind(*args, **kwargs))
 
     def get_signature(self):
         return self.__f_signature
@@ -364,53 +369,6 @@ class MergeMethod:
             for k, param in params.kwargs.items()
         }
         return FunctionArgs(arg_types, vararg_type, kwarg_types)
-
-    def get_return_merge_space(self, merge_space_args: Sequence[MergeSpace], merge_space_kwargs: Mapping[str, MergeSpace]) -> MergeSpace:
-        names = self.get_param_names()
-        n_args = len(merge_space_args)
-
-        for idx, merge_space_arg in (*zip(names.args_varargs(n_args), merge_space_args), *merge_space_kwargs.items()):
-            if merge_space_arg is None:
-                raise ValueError(f"merge space of parameter {idx} cannot be None")
-
-        input_merge_spaces = self.get_input_merge_spaces().as_dict(n_args)
-
-        resolved_input_spaces = {}
-        arg_tuples = enumerate(merge_space_args)
-        kwarg_tuples = ((k, v) for k, v in merge_space_kwargs.items())
-        for idx, merge_space_arg in itertools.chain(arg_tuples, kwarg_tuples):
-            name = names.args_varargs(n_args)[idx] if isinstance(idx, int) else idx
-            merge_space_param = input_merge_spaces[idx]
-            is_symbol = isinstance(merge_space_param, MergeSpaceSymbol)
-            valid_merge_spaces = merge_space_param.merge_spaces if is_symbol else merge_space_param
-            if merge_space_arg not in valid_merge_spaces:
-                valid_str_merge_spaces = tuple(m.identifier for m in valid_merge_spaces)
-                raise TypeError(f"parameter '{name}' of method {self.identifier} expects a merge space in {valid_str_merge_spaces} but got {merge_space_arg.identifier}")
-            if not is_symbol:
-                continue
-
-            if (resolved_input_space := resolved_input_spaces.get(merge_space_param)) is not None:
-                # occurrence of already seen type var
-                if merge_space_arg != resolved_input_space:
-                    raise TypeError(f"parameter '{name}' of method {self.identifier} was resolved to {resolved_input_space.identifier} but got {merge_space_arg.identifier}")
-            else:
-                resolved_input_spaces[merge_space_param] = merge_space_arg
-
-        merge_space_param: MergeSpace | MergeSpaceSymbol = self.__get_return_data(self.__f_hints.get("return")).merge_space
-        if isinstance(merge_space_param, MergeSpaceSymbol):
-            return resolved_input_spaces[merge_space_param]
-        if merge_space_param is None:
-            if self.default_merge_space in resolved_input_spaces:
-                return resolved_input_spaces[self.default_merge_space]
-            any_input_merge_space = next(iter(input_merge_spaces.values()))
-            if all(v == any_input_merge_space for v in input_merge_spaces.values()):
-                if isinstance(any_input_merge_space, set):
-                    if len(any_input_merge_space) != 1:
-                        raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
-                    any_input_merge_space = next(iter(any_input_merge_space))
-                return any_input_merge_space
-            raise RuntimeError(f"could not infer merge space of method '{self.identifier}'")
-        return merge_space_param
 
     def get_input_merge_spaces(self) -> FunctionArgs[AnyMergeSpace]:
         params = self.get_params()
@@ -445,27 +403,6 @@ class MergeMethod:
             kwargs_merge_spaces[name] = merge_space
 
         return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
-
-    def get_return_config(self, arg_configs: Sequence[Optional[ModelConfig]], kwarg_configs: Mapping[str, Optional[ModelConfig]]) -> ModelConfig:
-        input_configs = self.get_input_configs().as_dict(len(arg_configs))
-        default_config = self.__get_return_data(self.__f_hints.get("return")).model_config
-
-        arg_tuples = enumerate(arg_configs)
-        kwarg_tuples = ((k, kwarg_configs.get(k)) for k in kwarg_configs)
-        for param, arg_config in itertools.chain(arg_tuples, kwarg_tuples):
-            if arg_config is None:
-                continue
-
-            param_config = input_configs[param]
-            if param_config is None:
-                param_config = default_config
-            if param_config is None:
-                param_config = arg_config
-                default_config = arg_config
-            if param_config.identifier != arg_config.identifier:
-                raise ValueError(f"Recipe received an incompatible input: expected model config {param_config.identifier} but instead got {arg_config.identifier}")
-
-        return default_config
 
     def get_input_configs(self) -> FunctionArgs[Optional[ModelConfig]]:
         params = self.get_params()
@@ -763,9 +700,9 @@ def get_converter_paths() -> Dict[str, List[Tuple[str, MergeMethod]]]:
 def _register_config_converter(converter: MergeMethod):
     validate_config_converter(converter)
     input_configs = converter.get_input_configs()
-    return_config = converter.get_return_config(input_configs.args, input_configs.kwargs)
+    return_config = converter.get_signature().return_annotation.data.model_config
     src_config = input_configs.args[0].identifier
-    tgt_config = return_config.identifier
+    tgt_config = return_config.identifier if return_config is not None else None
 
     _module_state.conversion_registry[converter.identifier] = converter
     _module_state.converter_paths[src_config].append((tgt_config, converter))
@@ -831,6 +768,9 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) 
         else:
             expected_type = type(node_or_value)
 
+        if issubclass(expected_type, pathlib.Path):
+            expected_type = torch.Tensor
+
     numeric = int | float
 
     # verify dict value type consistency
@@ -858,12 +798,17 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) 
     except TypeError:
         pass
 
-    if isinstance(node_or_value, NonDictLiteralValue | Mapping):
+    if isinstance(node_or_value, NonDictLiteralValue):
+        res = LiteralRecipeNode({"key": node_or_value}, model_config="singleton-mecha")
+        res = _module_state.merge_methods_registry["convert_singleton"](res)
+        return res
+
+    if isinstance(node_or_value, dict):
         return LiteralRecipeNode(node_or_value)
 
-    if isinstance(expected_type, TypeVar) and isinstance(node_or_value, pathlib.Path) or issubclass(expected_type, torch.Tensor):
+    if isinstance(node_or_value, pathlib.Path) and (isinstance(expected_type, TypeVar) or issubclass(expected_type, torch.Tensor)):
         try:
-            return ModelRecipeNode(node_or_value)
+            return ClosedModelRecipeNode(node_or_value)
         except TypeError as e:
             base_error_message = f"No implicit conversion exists from {type(node_or_value)} to Dict[Tensor]"
             if isinstance(node_or_value, str):

@@ -1,8 +1,6 @@
 import contextlib
 import dataclasses
 import functools
-import gc
-import itertools
 import logging
 import operator
 import os
@@ -11,11 +9,12 @@ import sys
 import threading
 import typing
 import torch
-from .extensions import model_configs, model_dirs, model_formats
+from .extensions import model_dirs
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
 from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT
 from .extensions.merge_spaces import MergeSpace
-from .extensions.model_configs import ModelConfig, StructuralModelConfig, KeyMetadata
+from .extensions.model_configs import ModelConfig, KeyMetadata
+from .graph_finalization import open_graph
 from .keys_map import KeyRelation
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
@@ -25,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
-from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar, Sequence
+from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar, Sequence, Any
 from .typing_ import is_subclass
 
 
@@ -46,6 +45,7 @@ def merge(
     check_mandatory_keys: bool = ...,
     tqdm: type = ...,
     validate_mm_contract: bool = ...,
+    cache: Dict[RecipeNode, dict] = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
@@ -91,6 +91,10 @@ def merge(
         validate_mm_contract (optional):
             If True, validates that merge methods return the right amount of outputs indicated by `output_groups`
             and do not read other inputs than those reported by `input_keys_for_output`
+        cache (optional):
+            If set, specifies cache dicts for certain recipe nodes.
+            The dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls.
+            This can speed up certain merge methods when testing multiple parameter variations with fixed models.
 
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
@@ -125,6 +129,8 @@ def merge(
         tqdm = tqdm_original
     if validate_mm_contract is ...:
         validate_mm_contract = True
+    if cache is ...:
+        cache = {}
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
@@ -155,41 +161,41 @@ def merge(
         thread_local_data = threading.local()
         executor = ThreadPoolExecutor(max_workers=threads)
 
-    with open_input_dicts(recipe, buffer_size_per_file, omit_extra_keys, check_mandatory_keys):
-        if strict_weight_space and recipe.merge_space != "weight":
-            raise ValueError(f"recipe should be in 'weight' space, not '{recipe.merge_space.identifier}' space")
+    with open_graph(recipe, buffer_size_per_file, omit_extra_keys, check_mandatory_keys, "weight") as graph:
+        if strict_weight_space and graph.merge_space != "weight":
+            raise ValueError(f"recipe should be in 'weight' space, not '{graph.merge_space.identifier}' space")
 
-        recipe_metadata = recipe.accept(MinimalMetadataVisitor(set(recipe.model_config.keys())))
+        graph_metadata = graph.accept(MinimalMetadataVisitor(set(graph.model_config.keys())))
         if not omit_extra_keys:
-            recipe, recipe_metadata = copy_extra_keys(recipe)
+            graph, graph_metadata = copy_extra_keys(graph)
 
-        if omit_ema and "ema" in recipe.model_config.components():
-            for key in recipe.model_config.components()["ema"].keys():
-                if key in recipe_metadata:
+        if omit_ema and "ema" in graph.model_config.components():
+            for key in graph.model_config.components()["ema"].keys():
+                if key in graph_metadata:
                     # remove ema keys from merge plan
-                    del recipe_metadata[key]
+                    del graph_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(recipe, recipe_metadata.keys())
+        merge_methods_context = create_merge_method_context(graph, graph_metadata.keys())
 
         with (
             executor,
-            tqdm(total=len(recipe_metadata), desc="Merging recipe") as progress,
+            tqdm(total=len(graph_metadata), desc="Merging recipe") as progress,
             _get_output_dict(
                 output,
-                recipe_metadata,
+                graph_metadata,
                 original_recipe,
                 buffer_size_per_file_per_thread,
             ) as output_dict,
         ):
             fix_torch_threading()
             futures = []
-            for key, key_metadata in recipe_metadata.items():
-                fn = recipe.accept
+            for key, key_metadata in graph_metadata.items():
+                fn = graph.accept
                 fn = _track_output(fn, output_dict, key, key_metadata, check_finite)
-                fn = _track_progress(fn, key, recipe_metadata[key].shape, progress)
+                fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
-                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract)))
+                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache)))
 
             for future in as_completed(futures):
                 if future.exception() is not None:
@@ -222,11 +228,8 @@ class MinimalMetadataVisitor(RecipeVisitor):
 
     def visit_literal(self, node: LiteralRecipeNode) -> Mapping[str, KeyMetadata]:
         meta = node.model_config.keys()
-        if not isinstance(node.value, dict):
-            return meta
-
         res = {}
-        for k, child_node in node.value.items():
+        for k, child_node in node.value_dict.items():
             if k not in self.key_constraint:
                 continue
 
@@ -243,8 +246,9 @@ class MinimalMetadataVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode) -> Mapping[str, KeyMetadata]:
         res = {}
         meta = node.model_config.keys()
+        key_map = node.key_map()
         for k in self.key_constraint:
-            if k in node.key_map():
+            if k in key_map:
                 res[k] = meta[k]
 
         return res
@@ -272,22 +276,22 @@ class ForwardableNodesVisitor(RecipeVisitor):
     forwardable_nodes: List[Tuple[RecipeNode, Mapping[str, KeyMetadata]]] = dataclasses.field(default_factory=list)
 
     def visit_literal(self, node: LiteralRecipeNode):
-        if not isinstance(node.value, Mapping) or not node.value:
+        if not node.value_dict:
             return
 
-        if isinstance(next(iter(node.value.values())), RecipeNode):
-            for v in node.value.values():
-                v.accept(self)
-        elif (
-            isinstance(next(iter(node.value.values())), torch.Tensor) and
+        can_forward = (
             node.model_config == self.target_config and
             node.merge_space == self.target_merge_space and
             not any(node in n[0] for n in self.forwardable_nodes)
-        ):
-            metadata = OrderedDict(
-                (k, KeyMetadata(v.shape, v.dtype))
-                for k, v in node.value.items()
-            )
+        )
+        metadata = {}
+        for k, v in node.value_dict.items():
+            if isinstance(v, RecipeNode):
+                v.accept(self)
+            elif can_forward and isinstance(v, torch.Tensor):
+                metadata[k] = KeyMetadata(v.shape, v.dtype)
+
+        if can_forward and metadata:
             self.forwardable_nodes.append((node, metadata))
 
     def visit_model(self, node: ModelRecipeNode):
@@ -301,7 +305,7 @@ class ForwardableNodesVisitor(RecipeVisitor):
             ))
 
     def visit_merge(self, node: MergeRecipeNode):
-        for arg in (*node.args, *node.kwargs.values()):
+        for arg in node.bound_args.arguments.values():
             arg.accept(self)
 
 
@@ -396,200 +400,16 @@ class ThisThreadExecutor(nullcontext):
         return result
 
 
-@contextlib.contextmanager
-def open_input_dicts(
-    recipe: recipe_nodes.RecipeNode,
-    buffer_size_per_dict: int = 0,
-    omit_extra_keys: bool = True,
-    check_mandatory_keys: bool = False,
-    empty_cuda_cache: bool = False,
-):
-    try:
-        recipe.accept(LoadInputDictsVisitor(buffer_size_per_dict, omit_extra_keys, check_mandatory_keys))
-        yield recipe
-    finally:
-        recipe.accept(CloseInputDictsVisitor())
-        if empty_cuda_cache:
-            gc.collect()
-            torch.cuda.empty_cache()
-
-
-@dataclasses.dataclass
-class LoadInputDictsVisitor(RecipeVisitor):
-    buffer_size_per_dict: int
-    strip_extra_keys: bool
-    check_mandatory_keys: bool
-    dicts_cache: MutableMapping[str, Mapping[str, torch.Tensor]] = dataclasses.field(default_factory=dict)
-    structural_metadata: MutableMapping[str, TensorMetadata] = dataclasses.field(default_factory=OrderedDict)
-    param_config: Optional[ModelConfig] = None
-
-    def visit_literal(self, node: LiteralRecipeNode):
-        if not isinstance(node.value, Mapping):
-            return
-
-        metadata = {}
-        for k, v in node.value.items():
-            if isinstance(v, RecipeNode):
-                v.accept(self)
-            elif isinstance(v, torch.Tensor):
-                metadata[k] = TensorMetadata(v.shape, v.dtype)
-            elif k not in metadata:
-                metadata[k] = TensorMetadata(None, None)
-
-        node.model_config = self.__determine_model_config(metadata, node.model_config)
-        check_model_config(node.value, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, "<in-memory state dict>")
-
-    def visit_model(self, node: recipe_nodes.ModelRecipeNode):
-        node.state_dict, node_path = self.__load_dict(node)
-        metadata = OrderedDict(node.state_dict.metadata())
-        node.model_config = self.__determine_model_config(metadata, node.model_config)
-        check_model_config(node.state_dict, node.model_config, self.strip_extra_keys, self.check_mandatory_keys, str(node.path))
-
-    def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        input_configs = node.merge_method.get_input_configs().as_dict(len(node.args))
-        for k, v in itertools.chain(enumerate(node.args), node.kwargs.items()):
-            v.accept(dataclasses.replace(self, param_config=input_configs[k]))
-
-    def __load_dict(self, node: recipe_nodes.ModelRecipeNode):
-        if node.state_dict is not None:
-            return node.state_dict, node.path
-
-        path = node.path
-        if not isinstance(path, pathlib.Path):
-            path = pathlib.Path(path)
-        if not path.is_absolute():
-            for base_dir in model_dirs.get_all():
-                path_attempt = base_dir / path
-                if path_attempt.exists():
-                    path = path_attempt
-                    break
-
-        cache_key = str(path.resolve())
-        if cache_key not in self.dicts_cache:
-            matching_formats = []
-            for model_format in model_formats.get_all():
-                if model_format.matches(path):
-                    matching_formats.append(model_format)
-
-            if len(matching_formats) > 1:
-                raise RuntimeError(f"ambiguous format ({', '.join(f.identifier for f in matching_formats)}) for model {path}")
-            if len(matching_formats) < 1:
-                raise RuntimeError(f"no matching format found for model {path}")
-
-            self.dicts_cache[cache_key] = matching_formats[0].get_read_dict(path, self.buffer_size_per_dict)
-
-        return self.dicts_cache[cache_key], path
-
-    def __determine_model_config(self, metadata: MutableMapping[str, TensorMetadata], config_hint: Optional[ModelConfig]) -> ModelConfig:
-        config = config_hint
-        if config is None or config == model_configs.INFER:
-            inferred_model_configs = infer_model_configs(metadata)
-            if any(self.param_config in cfgs for cfgs in inferred_model_configs):
-                config = self.param_config
-            elif inferred_model_configs and len(inferred_model_configs[0]) == 1:
-                config = next(iter(inferred_model_configs[0]))
-            elif config is not None:  # config is INFER, structural is not allowed
-                raise RuntimeError("could not infer model config")
-
-        if config is None:
-            if not self.structural_metadata:
-                self.structural_metadata.update(metadata)
-            else:
-                for k in list(self.structural_metadata):
-                    if k not in metadata:
-                        del self.structural_metadata[k]
-                    elif (
-                        self.structural_metadata[k].shape is None or
-                        metadata[k].shape is not None and metadata[k].shape.numel() > self.structural_metadata[k].shape.numel()
-                    ):
-                        self.structural_metadata[k] = metadata[k]
-            config = StructuralModelConfig(self.structural_metadata)
-
-        return config
-
-
-def is_config_stub(config: Optional[model_configs.ModelConfig]) -> bool:
-    return getattr(config, "identifier", None) in (None, model_configs.INFER.identifier)
-
-
-def infer_model_configs(state_dict: Iterable[str]) -> List[Set[ModelConfig]]:
-    state_dict_set = set(state_dict)
-    configs_affinity = {}
-
-    for model_config in model_configs.get_all():
-        config_keys = set(model_config.keys()) | set(alias for aliases in model_config.aliases().values() for alias in aliases)
-        matched_keys = state_dict_set.intersection(config_keys)
-
-        # heuristic: accept config only if we match more than 10% of the keys of the state dict
-        if len(matched_keys) >= len(state_dict_set) * 0.1:
-            configs_affinity[model_config] = len(matched_keys)
-        # heuristic: break early if we match more than 90% of the keys of a config
-        if len(matched_keys) == len(state_dict_set) and len(matched_keys) >= len(model_config.keys()) * 0.9:
-            break
-
-    best_configs = sorted((
-        {c for c, n in configs_affinity.items() if n == affinity}
-        for affinity in set(configs_affinity.values())
-    ), key=lambda s: configs_affinity[next(iter(s))], reverse=True)
-    return best_configs
-
-
-def check_model_config(state_dict: Iterable[str], config: ModelConfig, strip_extra_keys: bool, check_mandatory_keys: bool, state_dict_origin: str):
-    state_dict_keys = set(state_dict)
-
-    if strip_extra_keys:
-        config_keys = set(k_alias for k, v in config.keys().items() for k_alias in [k, *v.aliases])
-        extra_keys = state_dict_keys - config_keys
-        if extra_keys:
-            logging.warning(f"Found extra keys in state dict {state_dict_origin}: {extra_keys}")
-
-    if check_mandatory_keys:
-        missing_keys = set()
-        for k, v in config.keys().items():
-            if v.optional:
-                continue
-
-            for k_alias in v.aliases:
-                if k_alias in state_dict_keys:
-                    k = k_alias
-                    break
-
-            if k not in state_dict_keys:
-                missing_keys.add(k)
-
-        if missing_keys:
-            raise RuntimeError(f"State dict {state_dict_origin} is missing non-optional keys: {missing_keys}")
-
-
-@dataclasses.dataclass
-class CloseInputDictsVisitor(RecipeVisitor):
-    def visit_literal(self, node: LiteralRecipeNode):
-        if isinstance(node.value, Mapping):
-            if not node.value or isinstance(next(iter(node.value.values())), RecipeNode):
-                for v in node.value.values():
-                    v.accept(self)
-
-    def visit_model(self, node: recipe_nodes.ModelRecipeNode):
-        if node.state_dict is not None:
-            node.state_dict.close()
-        node.state_dict = None
-
-    def visit_merge(self, node: recipe_nodes.MergeRecipeNode):
-        for model in (*node.args, *node.kwargs.values()):
-            model.accept(self)
-
-
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     output_key: str
     merge_methods_context: Dict[RecipeNode, MergeMethodContext]
     validate_mm_contract: bool
+    merge_methods_caches: Dict[RecipeNode, Any]
     parent_id: Optional[Tuple[RecipeNode, str]] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
-        value = node.value
-        if isinstance(node.value, Mapping):
-            value = self.__visit_sd(node.value, node.model_config)
+        value = self.__visit_sd(node.value_dict, node.model_config)
         if isinstance(value, NonDictLiteralValue):
             return value
         if isinstance(value, RecipeNode):
@@ -627,7 +447,7 @@ class KeyMergeVisitor(RecipeVisitor):
                         merged_kwargs,
                         self.output_key,
                         key_relation,
-                        node.cache,
+                        self.merge_methods_caches.get(node),
                         context.instance,
                     )
                 finally:
@@ -657,19 +477,19 @@ class KeyMergeVisitor(RecipeVisitor):
         Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
     ]:
         def depth_of_value(index) -> int:
-            nodes = node.args if isinstance(index, int) else node.kwargs
+            nodes = node.bound_args.args if isinstance(index, int) else node.bound_args.kwargs
             return nodes[index].accept(recipe_nodes.ModelDepthRecipeVisitor())
 
         new_parent_id = (node, self.output_key)
         error_holder = ErrorHolder()
         merged = {}
-        input_types = node.merge_method.get_input_types().as_dict(len(node.args))
-        input_names = node.merge_method.get_param_names().as_dict(len(node.args)) if self.validate_mm_contract is not None else None
-        indices = (*range(len(node.args)), *node.kwargs.keys())
+        input_types = node.merge_method.get_input_types().as_dict(len(node.bound_args.args))
+        input_names = node.merge_method.get_param_names().as_dict(len(node.bound_args.args)) if self.validate_mm_contract is not None else None
+        indices = (*range(len(node.bound_args.args)), *node.bound_args.kwargs.keys())
 
         for index in sorted(indices, key=depth_of_value, reverse=True):
             input_name = input_names[index]
-            input_node = node.args[index] if isinstance(index, int) else node.kwargs[index]
+            input_node = node.bound_args.args[index] if isinstance(index, int) else node.bound_args.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_id=new_parent_id)
             if is_subclass(input_types[index], StateDict):
                 if self.validate_mm_contract:
@@ -681,7 +501,7 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
 
-        merged_args = tuple(merged.get(index) for index in range(len(node.args)))
+        merged_args = tuple(merged.get(index) for index in range(len(node.bound_args.args)))
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
         error_holder.try_raise()
         return merged_args, merged_kwargs
@@ -695,9 +515,7 @@ class KeyReleaseVisitor(RecipeVisitor):
     needs_lock: bool
 
     def visit_literal(self, node: LiteralRecipeNode):
-        value = node.value
-        if isinstance(value, Mapping):
-            value = self.__visit_sd(value, node.model_config)
+        value = self.__visit_sd(node.value_dict, node.model_config)
         if isinstance(value, RecipeNode):
             value.accept(self)
 
@@ -735,8 +553,8 @@ class KeyReleaseVisitor(RecipeVisitor):
 
         key_relation = key_map[self.output_key]
 
-        for input_idx, input_name in node.merge_method.get_param_names().as_dict(len(node.args)).items():
-            input_node = node.args[input_idx] if isinstance(input_idx, int) else node.kwargs[input_idx]
+        for input_idx, input_name in node.merge_method.get_param_names().as_dict(len(node.bound_args.args)).items():
+            input_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
             release_visitors = [
                 KeyReleaseVisitor(input_key, self.merge_methods_context, new_parent_id, needs_lock=True)
                 for input_key in key_relation.inputs[input_name]
@@ -772,12 +590,12 @@ class ErrorHolder:
 class MergeNodeWrapperStateDict(StateDict):
     def __init__(
         self,
-        merge_node: recipe_nodes.MergeRecipeNode,
+        node: recipe_nodes.RecipeNode,
         expected_type: type,
         original_merge_visitor: KeyMergeVisitor,
         input_keys_constraints: Optional[Tuple[str, ...]],
     ):
-        self.merge_node = merge_node
+        self.node = node
         self.expected_type = expected_type
         self.original_merge_visitor = original_merge_visitor
         self.input_keys_constraints = input_keys_constraints
@@ -785,12 +603,12 @@ class MergeNodeWrapperStateDict(StateDict):
     def __getitem__(self, key):
         if self.input_keys_constraints is not None:
             assert key in self.input_keys_constraints, (
-                f"merge method {self.merge_node.merge_method.identifier} tried to fetch key '{key}' "
+                f"node {self.node} tried to fetch key '{key}' "
                 f"but only requested these keys through input_keys_for_output(): {self.input_keys_constraints}"
             )
 
         key_merger = dataclasses.replace(self.original_merge_visitor, output_key=key)
-        res_raw = self.merge_node.accept(key_merger)
+        res_raw = self.node.accept(key_merger)
         res = cast_node_value(res_raw, self.expected_type)
         return res
 
@@ -808,7 +626,7 @@ class MergeNodeWrapperStateDict(StateDict):
 
     @property
     def model_config(self) -> ModelConfig:
-        return self.merge_node.model_config
+        return self.node.model_config
 
     def compute_keys(self):
         return self.model_config.keys()
@@ -849,22 +667,20 @@ class CastInputDicts(RecipeVisitor):
         if node in self.converted_nodes:
             return self.converted_nodes[node]
 
-        if (
-            isinstance(node.value, torch.Tensor | int | float) or
-            isinstance(node.value, Mapping) and node.value and isinstance(next(iter(node.value.values())), torch.Tensor | int | float)
-        ):
-            res = node.to(device=self.device, dtype=self.dtype)
-            self.converted_nodes[node] = res
-            return res
-        if isinstance(node.value, Mapping) and node.value and isinstance(next(iter(node.value.values())), RecipeNode):
-            res = LiteralRecipeNode(
-                {k: v.accept(self) for k, v in node.value.items()},
-                model_config=node.model_config,
-                merge_space=node.merge_space,
-            )
-            self.converted_nodes[node] = res
-            return res
-        return node
+        converted_dict = {}
+        for k, v in node.value_dict.items():
+            if isinstance(v, RecipeNode):
+                converted_dict[k] = v.accept(self)
+            elif isinstance(v, (int, float, bool)):
+                converted_dict[k] = torch.tensor(v, device=self.device, dtype=self.dtype)
+            elif isinstance(v, torch.Tensor):
+                converted_dict[k] = v.to(device=self.device, dtype=self.dtype)
+            else:
+                raise RuntimeError(f"Cannot cast type {type(v)} to device={self.device}, dtype={self.dtype}")
+
+        res = LiteralRecipeNode(converted_dict, node.model_config, node.merge_space)
+        self.converted_nodes[node] = res
+        return res
 
     def visit_model(self, node: ModelRecipeNode):
         if node in self.converted_nodes:
@@ -876,11 +692,15 @@ class CastInputDicts(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode):
         if node in self.converted_nodes:
             return self.converted_nodes[node]
+
+        args = tuple(v.accept(self) for v in node.bound_args.args)
+        kwargs = {k: v.accept(self) for k, v in node.bound_args.kwargs.items()}
+        bound_args = node.merge_method.get_signature().bind(*args, **kwargs)
         res = MergeRecipeNode(
             node.merge_method,
-            tuple(v.accept(self) for v in node.args),
-            {k: v.accept(self) for k, v in node.kwargs.items()},
-            node.cache,
+            bound_args,
+            node.model_config,
+            node.merge_space,
         )
         self.converted_nodes[node] = res
         return res

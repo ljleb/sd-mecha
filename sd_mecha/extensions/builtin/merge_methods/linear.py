@@ -77,6 +77,23 @@ def add_difference(
 
 
 @merge_method
+def scale(
+    a: Parameter(StateDict[Tensor], "delta"),
+    alpha: Parameter(Tensor) = 1.0,
+    **kwargs,
+) -> Return(Tensor, "delta"):
+    key = kwargs["key"]
+    if alpha.numel() == 1:
+        alpha_item = alpha.item()
+        if math.isclose(alpha_item, 0.0):
+            return 0.0
+        if math.isclose(alpha_item, 1.0):
+            return a[key]
+
+    return a[key] * alpha
+
+
+@merge_method
 def subtract(
     a: Parameter(Tensor, "weight"),
     b: Parameter(Tensor, "weight"),

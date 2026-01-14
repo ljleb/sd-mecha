@@ -4,7 +4,7 @@ from typing import Mapping
 from .extensions.merge_methods import value_to_node, get_converter_paths
 from .extensions.model_configs import ModelConfig
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
-from sd_mecha.merging import open_input_dicts, infer_model_configs
+from .graph_finalization import open_graph, create_config_candidates
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -> RecipeNodeOrValue:
@@ -34,15 +34,15 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         return recipe
 
     if isinstance(config, RecipeNode):
-        with open_input_dicts(config):
-            config = config.model_config
+        with open_graph(config, fallback_ms="weight") as config_node:
+            config = config_node.model_config
 
     tgt_config = config if isinstance(config, str) else config.identifier
 
     if isinstance(recipe, Mapping):
-        possible_configs = infer_model_configs(recipe)
-        for possible_config in (cfg for s in possible_configs for cfg in s):
-            res = create_conversion_recipe(recipe, converter_paths, possible_config.identifier, tgt_config)
+        possible_configs = sorted(create_config_candidates(recipe).stats.items(), key=lambda k: k[1].state_dict_misses)
+        for possible_config in (t[0] for t in possible_configs):
+            res = create_conversion_recipe(recipe, converter_paths, possible_config, tgt_config)
             if res is not None:
                 return res
         raise ValueError(
@@ -51,10 +51,10 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         )
 
     recipe = value_to_node(recipe)
-    with open_input_dicts(recipe):
-        if recipe.model_config is None:
+    with open_graph(recipe, fallback_ms="weight") as recipe_open:
+        if recipe_open.model_config is None:
             return recipe
-        src_config = recipe.model_config.identifier
+        src_config = recipe_open.model_config.identifier
     if src_config == "structural":
         raise ValueError(
             "recipe config is 'structural': "

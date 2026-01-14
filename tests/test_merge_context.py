@@ -67,7 +67,7 @@ class convert_test2_to_test:
         return torch.stack([value0, value1], dim=0)
 
 
-@merge_method
+@merge_method(register=False)
 def weight_delta(
     a: Parameter(Tensor, merge_space="delta"),
     alpha: Parameter(float) = 1.0,

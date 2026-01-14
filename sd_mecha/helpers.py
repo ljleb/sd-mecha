@@ -1,14 +1,12 @@
 import logging
 import pathlib
 import torch
-
 from .streaming import StateDictKeyError
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig
 from .merging import merge
 from .conversion import convert
-from .recipe_nodes import ModelRecipeNode, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
-from .extensions.merge_methods import NonDictLiteralValue
+from .recipe_nodes import ClosedModelRecipeNode, LiteralValue, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
 from typing import Optional, List, MutableMapping, Iterable, Mapping
 
 
@@ -29,7 +27,7 @@ def model(
             The merge space in which the model is expected to be.
 
     Returns:
-        ModelRecipeNode: A node that can be used in recipe graphs.
+        RecipeNode: A node that can be used in recipe graphs.
     """
     if merge_space is None:
         raise ValueError("merge space cannot be None")
@@ -40,14 +38,14 @@ def model(
         return LiteralRecipeNode(state_dict, model_config=config, merge_space=merge_space)
     if isinstance(state_dict, str):
         state_dict = pathlib.Path(state_dict)
-    return ModelRecipeNode(state_dict, model_config=config, merge_space=merge_space)
+    return ClosedModelRecipeNode(state_dict, model_config=config, merge_space=merge_space)
 
 
 def literal(
-    value: NonDictLiteralValue | dict,
+    value: LiteralValue,
     config: Optional[ModelConfig | str] = None,
     merge_space: Optional[str | MergeSpace] = None,
-) -> LiteralRecipeNode:
+) -> RecipeNode:
     """
     Create a recipe node wrapping tensors or some builtin python objects.
 
@@ -66,9 +64,17 @@ def literal(
             The merge space in which the literal is expected to be.
 
     Returns:
-        LiteralRecipeNode: A recipe node representing the literal value.
+        RecipeNode: A recipe node representing the literal value.
     """
-    return LiteralRecipeNode(value, model_config=config, merge_space=merge_space)
+    initial_config = config
+    if not isinstance(value, dict):
+        value = {"key": value}
+        initial_config = "singleton-mecha"
+
+    res = LiteralRecipeNode(value, model_config=initial_config, merge_space=merge_space)
+    if config is not None:
+        res = convert(res, config)
+    return res
 
 
 def set_log_level(level: str = "INFO"):

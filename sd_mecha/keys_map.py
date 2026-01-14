@@ -367,7 +367,10 @@ class KeyMapBuilder:
 
     def __setitem__(self, out_keys: object, rhs: object) -> None:
         # Normalize outputs, preserve order, STRICTLY forbid duplicates
-        outs = _to_tuple(out_keys, what="output key")
+        if isinstance(out_keys, type(Ellipsis)):
+            outs = tuple(self._output_keys())
+        else:
+            outs = _to_tuple(out_keys, what="output key")
         if not outs:
             raise ValueError("Output group must contain at least one key.")
         _ensure_no_dupes(outs, what="output keys (within the same output group)")
