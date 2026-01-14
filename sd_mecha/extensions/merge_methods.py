@@ -190,36 +190,35 @@ class MergeMethod:
             fn = fn_or_cls
 
         try:
-            # merge method is overloaded if an overload dispatcher is registered for it
+            # merge method is overloaded if an interface is registered for it
             self.__interface = _module_state.interfaces_registry[identifier]
         except KeyError:
             self.__interface = None
 
-        self.__f_spec = inspect.getfullargspec(fn)
-        self.__f_hints = typing.get_type_hints(fn)
+        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+
         signature = inspect.signature(fn)
+        return_annotation = _ensure_return(signature.return_annotation, self.default_merge_space)
         self.__f_signature = signature.replace(
             parameters=[
-                p.replace(annotation=_ensure_parameter(p.annotation, p.name) if p.annotation != p.empty else p)
+                p.replace(annotation=_ensure_parameter(p.annotation, p.name, p.default, self.default_merge_space, return_annotation.data.interface) if p.annotation != p.empty else p)
                 for p in signature.parameters.values()
             ],
-            return_annotation=_ensure_return(signature.return_annotation)
+            return_annotation=return_annotation
         )
 
         if self.wrapped_is_class:
             if not isinstance(inspect.getattr_static(fn, "__call__"), (classmethod, staticmethod)):
-                self_arg = self.__f_spec.args.pop(0)
-                self.__f_hints.pop(self_arg, None)
+                self_arg = next(iter(p.name for p in self.__f_signature.parameters.values()))
                 self.__f_signature = self.__f_signature.replace(parameters=[v for v in self.__f_signature.parameters.values() if v.name != self_arg])
 
         self.identifier = identifier
-        self.has_varkwargs = self.__f_spec.varkw is not None
-        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+        self.has_varkwargs = any(p.kind == p.VAR_KEYWORD for p in self.__f_signature.parameters.values())
 
         self.__validate()
 
     def __validate(self):
-        names = self.get_param_names()
+        names = self.get_param_names().as_dict()
         params = self.get_params()  # validates param type annotations
         defaults = self.get_default_args()
         input_merge_spaces = self.get_input_merge_spaces()
@@ -230,27 +229,18 @@ class MergeMethod:
                 isinstance(param_idx, int) and
                 len(params.args) - len(defaults.args) <= param_idx < len(params.args)
             )
-            is_default_kwarg = isinstance(param_idx, str) and param_idx in (self.__f_spec.kwonlydefaults or {})
-            param_name = names.as_dict()[param_idx]
+            is_default_kwarg = isinstance(param_idx, str) and self.__f_signature.parameters[param_idx].default != self.__f_signature.empty
+            param_name = names[param_idx]
             if is_default_arg or is_default_kwarg:
                 param_merge_space = input_merge_spaces.as_dict()[param_idx]
                 if param_merge_space != {merge_spaces.resolve("param")}:
                     raise TypeError(f"The merge space for '{param_name}' should be 'param' since it has a default value.")
 
-        return_data = self.__get_return_data(self.__f_hints.get("return"))  # validates return type annotation
+        return_data = self.__f_signature.return_annotation.data
 
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
-            if not any(k.merge_space for k in params.as_dict().values()):
+            if not any(p.merge_space == return_data.merge_space for p in params.as_dict().values()):
                 raise RuntimeError("When using a merge space symbol as output, it must also be used by at least one input parameter.")
-
-        if isinstance(return_data.merge_space, MergeSpaceSymbol):
-            param_spaces = self.get_input_merge_spaces().as_dict().values()
-            if not any(isinstance(merge_space, MergeSpaceSymbol) for merge_space in param_spaces):
-                raise RuntimeError(
-                    f"Merge method '{self.identifier}': return merge space is a symbol, "
-                    f"but no parameter uses a merge space symbol. "
-                    f"Use a concrete return merge space or add a symbolic parameter."
-                )
 
         configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
@@ -414,34 +404,26 @@ class MergeMethod:
 
     def get_param_names(self) -> FunctionArgs[str]:
         return FunctionArgs(
-            self.__f_spec.args or [],
-            self.__f_spec.varargs or FunctionArgs.EMPTY_VARARGS,
-            {k: k for k in self.__f_spec.kwonlyargs} or {},
+            [p.name for p in self.__f_signature.parameters.values() if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)],
+            tuple((*(p.name for p in self.__f_signature.parameters.values() if p.kind == p.VAR_POSITIONAL), FunctionArgs.EMPTY_VARARGS))[0],
+            {p.name: p.name for p in self.__f_signature.parameters.values() if p.kind == p.KEYWORD_ONLY},
         )
 
     def get_default_args(self) -> FunctionArgs[Any]:
         return FunctionArgs(
-            self.__f_spec.defaults or [],
-            FunctionArgs.EMPTY_VARARGS,
-            self.__f_spec.kwonlydefaults or {},
+            [p.default for p in self.__f_signature.parameters.values() if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) and p.default != p.empty],
+            tuple((*(p for p in self.__f_signature.parameters.values() if p.kind == p.VAR_POSITIONAL), FunctionArgs.EMPTY_VARARGS))[0],
+            {p.name: p.default for p in self.__f_signature.parameters.values() if p.kind == p.KEYWORD_ONLY and p.default != p.empty},
         )
 
     def get_params(self) -> FunctionArgs[ParameterData]:
         names = self.get_param_names()
 
         return FunctionArgs(
-            [self.__get_parameter_data(self.__f_hints.get(k), k) for k in names.args],
-            self.__get_parameter_data(self.__f_hints.get(names.vararg), names.vararg) if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
-            {k: self.__get_parameter_data(self.__f_hints.get(k), k) for k in names.kwargs},
+            [self.__f_signature.parameters[k].annotation.data for k in names.args],
+            self.__f_signature.parameters[names.vararg].annotation.data if names.has_varargs() else FunctionArgs.EMPTY_VARARGS,
+            {k: self.__f_signature.parameters[k].annotation.data for k in names.kwargs},
         )
-
-    @staticmethod
-    def __get_parameter_data(hint: type, param_name: str):
-        return _ensure_parameter(hint, param_name).data
-
-    @staticmethod
-    def __get_return_data(hint: type):
-        return _ensure_return(hint).data
 
     def get_identifier(self) -> str:
         return self.identifier
@@ -452,16 +434,19 @@ class MergeMethodInterface:
         self.identifier = identifier
         self.candidates = []
 
+        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+
         signature = inspect.signature(fn)
         for param in signature.parameters.values():
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
                 raise RuntimeError(f"Keyword-only parameter '{param.name}' is not allowed in a merge strategy.")
+        return_annotation = _ensure_return(signature.return_annotation, self.default_merge_space)
         self.signature = signature.replace(
             parameters=[
-                p.replace(annotation=_ensure_parameter(p.annotation, p.name))
+                p.replace(annotation=_ensure_parameter(p.annotation, p.name, p.default, self.default_merge_space, return_annotation.data.interface))
                 for p in signature.parameters.values()
             ],
-            return_annotation=_ensure_return(signature.return_annotation),
+            return_annotation=return_annotation,
         )
 
     def register_implementation(self, candidate: MergeMethod):
@@ -507,6 +492,8 @@ class MergeMethodInterface:
 
     def dispatch(self, *args, **kwargs):
         import sd_mecha.conversion
+        from .. import open_graph
+
         for candidate, candidate_signature in self.candidates:
             try:
                 bound_args: inspect.BoundArguments = candidate_signature.bind(*args, **kwargs)
@@ -514,17 +501,20 @@ class MergeMethodInterface:
                 for parameter_name, argument_value in bound_args.arguments.copy().items():
                     contract_data = candidate_signature.parameters[parameter_name].annotation.data
 
-                    try:
-                        bound_args.arguments[parameter_name] = argument_value = sd_mecha.conversion.convert(argument_value, contract_data.model_config)
-                    except ValueError:
-                        pass
+                    if contract_data.model_config is not None:
+                        try:
+                            bound_args.arguments[parameter_name] = argument_value = sd_mecha.conversion.convert(argument_value, contract_data.model_config)
+                        except ValueError:
+                            pass
 
-                    argument_config = getattr(argument_value, "model_config", None)
-                    argument_merge_space = getattr(argument_value, "merge_space", None)
+                    fallback_ms = next(iter(contract_data.merge_space)) if contract_data.merge_space is not None else None
+                    with open_graph(argument_value, return_merge_space=fallback_ms, return_model_config=contract_data.model_config) as argument_graph:
+                        argument_config = argument_graph.model_config
+                        argument_merge_space = argument_graph.merge_space
 
-                    if contract_data.model_config is not None and argument_config is not None and contract_data.model_config != argument_config:
+                    if contract_data.model_config is not None and argument_config and contract_data.model_config != argument_config:
                         raise TypeError
-                    if contract_data.merge_space is not None and argument_merge_space is not None and argument_merge_space not in contract_data.merge_space:
+                    if contract_data.merge_space is not None and argument_merge_space and argument_merge_space not in contract_data.merge_space:
                         raise TypeError
 
                 bound_args.apply_defaults()
@@ -536,7 +526,8 @@ class MergeMethodInterface:
         raise TypeError(f"No candidate matched the given arguments: {self.identifier}(*{args}, **{kwargs})")
 
 
-def _ensure_parameter(hint: type, param_name: str):
+def _ensure_parameter(hint: type, param_name: str, default: Any, default_merge_space: MergeSpaceSymbol, return_interface: type):
+    # remove outer `| None`
     hint_args = [arg for arg in (typing.get_args(hint) or ()) if arg is not type(None)]
     if hint_args:
         hint = hint_args[0]
@@ -545,16 +536,34 @@ def _ensure_parameter(hint: type, param_name: str):
         raise TypeError(f"the type of parameter '{param_name}' should be `sd_mecha.Parameter(...)`, not `sd_mecha.Parameter` (note the lack of parentheses)")
 
     if not inspect.isclass(hint) or not issubclass(hint, ParameterType):
-        return Parameter(hint)
+        hint = Parameter(hint)
+
+    if hint.data.merge_space is None:
+        interface = hint.data.interface
+        if is_subclass(hint.data.interface, StateDict):
+            interface = (typing.get_args(interface) or (T,))[0]
+
+        if is_subclass(return_interface, StateDict):
+            return_interface = (typing.get_args(return_interface) or (T,))[0]
+
+        if default is inspect.Parameter.empty and is_subclass(interface, return_interface):
+            hint.data.merge_space = default_merge_space
+        else:
+            hint.data.merge_space = {"param"}
+
     return hint
 
 
-def _ensure_return(hint: type):
+def _ensure_return(hint: type, default_merge_space: MergeSpaceSymbol):
     if hint is Return:
         raise TypeError(f"the return type should be 'sd_mecha.Return(...)', not 'sd_mecha.Return' (note the lack of parentheses)")
 
     if not inspect.isclass(hint) or not issubclass(hint, ReturnType):
-        return Return(hint)
+        hint = Return(hint)
+
+    if hint.data.merge_space is None:
+        hint.data.merge_space = default_merge_space
+
     return hint
 
 

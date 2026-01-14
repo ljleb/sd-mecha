@@ -4,7 +4,7 @@ import logging
 import pathlib
 import torch
 from collections import OrderedDict
-from typing import Dict, Iterable, Iterator, Mapping, Optional, Set
+from typing import Dict, Iterable, Iterator, Mapping, Optional, Sequence, Set
 from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_formats
 from sd_mecha.extensions.merge_methods import value_to_node
 from sd_mecha.extensions.merge_spaces import MergeSpace, MergeSpaceSymbol
@@ -22,7 +22,9 @@ def open_graph(
     buffer_size_per_dict: int = 0,
     check_extra_keys: bool = False,
     check_mandatory_keys: bool = False,
-    fallback_ms: Optional[str | MergeSpace] = None
+    return_model_config: Optional[str | ModelConfig] = None,
+    return_merge_space: Optional[str | MergeSpace] = None,
+    return_merge_space_preference: Optional[str | MergeSpace] = None,
 ) -> Iterator[RecipeNode]:
     root = value_to_node(root)
 
@@ -37,12 +39,43 @@ def open_graph(
     merge_spaces_visitor = MergeSpacesVisitor()
     root.accept(merge_spaces_visitor)
 
-    fallback_ms = merge_spaces.resolve(fallback_ms) if isinstance(fallback_ms, str) else fallback_ms
+    return_model_config = model_configs.resolve(return_model_config) if isinstance(return_model_config, str) else return_model_config
+    return_merge_space = merge_spaces.resolve(return_merge_space) if isinstance(return_merge_space, str) else return_merge_space
+    return_merge_space_preference = merge_spaces.resolve(return_merge_space_preference) if isinstance(return_merge_space_preference, str) else return_merge_space_preference
+
+    if return_model_config is not None:
+        root_cands = model_configs_visitor.candidates[root].find()
+        root_cands |= create_config_candidates(return_model_config.metadata(), return_model_config)
+
+    if return_merge_space is not None:
+        root_ms_cands = merge_spaces_visitor.candidates[root].find()
+        previous_constraints = set(root_ms_cands.allowed) if root_ms_cands.allowed else {}
+        root_ms_cands.constrain({return_merge_space})
+        if root_ms_cands.is_empty():
+            raise RuntimeError(
+                "Return merge-space hint conflicts with existing constraints.\n"
+                f"  Provided hint: {return_merge_space}\n"
+                f"  Existing constraints: {previous_constraints}\n"
+                "Fix: remove the hint or adjust upstream merge-space constraints."
+            )
+    if return_merge_space_preference is not None:
+        root_cands = merge_spaces_visitor.candidates[root].find()
+        allowed = root_cands.allowed
+        chosen = None
+        if allowed is None:
+            chosen = return_merge_space_preference
+        elif len(allowed) > 1:
+            if return_merge_space_preference in allowed:
+                chosen = return_merge_space_preference
+            else:
+                chosen = next(iter(allowed))
+
+        if chosen is not None:
+            root_cands.constrain({chosen})
 
     finalize_visitor = FinalizeVisitor(
         check_extra_keys=check_extra_keys,
         check_mandatory_keys=check_mandatory_keys,
-        fallback_ms=fallback_ms,
         cfg_candidates=model_configs_visitor.candidates,
         ms_candidates=merge_spaces_visitor.candidates,
         state_dicts=state_dicts,
@@ -572,25 +605,21 @@ class MergeSpacesVisitor(TracingRecipeVisitor):
             )
 
 
-def finalize_component_merge_space(cands: MergeSpaceCandidates, *, origin: str = "", fallback: Optional[MergeSpace] = None) -> MergeSpace:
+def finalize_component_merge_space(cands: MergeSpaceCandidates, *, origin: str = "") -> MergeSpace:
     prefix = f"{origin}\n" if origin else ""
     if cands.allowed is None:
-        return fallback
-        # all_spaces = tuple(sorted(ms.identifier for ms in merge_spaces.get_all()))
-        # raise RuntimeError(
-        #     prefix
-        #     + "Merge-space inference failed: no constraints were provided.\n"
-        #     f"  Known merge spaces: {all_spaces}\n"
-        #     "Fix: provide a merge_space_hint, or use a merge method that specifies/propagates merge spaces."
-        # )
+        all_spaces = tuple(sorted(ms.identifier for ms in merge_spaces.get_all()))
+        raise RuntimeError(
+            prefix
+            + "Merge-space inference failed: no constraints were provided.\n"
+            f"  Known merge spaces: {all_spaces}\n"
+            "Fix: provide a merge_space_hint, or use a merge method that specifies/propagates merge spaces."
+        )
 
     if len(cands.allowed) == 0:
         raise RuntimeError(prefix + "Merge-space constraints are unsatisfiable (empty intersection).")
 
     if len(cands.allowed) > 1:
-        if fallback in cands.allowed:
-            return fallback
-
         opts = tuple(sorted(ms.identifier for ms in cands.allowed))
         raise RuntimeError(
             prefix
@@ -606,7 +635,6 @@ def finalize_component_merge_space(cands: MergeSpaceCandidates, *, origin: str =
 class FinalizeVisitor(TracingRecipeVisitor):
     check_extra_keys: bool = False
     check_mandatory_keys: bool = False
-    fallback_ms: Optional[MergeSpace] = None
     cfg_candidates: Dict[RecipeNode, ConfigCandidates] = dataclasses.field(default_factory=dict)
     ms_candidates: Dict[RecipeNode, MergeSpaceCandidates] = dataclasses.field(default_factory=dict)
     state_dicts: Dict[ModelRecipeNode, SafetensorsMapping] = dataclasses.field(default_factory=dict)
@@ -642,7 +670,7 @@ class FinalizeVisitor(TracingRecipeVisitor):
 
         ms_candidates = self.ms_candidates[node].find()
         if id(ms_candidates) not in self.ms_candidates_cache:
-            merge_space = finalize_component_merge_space(ms_candidates, origin=f"At node: {repr(node)}", fallback=self.fallback_ms)
+            merge_space = finalize_component_merge_space(ms_candidates, origin=f"At node: {repr(node)}")
             self.ms_candidates_cache[id(ms_candidates)] = merge_space
         ms = self.ms_candidates_cache[id(ms_candidates)]
 

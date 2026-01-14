@@ -161,7 +161,14 @@ def merge(
         thread_local_data = threading.local()
         executor = ThreadPoolExecutor(max_workers=threads)
 
-    with open_graph(recipe, buffer_size_per_file, omit_extra_keys, check_mandatory_keys, "weight") as graph:
+    with open_graph(
+            recipe,
+            buffer_size_per_file,
+            omit_extra_keys,
+            check_mandatory_keys,
+            return_merge_space="weight" if strict_weight_space else None,
+            return_merge_space_preference="weight" if not strict_weight_space else None,
+    ) as graph:
         if strict_weight_space and graph.merge_space != "weight":
             raise ValueError(f"recipe should be in 'weight' space, not '{graph.merge_space.identifier}' space")
 

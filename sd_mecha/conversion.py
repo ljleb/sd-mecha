@@ -34,7 +34,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         return recipe
 
     if isinstance(config, RecipeNode):
-        with open_graph(config, fallback_ms="weight") as config_node:
+        with open_graph(config, return_merge_space_preference="weight") as config_node:
             config = config_node.model_config
 
     tgt_config = config if isinstance(config, str) else config.identifier
@@ -51,7 +51,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         )
 
     recipe = value_to_node(recipe)
-    with open_graph(recipe, fallback_ms="weight") as recipe_open:
+    with open_graph(recipe, return_merge_space_preference="weight") as recipe_open:
         if recipe_open.model_config is None:
             return recipe
         src_config = recipe_open.model_config.identifier

@@ -4,6 +4,7 @@ import torch
 from .streaming import StateDictKeyError
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig
+from .extensions import merge_methods
 from .merging import merge
 from .conversion import convert
 from .recipe_nodes import ClosedModelRecipeNode, LiteralValue, LiteralRecipeNode, RecipeNode, RecipeNodeOrValue
@@ -72,8 +73,8 @@ def literal(
         initial_config = "singleton-mecha"
 
     res = LiteralRecipeNode(value, model_config=initial_config, merge_space=merge_space)
-    if config is not None:
-        res = convert(res, config)
+    if config != initial_config:
+        res = merge_methods.resolve("convert_singleton")(res)
     return res
 
 
