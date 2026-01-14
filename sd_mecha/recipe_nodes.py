@@ -4,6 +4,7 @@ import pathlib
 import torch
 from .extensions import model_configs, merge_methods, merge_spaces
 from .extensions.merge_spaces import MergeSpace
+from .keys_map import KeyMap
 from typing import Optional, Dict, Tuple, Union
 
 
@@ -20,6 +21,10 @@ class RecipeNode(abc.ABC):
     @property
     @abc.abstractmethod
     def model_config(self) -> Optional[model_configs.ModelConfig]:
+        pass
+
+    @abc.abstractmethod
+    def effective_keys(self) -> Dict[str, model_configs.KeyMetadata]:
         pass
 
     @abc.abstractmethod
@@ -65,9 +70,9 @@ class RecipeNode(abc.ABC):
         return merge_methods.resolve("cast")(self, device=device, dtype=dtype)
 
 
-PythonLiteralValue = str | int | float | bool | type(None)
+PythonLiteralValue = Optional[str | int | float | bool]
 NonDictLiteralValue = PythonLiteralValue | torch.Tensor
-LiteralValue = NonDictLiteralValue | dict
+LiteralValue = NonDictLiteralValue | Dict[str, NonDictLiteralValue | RecipeNode]
 RecipeNodeOrValue = RecipeNode | LiteralValue | pathlib.Path
 
 
@@ -159,7 +164,7 @@ class ModelRecipeNode(RecipeNode):
 class MergeRecipeNode(RecipeNode):
     def __init__(
         self,
-        merge_method,
+        merge_method: "merge_methods.MergeMethod",
         args: Tuple[RecipeNode, ...],
         kwargs: Dict[str, RecipeNode],
         cache: dict = None,
@@ -169,6 +174,7 @@ class MergeRecipeNode(RecipeNode):
         self.kwargs = kwargs
         self.cache = cache
         self.__validate_args()
+        self.__model_config = None
 
     def __validate_args(self):
         if not isinstance(self.merge_space, MergeSpace):
@@ -186,10 +192,12 @@ class MergeRecipeNode(RecipeNode):
 
     @property
     def model_config(self) -> Optional[model_configs.ModelConfig]:
-        return self.merge_method.get_return_config(
-            [v.model_config for v in self.args],
-            {k: v.model_config for k, v in self.kwargs.items()},
-        )
+        if self.__model_config is None:
+            self.__model_config = self.merge_method.get_return_config(
+                [v.model_config for v in self.args],
+                {k: v.model_config for k, v in self.kwargs.items()},
+            )
+        return self.__model_config
 
     def __contains__(self, item):
         return self is item or any(
@@ -204,6 +212,11 @@ class MergeRecipeNode(RecipeNode):
 
         self.cache = cache
         return self
+
+    def key_map(self) -> KeyMap:
+        args_configs = [v.model_config for v in self.args]
+        kwargs_configs = {k: v.model_config for k, v in self.kwargs.items()}
+        return self.merge_method.key_map(args_configs, kwargs_configs, self.model_config)
 
 
 class RecipeVisitor(abc.ABC):
