@@ -4,7 +4,7 @@ from typing import Mapping
 from .extensions.merge_methods import value_to_node, get_converter_paths
 from .extensions.model_configs import ModelConfig
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
-from .graph_finalization import open_graph, create_config_candidates
+from .graph_finalization import ModelConfigComponentType, open_graph
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -> RecipeNodeOrValue:
@@ -34,36 +34,18 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         return recipe
 
     if isinstance(config, RecipeNode):
-        with open_graph(config) as config_node:
-            config = config_node.model_config
+        with open_graph(config, root_only=True, solve_merge_space=False) as config_graph:
+            config = config_graph.finalize(check_mandatory_keys=False, check_extra_keys=False).root.model_config
 
     tgt_config = config if isinstance(config, str) else config.identifier
 
-    if isinstance(recipe, Mapping):
-        possible_configs = sorted(create_config_candidates(recipe).stats.items(), key=lambda k: k[1].state_dict_misses)
-        for possible_config in (t[0] for t in possible_configs):
-            res = create_conversion_recipe(recipe, converter_paths, possible_config, tgt_config)
+    with open_graph(recipe, root_only=True, solve_merge_space=False) as recipe_graph:
+        src_candidates = recipe_graph.root_candidates(model_config_preference=(tgt_config,)).model_config
+        for src_config in src_candidates:
+            res = create_conversion_recipe(recipe, converter_paths, src_config.identifier, tgt_config)
             if res is not None:
                 return res
-        raise ValueError(
-            "could not infer the intended config to convert from. "
-            "explicitly specifying the input config might resolve the issue"
-        )
-
-    recipe = value_to_node(recipe)
-    with open_graph(recipe, return_merge_space_preference="weight") as recipe_graph:
-        if recipe_open.model_config is None:
-            return recipe
-        src_config = recipe_open.model_config.identifier
-    if src_config == "structural":
-        raise ValueError(
-            "recipe config is 'structural': "
-            "structural recipes cannot be composed of any config conversions"
-        )
-    res = create_conversion_recipe(recipe, converter_paths, src_config, tgt_config)
-    if res is None:
-        raise ValueError(f"no config conversion exists from {src_config} to {tgt_config}")
-    return res
+        raise ValueError("Could not infer the intended config to convert from.")
 
 
 def create_conversion_recipe(recipe, paths, src_config, tgt_config):

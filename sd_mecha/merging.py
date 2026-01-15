@@ -19,7 +19,7 @@ from .keys_map import KeyRelation
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
@@ -152,7 +152,7 @@ def merge(
     )
     buffer_size_per_file = total_buffer_size // max(1, total_files_open)
     if threads is None:
-        threads = min(max(total_files_open, 2), os.cpu_count() or 1, 8)
+        threads = min(max(total_files_open, 2), os.cpu_count() or 0, 8)
 
     if threads == 0:
         thread_local_data = SimpleNamespace()
@@ -162,28 +162,33 @@ def merge(
         executor = ThreadPoolExecutor(max_workers=threads)
 
     with open_graph(
-            recipe,
-            buffer_size_per_file,
-            omit_extra_keys,
-            check_mandatory_keys,
-            return_merge_space="weight" if strict_weight_space else None,
-            return_merge_space_preference="weight" if not strict_weight_space else None,
+        recipe,
+        buffer_size_per_file,
     ) as graph:
-        if strict_weight_space and graph.merge_space != "weight":
-            raise ValueError(f"recipe should be in 'weight' space, not '{graph.merge_space.identifier}' space")
+        # todo: fix cache not referring to the new nodes
+        finalized_res = graph.finalize(
+            check_extra_keys=omit_extra_keys,
+            check_mandatory_keys=check_mandatory_keys,
+            model_config_preference=("singleton-mecha",),
+            merge_space="weight" if strict_weight_space else None,
+            merge_space_preference=("weight",) if not strict_weight_space else None,
+        )
+        recipe, node_to_keys = finalized_res.root, finalized_res.node_to_keys
+        minimal_keys = node_to_keys[recipe]
 
-        graph_metadata = graph.accept(MinimalMetadataVisitor(set(graph.model_config.keys())))
+        model_config = recipe.model_config
+        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in minimal_keys}
         if not omit_extra_keys:
-            graph, graph_metadata = copy_extra_keys(graph)
+            recipe, graph_metadata = copy_extra_keys(recipe)
 
-        if omit_ema and "ema" in graph.model_config.components():
-            for key in graph.model_config.components()["ema"].keys():
+        if omit_ema and "ema" in model_config.components():
+            for key in model_config.components()["ema"].keys():
                 if key in graph_metadata:
                     # remove ema keys from merge plan
                     del graph_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(graph, graph_metadata.keys())
+        merge_methods_context = create_merge_method_context(recipe, node_to_keys)
 
         with (
             executor,
@@ -198,7 +203,7 @@ def merge(
             fix_torch_threading()
             futures = []
             for key, key_metadata in graph_metadata.items():
-                fn = graph.accept
+                fn = recipe.accept
                 fn = _track_output(fn, output_dict, key, key_metadata, check_finite)
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
@@ -231,32 +236,44 @@ def fix_torch_threading():
 
 @dataclasses.dataclass
 class MinimalMetadataVisitor(RecipeVisitor):
-    key_constraint: Set[str]
-
     def visit_literal(self, node: LiteralRecipeNode) -> Mapping[str, KeyMetadata]:
         meta = node.model_config.keys()
         res = {}
-        for k, child_node in node.value_dict.items():
-            if k not in self.key_constraint:
-                continue
 
+        child_keys = defaultdict(set)
+        for k, child_node in node.value_dict.items():
             if isinstance(child_node, RecipeNode):
-                res |= child_node.accept(dataclasses.replace(self, key_constraint={k}))
+                child_keys[child_node].add(k)
+
+        for k, child_node in node.value_dict.items():
+            if isinstance(child_node, RecipeNode):
+                child_res = child_node.accept(dataclasses.replace(self))
+                for k_res in child_keys[child_node]:
+                    child_keys[k_res] = child_res[k_res]
             else:
                 res[k] = meta[k]
 
         return res
 
     def visit_model(self, node: ModelRecipeNode) -> Mapping[str, KeyMetadata]:
-        return {k: v for k, v in node.model_config.keys().items() if k in self.key_constraint}
+        return {k: v for k, v in node.state_dict.metadata()}
 
     def visit_merge(self, node: MergeRecipeNode) -> Mapping[str, KeyMetadata]:
         res = {}
         meta = node.model_config.keys()
         key_map = node.key_map()
-        for k in self.key_constraint:
-            if k in key_map:
-                res[k] = meta[k]
+
+        for param, args in node.bound_args.arguments.items():
+            for arg in (args if isinstance(args, tuple) else (args,)):
+                arg_res = arg.accept(self)
+                for input_key in arg_res:
+                    output_keys = key_map.in_to_out.get(input_key)
+                    output_keys = output_keys.get(param) if output_keys is not None else None
+                    if output_keys is None:
+                        continue
+
+                    for output_key in output_keys:
+                        res[output_key] = meta[output_key]
 
         return res
 
@@ -445,7 +462,8 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 try:
                     key_map = node.key_map()
-                    assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
+                    if self.output_key not in key_map:
+                        assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
                     key_relation = key_map[self.output_key]
 
                     merged_args, merged_kwargs = self.__visit_deeper_first(node, key_relation)

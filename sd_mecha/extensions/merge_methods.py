@@ -506,20 +506,17 @@ class MergeMethodInterface:
                         contract_merge_spaces = contract_data.merge_space
 
                         if argument_node not in argument_graphs:
-                            argument_graph = argument_graphs[argument_node] = stack.enter_context(open_graph(argument_node))
+                            argument_graph = argument_graphs[argument_node] = stack.enter_context(open_graph(argument_node, root_only=True))
                         else:
                             argument_graph = argument_graphs[argument_node]
 
-                        argument_finalized_node = argument_graph.finalize_root(
+                        argument_candidates = argument_graph.root_candidates(
                             model_config=contract_model_config,
                             merge_space_preference=contract_merge_spaces,
                         )
-                        argument_merge_space = argument_finalized_node.merge_space
-                        if (
-                            contract_data.merge_space is not None and
-                            argument_merge_space and
-                            argument_merge_space not in contract_data.merge_space
-                        ):
+                        mc_satisfied = bool(argument_candidates.model_config)
+                        ms_satisfied = contract_merge_spaces is None or any(ms in contract_merge_spaces for ms in argument_candidates.merge_space)
+                        if not (mc_satisfied and ms_satisfied):
                             raise TypeError
 
                     bound_args.apply_defaults()

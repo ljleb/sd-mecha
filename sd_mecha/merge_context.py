@@ -3,12 +3,12 @@ import dataclasses
 import threading
 from collections import defaultdict
 from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNode, RecipeVisitor
-from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, Mapping, Optional, Set, Tuple, Union
 
 
 # todo: test this function
-def create_merge_method_context(recipe: RecipeNode, root_keys: Iterable[str]) -> Dict[RecipeNode, "MergeMethodContext"]:
-    ports_visitor = GetOutputPortsVisitor(keys_constraint=list(root_keys))
+def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeNode, Set[str]]) -> Dict[RecipeNode, "MergeMethodContext"]:
+    ports_visitor = GetOutputPortsVisitor(active_keys)
     recipe.accept(ports_visitor)
     create_context_visitor = CreateMergeMethodContextVisitor(ports_visitor.parent_ids)
     res = recipe.accept(create_context_visitor)
@@ -17,42 +17,38 @@ def create_merge_method_context(recipe: RecipeNode, root_keys: Iterable[str]) ->
 
 @dataclasses.dataclass
 class GetOutputPortsVisitor(RecipeVisitor):
+    active_keys: Mapping[RecipeNode, Set[str]]
     parent_ids: Dict[RecipeNode, Dict[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=lambda: defaultdict(lambda: defaultdict(set)))
-    keys_constraint: Sequence[str] = dataclasses.field(default_factory=list)
 
     def visit_literal(self, node: LiteralRecipeNode):
-        keys_constraints = defaultdict(list)
-        for key, nested_node in node.value_dict.items():
-            if key in self.keys_constraint and isinstance(nested_node, RecipeNode):
-                keys_constraints[nested_node].append(key)
-        for nested_node, keys_constraint in keys_constraints.items():
-            nested_node.accept(dataclasses.replace(self, keys_constraint=keys_constraint))
+        for child_node in set(node.value_dict.values()):
+            if isinstance(child_node, RecipeNode):
+                child_node.accept(self)
 
     def visit_model(self, node: ModelRecipeNode):
         pass
 
     def visit_merge(self, node: MergeRecipeNode):
-        param_names = node.merge_method.get_param_names()
+        param_names = node.merge_method.get_param_names().as_dict(len(node.bound_args.args))
         key_map = node.key_map()
 
-        for output_key in self.keys_constraint:
-            for input_idx, input_name in param_names.as_dict(len(node.bound_args.args)).items():
-                input_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
+        for output_key in self.active_keys[node]:
+            for input_idx, param_name in param_names.items():
+                child_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
                 if output_key not in key_map:
                     continue
 
-                for input_key in key_map[output_key].inputs[input_name]:
-                    self.parent_ids[input_node][input_key].add((node, output_key))
+                child_output_keys = self.active_keys[child_node].intersection(key_map[output_key].inputs[param_name])
+                for child_output_key in child_output_keys:
+                    self.parent_ids[child_node][child_output_key].add((node, output_key))
 
         for input_node in (*node.bound_args.args, *node.bound_args.kwargs.values()):
-            input_config = input_node.model_config or node.model_config
-            input_visitor = dataclasses.replace(self, keys_constraint=list(input_config.keys())) if input_config is not None else self
-            input_node.accept(input_visitor)
+            input_node.accept(self)
 
 
 @dataclasses.dataclass
 class CreateMergeMethodContextVisitor(RecipeVisitor):
-    parent_ids: Dict[RecipeNode, Dict[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=dict)
+    parent_ids: Mapping[RecipeNode, Mapping[str, Set[Tuple[RecipeNode, str]]]] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode) -> Dict[RecipeNode, "MergeMethodContext"]:
         res = {}
@@ -71,21 +67,18 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
 
         key_map = node.key_map()
 
-        locks = defaultdict(lambda: threading.Lock())
-        for output_key in self.parent_ids[node].keys():
-            if output_key not in key_map:
-                continue
-
-            output_key_group = key_map[output_key].outputs
-            lock = threading.Lock()
-            for output_key in output_key_group:
-                locks[output_key] = lock
+        node_parent_ids = self.parent_ids[node]
+        locks = {
+            k: l
+            for t, l in ((t, threading.Lock()) for t in key_map.n_to_n_map)
+            for k in t if k in node_parent_ids
+        }
 
         res[node] = MergeMethodContext(
             {
-                output_key: MergeMethodOutputRef(output_parent_ids, None, locks[output_key])
-                for output_key, output_parent_ids in self.parent_ids[node].items()
-                if len(output_parent_ids) >= 2 or (output_key in key_map and len(key_map[output_key].outputs) >= 2)
+                output_key: MergeMethodOutputRef(node_parent_ids[output_key], None, locks[output_key])
+                for output_key in locks
+                if len(node_parent_ids[output_key]) >= 2 or len(key_map[output_key].outputs) >= 2
             },
             node.merge_method.instantiate(),
         )

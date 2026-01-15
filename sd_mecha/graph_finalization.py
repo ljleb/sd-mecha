@@ -5,12 +5,15 @@ import logging
 import pathlib
 import torch
 from collections import deque, OrderedDict
-from typing import ContextManager, Dict, Generic, Iterable, List, Mapping, Optional, Set, Tuple, TypeVar
+from typing import ContextManager, Dict, Generic, Iterable, Iterator, List, Mapping, Optional, Set, Tuple, TypeVar
 from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_formats
 from sd_mecha.extensions.merge_methods import value_to_node
 from sd_mecha.extensions.merge_spaces import MergeSpace, MergeSpaceSymbol
 from sd_mecha.extensions.model_configs import ModelConfig, StructuralModelConfig
-from sd_mecha.recipe_nodes import ClosedModelRecipeNode, LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode, OpenModelRecipeNode, RecipeNode, RecipeNodeOrValue, RecipeVisitor
+from sd_mecha.recipe_nodes import (
+    ClosedModelRecipeNode, LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode,
+    OpenModelRecipeNode, RecipeNode, RecipeNodeOrValue, RecipeVisitor, TracingRecipeVisitor,
+)
 from sd_mecha.streaming import SafetensorsMapping, TensorMetadata
 
 
@@ -21,41 +24,16 @@ T = TypeVar("T")
 def open_graph(
     root: RecipeNodeOrValue,
     buffer_size_per_dict: int = 0,
-    check_extra_keys: bool = False,
-    check_mandatory_keys: bool = False,
     root_only: bool = False,
     solve_model_config: bool = True,
     solve_merge_space: bool = True,
-    model_config: Optional[str | ModelConfig] = None,
-    merge_space: Optional[str | MergeSpace] = None,
-    model_config_preference: Optional[Iterable[str | ModelConfig]] = None,
-    merge_space_preference: Optional[Iterable[str | MergeSpace]] = None,
-) -> ContextManager[RecipeNode]:
-    model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
-    merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
-    if model_config_preference is not None:
-        model_config_preference = [
-            model_configs.resolve(mc) if isinstance(mc, str) else mc
-            for mc in model_config_preference
-        ]
-    if merge_space_preference is not None:
-        merge_space_preference = [
-            merge_spaces.resolve(ms) if isinstance(ms, str) else ms
-            for ms in merge_space_preference
-        ]
-
+) -> ContextManager["RecipeGraph"]:
     root, dicts_cache = _open_graph_impl(
         root=root,
         buffer_size_per_dict=buffer_size_per_dict,
-        check_extra_keys=check_extra_keys,
-        check_mandatory_keys=check_mandatory_keys,
         root_only=root_only,
         solve_model_config=solve_model_config,
         solve_merge_space=solve_merge_space,
-        model_config=model_config,
-        merge_space=merge_space,
-        model_config_preference=model_config_preference,
-        merge_space_preference=merge_space_preference,
     )
 
     try:
@@ -69,54 +47,178 @@ def _open_graph_impl(
     *,
     root: RecipeNodeOrValue,
     buffer_size_per_dict: int,
-    check_extra_keys: bool,
-    check_mandatory_keys: bool,
     root_only: bool,
     solve_model_config: bool,
     solve_merge_space: bool,
-    model_config: Optional[str | ModelConfig],
-    merge_space: Optional[str | MergeSpace],
-    model_config_preference: Optional[Iterable[str | ModelConfig]],
-    merge_space_preference: Optional[Iterable[str | MergeSpace]],
-) -> Tuple[RecipeNode, Dict[pathlib.Path, SafetensorsMapping]]:
-    component_types = {}
+) -> Tuple["RecipeGraph", Dict[pathlib.Path, SafetensorsMapping]]:
+    component_types = set()
     if solve_model_config:
-        component_types[ModelConfigComponentType] = (model_config, model_config_preference)
+        component_types.add(ModelConfigComponentType)
     if solve_merge_space:
-        component_types[MergeSpaceComponentType] = (merge_space, merge_space_preference)
+        component_types.add(MergeSpaceComponentType)
 
     root = value_to_node(root).accept(ResolvePathsVisitor())
 
     node_to_indices, processed_nodes = discover_components(root, root_only, set(component_types))
-    active_nodes = processed_nodes if root_only else set(node_to_indices.keys())
 
+    active_nodes = processed_nodes if root_only else set(node_to_indices)
     opener = OpenActiveStateDictsVisitor(buffer_size_per_dict, active_nodes)
     root = opener.process(root)
+    new_nodes_map = opener.transform_cache
+
+    node_to_indices = {new_nodes_map.get(k, k): v for k, v in node_to_indices.items()}
+    processed_nodes = {new_nodes_map.get(v, v) for v in processed_nodes}
+    del active_nodes
 
     candidates: Dict[type[ComponentType], Dict[ComponentIndex, ComponentCandidates]] = {}
-    for t, (return_hint, return_preference) in component_types.items():
-        t_candidates = t.build_candidates(node_to_indices, processed_nodes)
-        root_t_candidates = t_candidates[node_to_indices[root].ids[t]]
+    for t in component_types:
+        candidates[t] = t.build_candidates(node_to_indices, processed_nodes)
 
-        if return_hint is not None:
-            root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
-        if return_preference is not None:
-            root_t_candidates.apply_preference(return_preference)
+    graph = RecipeGraph(root, node_to_indices, processed_nodes, candidates, root_only)
 
-        candidates[t] = t_candidates
+    return graph, opener.dicts_cache
 
-    solutions = {t: {idx: c.finalize() for idx, c in candidates[t].items()} for t in candidates}
 
-    finalizer = FinalizeVisitor(
-        node_to_indices=node_to_indices,
-        solved_cfg=solutions.get(ModelConfigComponentType),
-        solved_ms=solutions.get(MergeSpaceComponentType),
-        check_extra_keys=check_extra_keys,
-        check_mandatory_keys=check_mandatory_keys,
-    )
-    root = root.accept(finalizer)
+@dataclasses.dataclass
+class RecipeGraph:
+    root: RecipeNode
+    node_to_indices: Dict[RecipeNode, "ComponentIndices"]
+    processed_nodes: Set[RecipeNode]
+    candidates: Dict[type["ComponentType"], Dict["ComponentIndex", "ComponentCandidates"]]
+    is_root_only: bool
 
-    return root, opener.dicts_cache
+    def finalize(
+        self,
+        model_config: Optional[str | ModelConfig] = None,
+        merge_space: Optional[str | MergeSpace] = None,
+        model_config_preference: Optional[Iterable[str | ModelConfig]] = None,
+        merge_space_preference: Optional[Iterable[str | MergeSpace]] = None,
+        check_extra_keys: bool = True,
+        check_mandatory_keys: bool = True,
+    ) -> "FinalizeReturn":
+        model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
+        merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
+        if model_config_preference is not None:
+            model_config_preference = [
+                model_configs.resolve(mc) if isinstance(mc, str) else mc
+                for mc in model_config_preference
+            ]
+        if merge_space_preference is not None:
+            merge_space_preference = [
+                merge_spaces.resolve(ms) if isinstance(ms, str) else ms
+                for ms in merge_space_preference
+            ]
+
+        candidates = self._clone_candidates()
+        component_types = {}
+        if ModelConfigComponentType in candidates:
+            component_types[ModelConfigComponentType] = (model_config, model_config_preference)
+        if MergeSpaceComponentType in candidates:
+            component_types[MergeSpaceComponentType] = (merge_space, merge_space_preference)
+
+        root_idx = self.node_to_indices[self.root].ids
+        for t, (return_hint, return_preference) in component_types.items():
+            root_idx_t = root_idx[t]
+            root_t_candidates = candidates[t][root_idx_t]
+            if return_hint is not None:
+                root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
+            if return_preference is not None:
+                root_t_candidates.apply_preference(return_preference)
+
+        solutions = {t: {idx: c.finalize() for idx, c in candidates[t].items()} for t in candidates}
+
+        finalizer = FinalizeVisitor(
+            node_to_indices=self.node_to_indices,
+            solved_cfg=solutions.get(ModelConfigComponentType),
+            solved_ms=solutions.get(MergeSpaceComponentType),
+            check_extra_keys=check_extra_keys,
+            check_mandatory_keys=check_mandatory_keys,
+        )
+        finalized_root = self.root.accept(finalizer)
+
+        node_to_keys = {}
+        if ModelConfigComponentType in candidates and not self.is_root_only:
+            t = ModelConfigComponentType
+
+            node_to_index = {finalizer.to_new_node[node]: indices.ids[t] for node, indices in self.node_to_indices.items()}
+            component_keys = {
+                idx: candidates[t][idx].stats[solutions[t][idx].identifier].intersection.copy()
+                for idx in set(node_to_index.values())
+            }
+            keys_visitor = PropagateKeysVisitor(node_to_index, component_keys)
+            finalized_root.accept(keys_visitor)
+            node_to_keys = {
+                node: keys_visitor.component_keys[node_to_index[node]]
+                for node in node_to_index.keys()
+            }
+
+        return FinalizeReturn(finalized_root, node_to_keys)
+
+    def root_candidates(
+        self,
+        model_config: Optional[str | ModelConfig] = None,
+        merge_space: Optional[str | MergeSpace] = None,
+        model_config_preference: Optional[Iterable[str | ModelConfig]] = None,
+        merge_space_preference: Optional[Iterable[str | MergeSpace]] = None,
+    ) -> "CandidatesReturn":
+        model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
+        merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
+        if model_config_preference is not None:
+            model_config_preference = [
+                model_configs.resolve(mc) if isinstance(mc, str) else mc
+                for mc in model_config_preference
+            ]
+        if merge_space_preference is not None:
+            merge_space_preference = [
+                merge_spaces.resolve(ms) if isinstance(ms, str) else ms
+                for ms in merge_space_preference
+            ]
+
+        candidates = self._clone_candidates()
+        component_types = {}
+        if ModelConfigComponentType in candidates:
+            component_types[ModelConfigComponentType] = (model_config, model_config_preference)
+        if MergeSpaceComponentType in candidates:
+            component_types[MergeSpaceComponentType] = (merge_space, merge_space_preference)
+
+        if ModelConfigComponentType not in candidates:
+            raise RuntimeError("The recipe graph was opened without model config analysis.")
+
+        root_idx = self.node_to_indices[self.root].ids
+        for t, (return_hint, return_preference) in component_types.items():
+            root_idx_t = root_idx[t]
+            root_t_candidates = candidates[t][root_idx_t]
+            if return_hint is not None:
+                root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
+            if return_preference is not None:
+                root_t_candidates.apply_preference(return_preference)
+
+        return CandidatesReturn(**{
+            t.name: candidates[t][root_idx[t]] if t in candidates else None for t in (
+                ModelConfigComponentType,
+                MergeSpaceComponentType,
+            )
+        })
+
+    def _clone_candidates(self):
+        out = {}
+        for t, by_idx in self.candidates.items():
+            out[t] = {}
+            for idx, c in by_idx.items():
+                out[t][idx] = c.clone()
+        return out
+
+
+@dataclasses.dataclass
+class FinalizeReturn:
+    root: RecipeNode
+    node_to_keys: Mapping[RecipeNode, Set[str]]
+
+
+@dataclasses.dataclass
+class CandidatesReturn:
+    model_config: Optional["ModelConfigCandidates"]
+    merge_space: Optional["MergeSpaceCandidates"]
 
 
 @dataclasses.dataclass
@@ -241,11 +343,22 @@ class OpenActiveStateDictsVisitor(RecipeVisitor):
 
 
 @dataclasses.dataclass
-class ComponentCandidates(RecipeVisitor, abc.ABC, Generic[T]):
+class ComponentCandidates(TracingRecipeVisitor, abc.ABC, Generic[T]):
+    def clone(self) -> "ComponentCandidates[T]":
+        ...
+
     def apply_return_hint(self, cfg: T, *, reason: str) -> None:
         ...
 
     def apply_preference(self, prefs: Iterable[T]) -> None:
+        ...
+
+    @abc.abstractmethod
+    def __iter__(self) -> Iterator[T]:
+        ...
+
+    @abc.abstractmethod
+    def __bool__(self) -> bool:
         ...
 
     @abc.abstractmethod
@@ -260,7 +373,7 @@ class ComponentType(abc.ABC, Generic[T]):
     Candidates: type[ComponentCandidates[T]]
 
     def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
+        super().__init_subclass__()
         cls.name = kwargs.get("component_name", cls.__name__)
         if cls.name in cls.all_components:
             raise TypeError(f"Component {cls.name} already exists.")
@@ -319,6 +432,17 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
     explicit_ids: Set[str] = dataclasses.field(default_factory=set)
     common_keys: Optional[Dict[str, TensorMetadata]] = None
 
+    def clone(self) -> "ModelConfigCandidates":
+        out = ModelConfigCandidates()
+        out.requires_known_config = self.requires_known_config
+        out.explicit_ids = set(self.explicit_ids)
+        out.common_keys = None if self.common_keys is None else dict(self.common_keys)
+        if self.stats is None:
+            out.stats = None
+        else:
+            out.stats = {k: dataclasses.replace(v, intersection=set(v.intersection)) for k, v in self.stats.items()}
+        return out
+
     def apply_return_hint(self, cfg: ModelConfig, *, reason: str) -> None:
         self.requires_known_config = True
         self.explicit_ids.add(cfg.identifier)
@@ -326,10 +450,11 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
         self._update_with_metadata(cfg.metadata(), cfg)
 
     def apply_preference(self, prefs: Iterable[ModelConfig]) -> None:
-        if not self.stats:
+        if self.stats is not None and not self.stats:
             return
+
         for mc in prefs:
-            if mc.identifier in self.stats:
+            if self.stats is None or mc.identifier in self.stats:
                 self.apply_return_hint(mc, reason=f"return preference {mc.identifier}")
                 break
 
@@ -431,6 +556,16 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
 
             child_candidates.apply_return_hint(cfg, reason=f"merge input {cfg.identifier}")
 
+    def __iter__(self):
+        if self.stats is None:
+            return
+
+        for cfg, stat in sorted(self.stats.items(), key=lambda kv: kv[1].state_dict_misses):
+            yield model_configs.resolve(cfg)
+
+    def __bool__(self) -> bool:
+        return bool(self.stats)
+
     def finalize(self) -> ModelConfig:
         if not self.stats:
             if self.requires_known_config:
@@ -464,6 +599,11 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
 @dataclasses.dataclass
 class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
     allowed: Optional[Set[MergeSpace]] = None
+
+    def clone(self) -> "MergeSpaceCandidates":
+        out = MergeSpaceCandidates()
+        out.allowed = self.allowed.copy() if self.allowed is not None else None
+        return out
 
     def apply_return_hint(self, ms: MergeSpace, *, reason: str) -> None:
         self.constrain({ms}, reason=reason)
@@ -517,6 +657,15 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
             else:
                 assert isinstance(param_ms, set), f"Unexpected merge space type: {type(param_ms)}"
                 child_c.constrain(set(param_ms), reason="merge input fixed-set constraint")
+
+    def __iter__(self):
+        if self.allowed is None:
+            return
+
+        yield from self.allowed
+
+    def __bool__(self) -> bool:
+        return bool(self.allowed)
 
     def finalize(self) -> MergeSpace:
         if self.allowed is None:
@@ -850,6 +999,7 @@ class FinalizeVisitor(RecipeVisitor):
     solved_ms: Optional[Dict[ComponentIndex, MergeSpace]]
     check_extra_keys: bool
     check_mandatory_keys: bool
+    to_new_node: Dict[RecipeNode, RecipeNode] = dataclasses.field(default_factory=dict)
 
     def visit_literal(self, node: LiteralRecipeNode):
         value_dict = {
@@ -860,7 +1010,9 @@ class FinalizeVisitor(RecipeVisitor):
         cfg, ms = self._solve_info(node)
         check_model_config(value_dict, cfg, self.check_extra_keys, self.check_mandatory_keys, "<in-memory>")
 
-        return LiteralRecipeNode(value_dict, cfg, ms)
+        res = LiteralRecipeNode(value_dict, cfg, ms)
+        self.to_new_node[node] = res
+        return res
 
     def visit_model(self, node: ModelRecipeNode):
         cfg, ms = self._solve_info(node)
@@ -869,8 +1021,11 @@ class FinalizeVisitor(RecipeVisitor):
         if node.is_open:
             if cfg == node.model_config and ms == node.merge_space:
                 return node
-            return OpenModelRecipeNode(node.state_dict, node.path, cfg, ms)
-        return ClosedModelRecipeNode(node.path, cfg, ms)
+            res = OpenModelRecipeNode(node.state_dict, node.path, cfg, ms)
+        else:
+            res = ClosedModelRecipeNode(node.path, cfg, ms)
+        self.to_new_node[node] = res
+        return res
 
     def visit_merge(self, node: MergeRecipeNode):
         args = tuple(v.accept(self) for v in node.bound_args.args)
@@ -879,7 +1034,9 @@ class FinalizeVisitor(RecipeVisitor):
 
         cfg, ms = self._solve_info(node)
 
-        return MergeRecipeNode(node.merge_method, bound_args, cfg, ms)
+        res = MergeRecipeNode(node.merge_method, bound_args, cfg, ms)
+        self.to_new_node[node] = res
+        return res
 
     def _solve_info(self, node):
         cfg = node.model_config
@@ -941,6 +1098,40 @@ def check_model_config(
                 f"  Missing ({len(missing)}):\n{lines}\n"
                 "Fix: choose the correct model config, or provide a valid checkpoint file."
             )
+
+
+@dataclasses.dataclass
+class PropagateKeysVisitor(RecipeVisitor):
+    node_to_indices: Dict[RecipeNode, ComponentIndex]
+    component_keys: Dict[ComponentIndex, Set[str]]
+
+    def visit_literal(self, node: LiteralRecipeNode):
+        self._node_keys(node).intersection_update(node.value_dict)
+        for child in node.value_dict.values():
+            if isinstance(child, RecipeNode):
+                child.accept(self)
+
+    def visit_model(self, node: ModelRecipeNode):
+        self._node_keys(node).intersection_update(node.state_dict.keys())
+
+    def visit_merge(self, node: MergeRecipeNode):
+        for child in node.bound_args.arguments.values():
+            child.accept(self)
+
+        key_map = node.key_map()
+
+        output_keys = set()
+        for outputs, inputs in key_map.n_to_n_map.values():
+            for param in inputs:
+                child = node.bound_args.arguments[param]
+                child_keys = self._node_keys(child)
+                if child_keys.intersection(inputs[param]):
+                    output_keys.update(outputs)
+
+        self._node_keys(node).intersection_update(output_keys)
+
+    def _node_keys(self, node):
+        return self.component_keys[self.node_to_indices[node]]
 
 
 def _fmt_list(items, limit=12) -> str:

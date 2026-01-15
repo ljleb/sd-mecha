@@ -106,21 +106,30 @@ class LiteralRecipeNode(RecipeNode):
         super().__init__(model_config, merge_space)
         self.value_dict = value_dict
         self.__hash = None
+        self.__equal_solved = {id(self)}
 
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_literal(self, *args, **kwargs)
 
     def __eq__(self, other):
-        return isinstance(other, LiteralRecipeNode) and (
+        if id(other) in self.__equal_solved:
+            return True
+
+        equal = isinstance(other, LiteralRecipeNode) and (
             self.value_dict == other.value_dict and
             self.model_config == other.model_config and
             self.merge_space == other.merge_space
         )
 
+        if equal:
+            self.__equal_solved.add(id(other))
+            other.__equal_past = self.__equal_solved
+        return equal
+
     def __hash__(self):
         if self.__hash is None:
             value_hash = functools.reduce(operator.xor, (hash(t) for t in self.value_dict.items()), -1)
-            self.__hash = value_hash ^ hash(self.model_config) ^ hash(self.merge_space)
+            self.__hash = value_hash ^ hash(getattr(self.model_config, "identifier", None)) ^ hash(getattr(self.merge_space, "identifier", None))
         return self.__hash
 
     def __repr__(self) -> str:
@@ -178,7 +187,7 @@ class ModelRecipeNode(RecipeNode):
 
     def __hash__(self):
         if self.__hash is None:
-            self.__hash = hash(self.path) ^ hash(self.model_config) ^ hash(self.merge_space)
+            self.__hash = hash(self.path) ^ hash(getattr(self.model_config, "identifier", None)) ^ hash(getattr(self.merge_space, "identifier", None))
         return self.__hash
 
     def __repr__(self) -> str:
@@ -232,6 +241,7 @@ class MergeRecipeNode(RecipeNode):
         self.merge_method = merge_method
         self.bound_args = bound_args
         self.__hash = None
+        self.__equal_solved = {id(self)}
         self.__key_map = None
 
     def accept(self, visitor, *args, **kwargs):
@@ -248,15 +258,23 @@ class MergeRecipeNode(RecipeNode):
         return self.__key_map
 
     def __eq__(self, other):
-        return isinstance(other, MergeRecipeNode) and (
+        if id(other) in self.__equal_solved:
+            return True
+
+        equal = isinstance(other, MergeRecipeNode) and (
             self.merge_method == other.merge_method and
             self.bound_args.arguments == other.bound_args.arguments
         )
 
+        if equal:
+            self.__equal_solved.add(id(other))
+            other.__equal_past = self.__equal_solved
+        return equal
+
     def __hash__(self):
         if self.__hash is None:
             args_hash = functools.reduce(operator.xor, (hash(t) for t in self.bound_args.arguments.items()), -1)
-            self.__hash = hash(self.merge_method) ^ args_hash ^ hash(self.model_config) ^ hash(self.merge_space)
+            self.__hash = hash(self.merge_method) ^ args_hash ^ hash(getattr(self.model_config, "identifier", None)) ^ hash(getattr(self.merge_space, "identifier", None))
         return self.__hash
 
     def __repr__(self) -> str:
@@ -345,7 +363,7 @@ class IterVisitor(RecipeVisitor):
     def visit_literal(self, node: LiteralRecipeNode):
         for v in node.value_dict.values():
             if isinstance(v, RecipeNode):
-                yield from v.accept(self, is_root=False)
+                yield from v.accept(self)
         yield node
 
     def visit_model(self, node: ModelRecipeNode):
@@ -353,7 +371,7 @@ class IterVisitor(RecipeVisitor):
 
     def visit_merge(self, node: MergeRecipeNode):
         for v in node.bound_args.arguments.values():
-            yield from v.accept(self, is_root=False)
+            yield from v.accept(self)
         yield node
 
 

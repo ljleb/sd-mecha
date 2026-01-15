@@ -37,11 +37,10 @@ where:
 - out_keys is tuple[str, ...] (order preserved)
 - input_keys is a read-only mapping param -> tuple[str, ...] (order preserved)
 """
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Set, Tuple
-from collections.abc import Mapping as ABCMapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +240,16 @@ class KeyMap:
             for ks, g in self.n_to_n_map.items()
             for k in ks
         }
+        in_to_out = defaultdict(lambda: defaultdict(list))
+        for outputs, inputs in self:
+            for output in outputs:
+                for param, param_inputs in inputs.items():
+                    for input in param_inputs:
+                        in_to_out[input][param].append(output)
+        self.in_to_out = dict(in_to_out)
+
+    def __iter__(self):
+        return iter(self.n_to_n_map.values())
 
     def __getitem__(self, k: str | Tuple[str, ...]) -> KeyRelation:
         if isinstance(k, str):
@@ -253,20 +262,6 @@ class KeyMap:
             return k in self.simple_map
         else:
             return k in self.n_to_n_map
-
-
-class IdentityDict(ABCMapping):
-    def __init__(self, value):
-        self.value = value
-
-    def __getitem__(self, __key):
-        return self.value
-
-    def __len__(self):
-        raise RuntimeError("Invalid operation.")
-
-    def __iter__(self):
-        raise RuntimeError("Invalid operation.")
 
 
 class KeyMapBuilder:
