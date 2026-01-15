@@ -9,14 +9,22 @@ import torch
 from .extensions import model_configs, merge_methods, merge_spaces, model_dirs
 from .extensions.merge_spaces import MergeSpace
 from typing import Any, Callable, cast, List, Optional, Dict, Set, Tuple, Union
-
 from .keys_map import KeyMap
 from .streaming import SafetensorsMapping
 from .typing_ import is_instance
 
 
 class RecipeNode(abc.ABC):
-    def __init__(self, model_config: Optional[model_configs.ModelConfig], merge_space: Optional[MergeSpace]):
+    def __init__(
+        self,
+        model_config: Optional[model_configs.ModelConfig | str],
+        merge_space: Optional[MergeSpace | str],
+    ):
+        if isinstance(model_config, str):
+            model_config = model_configs.resolve(model_config)
+        if isinstance(merge_space, str):
+            merge_space = merge_spaces.resolve(merge_space)
+
         self.__model_config = model_config
         self.__merge_space = merge_space
 
@@ -34,6 +42,9 @@ class RecipeNode(abc.ABC):
 
     def __contains__(self, item):
         return self.accept(ContainsVisitor(item))
+
+    def __iter__(self):
+        yield from self.accept(IterVisitor())
 
     def __add__(self, other: "RecipeNodeOrValue") -> "RecipeNode":
         other = merge_methods.value_to_node(other)
@@ -92,8 +103,6 @@ class LiteralRecipeNode(RecipeNode):
             if not is_instance(v, NonDictLiteralValue | RecipeNode):
                 raise TypeError(f"key {k} of value_dict is type {type(v)} but it should be {NonDictLiteralValue | RecipeNode}.")
 
-        model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
-        merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
         super().__init__(model_config, merge_space)
         self.value_dict = value_dict
         self.__hash = None
@@ -140,8 +149,6 @@ class ModelRecipeNode(RecipeNode):
         model_config: Optional[str | model_configs.ModelConfig] = None,
         merge_space: Optional[str | MergeSpace] = None,
     ):
-        model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
-        merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
         super().__init__(model_config, merge_space)
         if not isinstance(path, pathlib.Path):
             raise TypeError(f"The type of 'path' must be Path, not {type(path).__name__}")
@@ -198,8 +205,8 @@ class OpenModelRecipeNode(ModelRecipeNode):
         self,
         state_dict: SafetensorsMapping,
         path: pathlib.Path,
-        model_config: str | model_configs.ModelConfig,
-        merge_space: str | MergeSpace,
+        model_config: Optional[str | model_configs.ModelConfig] = None,
+        merge_space: Optional[str | MergeSpace] = None,
     ):
         super().__init__(path, model_config, merge_space)
         self._state_dict = state_dict
@@ -219,12 +226,8 @@ class MergeRecipeNode(RecipeNode):
         merge_method: "merge_methods.MergeMethod",
         bound_args: BoundArguments,
         model_config: Optional[str | model_configs.ModelConfig] = None,
-        merge_space: Optional[str | MergeSpace] = None
+        merge_space: Optional[str | MergeSpace] = None,
     ):
-        if isinstance(model_config, str):
-            model_config = model_configs.resolve(model_config)
-        if isinstance(merge_space, str):
-            merge_space = merge_spaces.resolve(merge_space)
         super().__init__(model_config, merge_space)
         self.merge_method = merge_method
         self.bound_args = bound_args
@@ -338,6 +341,23 @@ class ContainsVisitor(RecipeVisitor):
 
 
 @dataclasses.dataclass
+class IterVisitor(RecipeVisitor):
+    def visit_literal(self, node: LiteralRecipeNode):
+        for v in node.value_dict.values():
+            if isinstance(v, RecipeNode):
+                yield from v.accept(self, is_root=False)
+        yield node
+
+    def visit_model(self, node: ModelRecipeNode):
+        yield node
+
+    def visit_merge(self, node: MergeRecipeNode):
+        for v in node.bound_args.arguments.values():
+            yield from v.accept(self, is_root=False)
+        yield node
+
+
+@dataclasses.dataclass
 class VisitorContext:
     stack: List[str] = dataclasses.field(default_factory=list)
 
@@ -370,8 +390,9 @@ class TracingRecipeVisitor(RecipeVisitor, abc.ABC):
     Just inherit from TracingRecipeVisitor instead of RecipeVisitor.
     """
 
-    ctx: VisitorContext = dataclasses.field(default_factory=VisitorContext)
-    node_traces: Dict["RecipeNode", Tuple[str, ...]] = dataclasses.field(default_factory=dict)
+    def __post_init__(self):
+        self.ctx: VisitorContext = VisitorContext()
+        self.node_traces: Dict["RecipeNode", Tuple[str, ...]] = {}
 
     @classmethod
     def __init_subclass__(cls, **kwargs: Any):

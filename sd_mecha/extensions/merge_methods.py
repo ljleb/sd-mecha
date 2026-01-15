@@ -1,4 +1,5 @@
 import abc
+import contextlib
 import dataclasses
 import threading
 from collections import defaultdict
@@ -491,37 +492,41 @@ class MergeMethodInterface:
         self.candidates.append((candidate, candidate_signature))
 
     def dispatch(self, *args, **kwargs):
-        import sd_mecha.conversion
         from .. import open_graph
 
-        for candidate, candidate_signature in self.candidates:
-            try:
-                bound_args: inspect.BoundArguments = candidate_signature.bind(*args, **kwargs)
+        argument_graphs = {}
+        with contextlib.ExitStack() as stack:
+            for candidate, candidate_signature in self.candidates:
+                try:
+                    bound_args: inspect.BoundArguments = candidate_signature.bind(*args, **kwargs)
 
-                for parameter_name, argument_value in bound_args.arguments.copy().items():
-                    contract_data = candidate_signature.parameters[parameter_name].annotation.data
+                    for parameter_name, argument_node in bound_args.arguments.copy().items():
+                        contract_data = candidate_signature.parameters[parameter_name].annotation.data
+                        contract_model_config = contract_data.model_config
+                        contract_merge_spaces = contract_data.merge_space
 
-                    if contract_data.model_config is not None:
-                        try:
-                            bound_args.arguments[parameter_name] = argument_value = sd_mecha.conversion.convert(argument_value, contract_data.model_config)
-                        except ValueError:
-                            pass
+                        if argument_node not in argument_graphs:
+                            argument_graph = argument_graphs[argument_node] = stack.enter_context(open_graph(argument_node))
+                        else:
+                            argument_graph = argument_graphs[argument_node]
 
-                    fallback_ms = next(iter(contract_data.merge_space)) if contract_data.merge_space is not None else None
-                    with open_graph(argument_value, return_merge_space=fallback_ms, return_model_config=contract_data.model_config) as argument_graph:
-                        argument_config = argument_graph.model_config
-                        argument_merge_space = argument_graph.merge_space
+                        argument_finalized_node = argument_graph.finalize_root(
+                            model_config=contract_model_config,
+                            merge_space_preference=contract_merge_spaces,
+                        )
+                        argument_merge_space = argument_finalized_node.merge_space
+                        if (
+                            contract_data.merge_space is not None and
+                            argument_merge_space and
+                            argument_merge_space not in contract_data.merge_space
+                        ):
+                            raise TypeError
 
-                    if contract_data.model_config is not None and argument_config and contract_data.model_config != argument_config:
-                        raise TypeError
-                    if contract_data.merge_space is not None and argument_merge_space and argument_merge_space not in contract_data.merge_space:
-                        raise TypeError
+                    bound_args.apply_defaults()
+                    return candidate.create_recipe(bound_args)
 
-                bound_args.apply_defaults()
-                return candidate.create_recipe(bound_args)
-
-            except TypeError:
-                pass
+                except TypeError:
+                    pass
 
         raise TypeError(f"No candidate matched the given arguments: {self.identifier}(*{args}, **{kwargs})")
 
