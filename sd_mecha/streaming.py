@@ -73,6 +73,10 @@ class SafetensorsMapping(Mapping[str, torch.Tensor], abc.ABC):
     def items(self) -> Iterable[Tuple[str, torch.Tensor]]:
         ...
 
+    @abc.abstractmethod
+    def close(self) -> None:
+        ...
+
 
 class InSafetensorsDict(SafetensorsMapping):
     def __init__(self, file_path: pathlib.Path, buffer_size):
@@ -164,7 +168,7 @@ class InSafetensorsDict(SafetensorsMapping):
             with self.lock:
                 self._ensure_buffer(absolute_start_pos, total_bytes)
                 buffer_offset = absolute_start_pos - self.buffer_start_offset
-                return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).reshape(shape)
+                return torch.frombuffer(self.buffer, count=total_bytes // dtype_bytes, offset=buffer_offset, dtype=dtype).view(shape).clone()
 
 
 class StateDictKeyError(KeyError):
@@ -216,7 +220,7 @@ class OutSafetensorsDict(WriteOnlyMapping[str, torch.Tensor]):
 
         state = self.thread_states[tid]
 
-        tensor_bytes = tensor_to_bytes(tensor)
+        tensor_bytes = tensor_to_bytes(tensor.cpu().contiguous())
         tensor_size = len(tensor_bytes)
 
         if tensor_size > len(state.buffer) - state.memory_used:

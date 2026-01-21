@@ -1,7 +1,8 @@
 import torch
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from .convert_huggingface_sd_vae_to_original import convert_vae
-from ... import model_configs
+from sd_mecha.extensions import model_configs
+from .convert_huggingface_sd_vae_to_original import convert_vae_key, reshape_weight_for_sd
+
 
 # hf to sd conversion src:
 # https://github.com/huggingface/diffusers/blob/main/scripts/convert_diffusers_to_original_stable_diffusion.py
@@ -15,22 +16,36 @@ sd1_ldm = model_configs.resolve("sd1-ldm")
     identifier=f"convert_'{sd1_kohya.identifier}'_to_'{sd1_ldm.identifier}'",
     is_conversion=True,
 )
-def convert_sd1_kohya_to_original(
-    kohya_sd: Parameter(StateDict[torch.Tensor], model_config=sd1_kohya),
-    **kwargs,
-) -> Return(torch.Tensor, model_config=sd1_ldm):
-    ldm_key = kwargs["key"]
-    if ldm_key.startswith("model.diffusion_model."):
-        return convert_unet(kohya_sd, ldm_key)
-    elif ldm_key.startswith("cond_stage_model."):
-        return convert_clip_l(kohya_sd, ldm_key)
-    elif ldm_key.startswith("first_stage_model."):
-        return convert_vae(kohya_sd, ldm_key)
-    else:
-        return kohya_sd[ldm_key]
+class convert_sd1_kohya_to_original:
+    @staticmethod
+    def map_keys(b):
+        for output_key in sd1_ldm.keys():
+            needs_reshape = False
+            if output_key.startswith("model.diffusion_model."):
+                input_keys = convert_unet_key(output_key)
+            elif output_key.startswith("cond_stage_model."):
+                input_keys = convert_clip_l_key(output_key)
+            elif output_key.startswith("first_stage_model."):
+                input_keys, needs_reshape = convert_vae_key(output_key)
+            else:
+                input_keys = output_key
+            b[output_key] = b.keys[input_keys] @ needs_reshape
+
+    def __call__(
+        self,
+        kohya_sd: Parameter(StateDict[torch.Tensor], model_config=sd1_kohya),
+        **kwargs,
+    ) -> Return(torch.Tensor, model_config=sd1_ldm):
+        relation = kwargs["key_relation"]
+        needs_reshape = relation.meta
+
+        res = kohya_sd[relation["kohya_sd"][0]]
+        if needs_reshape:
+            res = reshape_weight_for_sd(res)
+        return res
 
 
-def convert_unet(kohya_sd: StateDict, ldm_key: str) -> torch.Tensor:
+def convert_unet_key(ldm_key: str) -> str:
     kohya_key = '.'.join(ldm_key.split(".")[2:])  # model.diffusion_model.
 
     for sd_part, hf_part in unet_conversion_map_layer.items():
@@ -43,7 +58,7 @@ def convert_unet(kohya_sd: StateDict, ldm_key: str) -> torch.Tensor:
     kohya_key = unet_conversion_map.get(kohya_key, kohya_key)
 
     kohya_key = f"unet.{kohya_key}"
-    return kohya_sd[kohya_key]
+    return kohya_key
 
 
 unet_conversion_map = {
@@ -123,7 +138,7 @@ for j in range(2):
     unet_conversion_map_layer[sd_mid_res_prefix] = hf_mid_res_prefix
 
 
-def convert_clip_l(kohya_sd: StateDict, ldm_key: str) -> torch.Tensor:
+def convert_clip_l_key(ldm_key: str) -> str:
     kohya_key = '.'.join(ldm_key.split(".")[2:])  # cond_stage_model.transformer.
     kohya_key = f"te.{kohya_key}"
-    return kohya_sd[kohya_key]
+    return kohya_key

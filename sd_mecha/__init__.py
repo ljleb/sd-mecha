@@ -6,40 +6,45 @@ def _load_builtin_extensions():
 _load_builtin_extensions()
 
 
-from .merging import merge, open_input_dicts, infer_model_configs
+from .merging import merge
+from .graph_finalization import open_graph
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
 from .extensions.merge_methods import merge_method, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
+from .extensions import model_dirs
 from .conversion import convert
 from sd_mecha.extensions.builtin.merge_methods import (
+    clamp,
+    add_cosine_a,
+    add_cosine_b,
+    crossover,
+    exchange_ema,
     weighted_sum,
-    slerp,
     n_average,
-    geometric_median,
+    slerp,
     subtract,
     perpendicular_component,
-    geometric_sum,
     train_difference_mask,
     add_opposite_mask,
     add_strict_opposite_mask,
-    add_cosine_a,
-    add_cosine_b,
-    ties_sum,
-    ties_sum_extended,
-    ties_sum_with_dropout,
-    crossover,
-    clamp,
-    model_stock,
+    geometric_sum,
+    multiply_quotient,
     fallback,
     cast,
     get_dtype,
     get_device,
     pick_component,
     omit_component,
-    exchange_ema,
+    cast_dtype_map,
+    cast_dtype_map_reversed,
     stack,
-)
-from .merge_method_wrappers import (
+    top_k_tensor_sum,
+    truncate_rank,
+    ties_sum_with_dropout,
+    ties_sum,
+    ties_sum_extended,
+    model_stock,
+    geometric_median,
     add_difference,
     add_perpendicular,
     add_difference_ties,
@@ -48,8 +53,8 @@ from .merge_method_wrappers import (
     tensor_sum,
     rotate,
     dropout,
-    ties_with_dare,
+    add_ties_with_dare,
     n_model_stock,
 )
 from .helpers import model, literal, Defaults, set_log_level, skip_key
-from . import recipe_nodes, extensions
+from . import recipe_nodes, extensions, merge_context
