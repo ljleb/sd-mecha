@@ -78,7 +78,7 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
             {
                 output_key: MergeMethodOutputRef(node_parent_ids[output_key], None, locks[output_key])
                 for output_key in locks
-                if len(node_parent_ids[output_key]) >= 2 or len(key_map[output_key].outputs) >= 2
+                if len(key_map[output_key].outputs) >= 2
             },
             node.merge_method.instantiate(),
         )
@@ -112,6 +112,10 @@ class MergeMethodOutputRef:
     cache: Any
     lock: Union[threading.Lock, contextlib.AbstractContextManager]
     locked: bool = False
+
+    def __post_init__(self):
+        if len(self.remaining_ports) <= 1:
+            self.lock = contextlib.nullcontext()
 
     def use_once(self, port: Optional[Tuple[RecipeNode, str]]) -> Any:
         assert self.locked

@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
-from typing import Optional, Mapping, MutableMapping, List, Set, Iterable, Tuple, Dict, TypeVar, Sequence, Any
+from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar, Sequence, Any
 from .typing_ import is_subclass
 
 
@@ -106,7 +106,7 @@ def merge(
     if merge_device is ...:
         merge_device = "cpu"
     if merge_dtype is ...:
-        merge_dtype = torch.float64
+        merge_dtype = torch.float32
     if output_device is ...:
         output_device = "cpu"
     if output_dtype is ...:

@@ -1,10 +1,9 @@
 import functools
 import heapq
-from typing import Mapping
-from .extensions.merge_methods import value_to_node, get_converter_paths
+from .extensions.merge_methods import get_converter_paths
 from .extensions.model_configs import ModelConfig
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
-from .graph_finalization import ModelConfigComponentType, open_graph
+from .graph_finalization import open_graph
 
 
 def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -> RecipeNodeOrValue:
