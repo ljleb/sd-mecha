@@ -1,6 +1,5 @@
 import abc
 import dataclasses
-import inspect
 import torch
 from typing import Iterable, Mapping, Dict
 from sd_mecha.extensions import model_configs
@@ -295,7 +294,7 @@ def _to_lycoris_keys(
 
             for suffix in lycoris_algorithms[algorithm]:
                 lycoris_key = f"{prefix}_{key}.{suffix}"
-                lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=[], optional=True)
+                lycoris_keys[lycoris_key] = dataclasses.replace(meta, shape=[] if suffix == "alpha" else None, optional=True)
 
     return lycoris_keys
 

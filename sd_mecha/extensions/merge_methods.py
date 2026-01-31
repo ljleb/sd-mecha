@@ -775,7 +775,7 @@ def value_to_node(node_or_value: RecipeNodeOrValue, expected_type: type = None) 
 
     if expected_type is None:
         if isinstance(node_or_value, Mapping):
-            expected_type = next(iter(node_or_value.values()))
+            expected_type = type(next(iter(node_or_value.values())))
         else:
             expected_type = type(node_or_value)
 

@@ -3,7 +3,7 @@ import dataclasses
 import threading
 from collections import defaultdict
 from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNode, RecipeVisitor
-from typing import Any, Dict, Mapping, Optional, Set, Tuple, Union
+from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 
 # todo: test this function
@@ -33,10 +33,11 @@ class GetOutputPortsVisitor(RecipeVisitor):
         key_map = node.key_map()
 
         for output_key in self.active_keys[node]:
+            if output_key not in key_map:
+                continue
+
             for input_idx, param_name in param_names.items():
                 child_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
-                if output_key not in key_map:
-                    continue
 
                 child_output_keys = self.active_keys[child_node].intersection(key_map[output_key].inputs[param_name])
                 for child_output_key in child_output_keys:
@@ -110,7 +111,7 @@ class MergeMethodContext:
 class MergeMethodOutputRef:
     remaining_ports: Set[Tuple[RecipeNode, str]]
     cache: Any
-    lock: Union[threading.Lock, contextlib.AbstractContextManager]
+    lock: contextlib.AbstractContextManager
     locked: bool = False
 
     def __post_init__(self):

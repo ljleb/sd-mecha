@@ -1,10 +1,11 @@
 import abc
 import contextlib
 import dataclasses
+import functools
 import logging
 import pathlib
 import torch
-from collections import deque, OrderedDict
+from collections import defaultdict, deque, OrderedDict
 from typing import ContextManager, Dict, Generic, Iterable, Iterator, List, Mapping, Optional, Set, Tuple, TypeVar
 from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_formats
 from sd_mecha.extensions.merge_methods import value_to_node
@@ -1120,13 +1121,18 @@ class PropagateKeysVisitor(RecipeVisitor):
 
         key_map = node.key_map()
 
-        output_keys = set()
+        param_output_keys = defaultdict(set)
         for outputs, inputs in key_map.n_to_n_map.values():
             for param in inputs:
                 child = node.bound_args.arguments[param]
                 child_keys = self._node_keys(child)
                 if child_keys.intersection(inputs[param]):
-                    output_keys.update(outputs)
+                    param_output_keys[param].update(outputs)
+
+        if param_output_keys:
+            output_keys = functools.reduce(lambda a, b: a.intersection(b), param_output_keys.values())
+        else:
+            output_keys = set()
 
         self._node_keys(node).intersection_update(output_keys)
 
