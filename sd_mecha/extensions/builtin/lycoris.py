@@ -284,8 +284,8 @@ def _to_lycoris_keys(
 ) -> Dict[StateDictKey, KeyMetadata]:
     lycoris_keys = {}
 
-    for algorithm in algorithms:
-        for key, meta in base_keys.items():
+    for key, meta in base_keys.items():
+        for algorithm in algorithms:
             if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True) or meta.optional:
                 continue
 

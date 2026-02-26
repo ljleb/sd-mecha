@@ -208,6 +208,7 @@ def merge(
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache)))
+                torch.cuda.empty_cache()
 
             for future in as_completed(futures):
                 if future.exception() is not None:
@@ -218,6 +219,7 @@ def merge(
             for node, mm_context in merge_methods_context.items():
                 num_leaked = sum(not output_ref.was_freed() for output_ref in mm_context.output_refs.values())
                 if num_leaked:
+                    print("YOU WERE LIED TO!!!")
                     logging.warning(f"memory leaked during the merge: {node}, number of entries: {num_leaked}")
 
             if isinstance(output_dict, MutableMapping):
