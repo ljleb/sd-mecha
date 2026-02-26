@@ -208,7 +208,6 @@ def merge(
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache)))
-                torch.cuda.empty_cache()
 
             for future in as_completed(futures):
                 if future.exception() is not None:
