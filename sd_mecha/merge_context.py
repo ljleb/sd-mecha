@@ -23,6 +23,7 @@ class GetOutputPortsVisitor(RecipeVisitor):
     def visit_root(self, root: RecipeNode):
         for k in self.active_keys[root]:
             self.parent_ports[root][k].add(None)
+        root.accept(self)
 
     def visit_literal(self, node: LiteralRecipeNode):
         for child_node in set(node.value_dict.values()):
