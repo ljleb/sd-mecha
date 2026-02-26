@@ -7,6 +7,7 @@ from .merge_methods.kronecker import kron_dims_from_ratio
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.extensions.model_configs import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase, KeyMetadata
 from sd_mecha.streaming import StateDictKeyError
+from sd_mecha.keys_map import KeyMapBuilder
 
 
 def _register_all_lycoris_configs():
@@ -52,7 +53,7 @@ def define_conversions(lyco_config, lyco_interfaces):
     @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
     class LycorisToBase:
         @staticmethod
-        def map_keys(b):
+        def map_keys(b: KeyMapBuilder):
             for base_key in base_config.keys():
                 input_keys = tuple(lyco_config.to_lycoris_keys(base_key))
                 if not input_keys:
@@ -94,9 +95,10 @@ def define_conversions(lyco_config, lyco_interfaces):
         @staticmethod
         def get_output_keys(base_key: str):
             keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
-            if keys:
-                up, _, down, alpha = keys
-                return up, down, alpha
+            if not keys:
+                return ()
+            up, _, down, alpha = keys
+            return up, down, alpha
 
         def __call__(
             self,
@@ -131,7 +133,7 @@ def define_conversions(lyco_config, lyco_interfaces):
         def get_output_keys(base_key: str):
             keys = lyco_config.to_lycoris_keys(base_key, ("lokr",))
             if not keys:
-                return keys
+                return ()
             w1, _, _, w2, _, _, _, _ = keys
             return w1, w2
 

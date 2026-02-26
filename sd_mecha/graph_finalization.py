@@ -1,7 +1,6 @@
 import abc
 import contextlib
 import dataclasses
-import functools
 import logging
 import pathlib
 import torch
@@ -10,13 +9,12 @@ from typing import ContextManager, Dict, Generic, Iterable, Iterator, List, Mapp
 from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_formats
 from sd_mecha.extensions.merge_methods import value_to_node
 from sd_mecha.extensions.merge_spaces import MergeSpace, MergeSpaceSymbol
-from sd_mecha.extensions.model_configs import ModelConfig, StructuralModelConfig
+from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfig, StructuralModelConfig
 from sd_mecha.recipe_nodes import (
     ClosedModelRecipeNode, LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode,
     OpenModelRecipeNode, RecipeNode, RecipeNodeOrValue, RecipeVisitor, TracingRecipeVisitor,
 )
 from sd_mecha.streaming import SafetensorsMapping, TensorMetadata
-
 
 T = TypeVar("T")
 
@@ -29,7 +27,7 @@ def open_graph(
     solve_model_config: bool = True,
     solve_merge_space: bool = True,
 ) -> ContextManager["RecipeGraph"]:
-    root, dicts_cache = _open_graph_impl(
+    graph, dicts_cache = _open_graph_impl(
         root=root,
         buffer_size_per_dict=buffer_size_per_dict,
         root_only=root_only,
@@ -38,7 +36,7 @@ def open_graph(
     )
 
     try:
-        yield root
+        yield graph
     finally:
         for v in dicts_cache.values():
             v.close()
@@ -146,10 +144,14 @@ class RecipeGraph:
                 idx: candidates[t][idx].stats[solutions[t][idx].identifier].intersection.copy()
                 for idx in set(node_to_index.values())
             }
-            keys_visitor = PropagateKeysVisitor(node_to_index, component_keys)
-            finalized_root.accept(keys_visitor)
+            component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {
+                idx: (candidates[t][idx].common_keys if solutions[t][idx].identifier == "structural" else solutions[t][idx].keys())
+                for idx in set(node_to_index.values())
+            }
+            keys_visitor = PropagatableKeyVisitor(node_to_index, component_keys, component_metadata)
+            keys_visitor.visit_all_keys(finalized_root)
             node_to_keys = {
-                node: keys_visitor.component_keys[node_to_index[node]]
+                node: keys_visitor.filtered_component_keys[node_to_index[node]]
                 for node in node_to_index.keys()
             }
 
@@ -201,7 +203,7 @@ class RecipeGraph:
             )
         })
 
-    def _clone_candidates(self):
+    def _clone_candidates(self) -> Dict[type["ComponentType"], Dict["ComponentIndex", "ComponentCandidates"]]:
         out = {}
         for t, by_idx in self.candidates.items():
             out[t] = {}
@@ -459,66 +461,6 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
                 self.apply_return_hint(mc, reason=f"return preference {mc.identifier}")
                 break
 
-    def _update_common_keys(self, metadata: Mapping[str, TensorMetadata]) -> None:
-        if self.common_keys is None:
-            self.common_keys = dict(metadata)
-            return
-
-        out = {}
-        for k, m1 in self.common_keys.items():
-            m2 = metadata.get(k)
-            if m2 is None:
-                continue
-            out[k] = m1 if _meta_score(m1) < _meta_score(m2) else m2
-        self.common_keys = out
-
-    def _constrain_to_id(self, config: ModelConfig, *, reason: str) -> None:
-        if self.stats is None:
-            self.stats = {config.identifier: ConfigMatchStats(set(config.keys()))}
-        else:
-            common_ids = set(self.stats.keys()).intersection({config.identifier})
-            if not common_ids and self.requires_known_config:
-                raise TypeError(
-                    "Incompatible model config constraints: candidate set intersection is empty.\n"
-                    f"  Existing: {sorted(self.stats.keys())}\n"
-                    f"  New:      {config.identifier}\n"
-                    f"  Reason:   {reason}\n"
-                )
-            self.stats = {cfg_id: self.stats[cfg_id] for cfg_id in common_ids}
-
-    def _update_with_metadata(self, metadata: Mapping[str, TensorMetadata], hint: Optional[ModelConfig]) -> None:
-        self._update_common_keys(metadata)
-
-        if hint is not None:
-            self.requires_known_config = True
-
-        if is_config_stub(hint):
-            new_stats = generate_configs_stats(metadata)
-            if self.stats is None:
-                self.stats = new_stats
-            else:
-                common = set(self.stats.keys()).intersection(new_stats.keys())
-                if not common and self.requires_known_config:
-                    raise TypeError(
-                        "Incompatible model config constraints: candidate set intersection is empty.\n"
-                        f"  Existing: {sorted(self.stats.keys())}\n"
-                        f"  New:      {sorted(new_stats.keys())}\n"
-                        "Fix: ensure inputs correspond to a known config, or use the structural model config.\n"
-                    )
-                self.stats = {cfg_id: self.stats[cfg_id] | new_stats[cfg_id] for cfg_id in common}
-        else:
-            self.explicit_ids.add(hint.identifier)
-            self.requires_known_config = True
-
-            self._constrain_to_id(hint, reason=f"explicit hint {hint.identifier}")
-
-            cfg_stat = create_config_stats(hint, set(metadata))
-            if self.stats is None:
-                self.stats = {hint.identifier: cfg_stat}
-            else:
-                prev = self.stats.get(hint.identifier, ConfigMatchStats(set(hint.keys())))
-                self.stats[hint.identifier] = prev | cfg_stat
-
     def visit_literal(self, node: LiteralRecipeNode, **_kwargs):
         metadata: Dict[str, TensorMetadata] = {}
         for k, v in node.value_dict.items():
@@ -556,6 +498,66 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
                 continue
 
             child_candidates.apply_return_hint(cfg, reason=f"merge input {cfg.identifier}")
+
+    def _update_with_metadata(self, metadata: Mapping[str, TensorMetadata], hint: Optional[ModelConfig]) -> None:
+        self._update_common_keys(metadata)
+
+        if hint is not None:
+            self.requires_known_config = True
+
+        if is_config_stub(hint):
+            new_stats = generate_configs_stats(metadata)
+            if self.stats is None:
+                self.stats = new_stats
+            else:
+                common = set(self.stats.keys()).intersection(new_stats.keys())
+                if not common and self.requires_known_config:
+                    raise TypeError(
+                        "Incompatible model config constraints: candidate set intersection is empty.\n"
+                        f"  Existing: {sorted(self.stats.keys())}\n"
+                        f"  New:      {sorted(new_stats.keys())}\n"
+                        "Fix: ensure inputs correspond to a known config, or use the structural model config.\n"
+                    )
+                self.stats = {cfg_id: self.stats[cfg_id] | new_stats[cfg_id] for cfg_id in common}
+        else:
+            self.explicit_ids.add(hint.identifier)
+            self.requires_known_config = True
+
+            self._constrain_to_id(hint, reason=f"explicit hint {hint.identifier}")
+
+            cfg_stat = create_config_stats(hint, set(metadata))
+            if self.stats is None:
+                self.stats = {hint.identifier: cfg_stat}
+            else:
+                prev = self.stats.get(hint.identifier, ConfigMatchStats(set(hint.keys())))
+                self.stats[hint.identifier] = prev | cfg_stat
+
+    def _update_common_keys(self, metadata: Mapping[str, TensorMetadata]) -> None:
+        if self.common_keys is None:
+            self.common_keys = dict(metadata)
+            return
+
+        out = {}
+        for k, m1 in self.common_keys.items():
+            m2 = metadata.get(k)
+            if m2 is None:
+                continue
+            out[k] = m1 if _meta_score(m1) < _meta_score(m2) else m2
+        self.common_keys = out
+
+    def _constrain_to_id(self, config: ModelConfig, *, reason: str) -> None:
+        if self.stats is None:
+            self.stats = {config.identifier: ConfigMatchStats(set(config.keys()))}
+        else:
+            common_ids = set(self.stats.keys()).intersection({config.identifier})
+            if not common_ids and self.requires_known_config:
+                raise TypeError(
+                    "Incompatible model config constraints: candidate set intersection is empty.\n"
+                    f"  Existing: {sorted(self.stats.keys())}\n"
+                    f"  New:      {config.identifier}\n"
+                    f"  Reason:   {reason}\n"
+                )
+            self.stats = {cfg_id: self.stats[cfg_id] for cfg_id in common_ids}
 
     def __iter__(self):
         if self.stats is None:
@@ -1102,42 +1104,66 @@ def check_model_config(
 
 
 @dataclasses.dataclass
-class PropagateKeysVisitor(RecipeVisitor):
+class PropagatableKeyVisitor(RecipeVisitor):
     node_to_indices: Dict[RecipeNode, ComponentIndex]
     component_keys: Dict[ComponentIndex, Set[str]]
+    component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]]
+    filtered_component_keys: Dict[ComponentIndex, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
 
-    def visit_literal(self, node: LiteralRecipeNode):
-        self._node_keys(node).intersection_update(node.value_dict)
-        for child in node.value_dict.values():
+    def visit_all_keys(self, root: RecipeNode):
+        root_id = self.node_to_indices[root]
+        for root_output_key in self.component_keys[root_id]:
+            key_visitor = dataclasses.replace(self, filtered_component_keys=defaultdict(set))
+            if root.accept(key_visitor, root_output_key):
+                for idx, keys in key_visitor.filtered_component_keys.items():
+                    self.filtered_component_keys[idx].update(keys)
+
+    def visit_literal(self, node: LiteralRecipeNode, output_key: str) -> bool:
+        if output_key in self._possible_keys(node) and output_key in node.value_dict:
+            self._filtered_keys(node).add(output_key)
+            child = node.value_dict[output_key]
             if isinstance(child, RecipeNode):
-                child.accept(self)
+                return child.accept(self, output_key)
+            return True
 
-    def visit_model(self, node: ModelRecipeNode):
-        self._node_keys(node).intersection_update(node.state_dict.keys())
+        return self._key_optional(node, output_key)
 
-    def visit_merge(self, node: MergeRecipeNode):
-        for child in node.bound_args.arguments.values():
-            child.accept(self)
+    def visit_model(self, node: ModelRecipeNode, output_key: str) -> bool:
+        if output_key in self._possible_keys(node) and output_key in node.state_dict:
+            self._filtered_keys(node).add(output_key)
+            return True
 
-        key_map = node.key_map()
+        return self._key_optional(node, output_key)
 
-        param_output_keys = defaultdict(set)
-        for outputs, inputs in key_map.n_to_n_map.values():
-            for param in inputs:
-                child = node.bound_args.arguments[param]
-                child_keys = self._node_keys(child)
-                if child_keys.intersection(inputs[param]):
-                    param_output_keys[param].update(outputs)
+    def visit_merge(self, node: MergeRecipeNode, output_key: str) -> bool:
+        if can_merge := output_key in self._possible_keys(node):
+            key_map = node.key_map()
+            if output_key not in key_map:
+                return False
 
-        if param_output_keys:
-            output_keys = functools.reduce(lambda a, b: a.intersection(b), param_output_keys.values())
-        else:
-            output_keys = set()
+            for child_name, child in node.bound_args.arguments.items():
+                child_keys = key_map[output_key].inputs.get(child_name)
+                if not child_keys:
+                    continue
+                for child_key in child_keys:
+                    can_merge = can_merge and child.accept(self, child_key)
 
-        self._node_keys(node).intersection_update(output_keys)
+        if can_merge:
+            self._filtered_keys(node).add(output_key)
 
-    def _node_keys(self, node):
+        return can_merge or self._key_optional(node, output_key)
+
+    def _possible_keys(self, node):
         return self.component_keys[self.node_to_indices[node]]
+
+    def _key_optional(self, node, key) -> bool:
+        metadata = self.component_metadata[self.node_to_indices[node]]
+        if metadata is not None and key in metadata:
+            return getattr(metadata[key], "optional", True)
+        return True
+
+    def _filtered_keys(self, node):
+        return self.filtered_component_keys[self.node_to_indices[node]]
 
 
 def _fmt_list(items, limit=12) -> str:

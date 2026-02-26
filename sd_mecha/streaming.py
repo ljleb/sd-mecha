@@ -58,6 +58,10 @@ class TensorMetadata:
 
 class SafetensorsMapping(Mapping[str, torch.Tensor], abc.ABC):
     @abc.abstractmethod
+    def __contains__(self, item):
+        ...
+
+    @abc.abstractmethod
     def keys(self) -> Iterable[str]:
         ...
 
@@ -104,6 +108,9 @@ class InSafetensorsDict(SafetensorsMapping):
 
     def __len__(self) -> int:
         return len(self.header) - int("__metadata__" in self.header)
+
+    def __contains__(self, item):
+        return item in self.header
 
     def close(self):
         if getattr(self, "file", None) is not None:

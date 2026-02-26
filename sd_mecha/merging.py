@@ -462,8 +462,7 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 try:
                     key_map = node.key_map()
-                    if self.output_key not in key_map:
-                        assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
+                    assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
                     key_relation = key_map[self.output_key]
 
                     merged_args, merged_kwargs = self.__visit_deeper_first(node, key_relation)
@@ -476,8 +475,9 @@ class KeyMergeVisitor(RecipeVisitor):
                         context.instance,
                     )
                 finally:
-                    release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.parent_id, needs_lock=False)
-                    node.accept(release_visitor)
+                    if self.parent_id is None:
+                        release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.parent_id, needs_lock=False)
+                        node.accept(release_visitor)
                 if isinstance(res, dict):
                     if self.validate_mm_contract:
                         assert all(k in key_relation.outputs for k in res.keys()), (
@@ -578,11 +578,11 @@ class KeyReleaseVisitor(RecipeVisitor):
 
         key_relation = key_map[self.output_key]
 
-        for input_idx, input_name in node.merge_method.get_param_names().as_dict(len(node.bound_args.args)).items():
+        for input_idx, input_param in node.merge_method.get_param_names().as_dict(len(node.bound_args.args)).items():
             input_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
             release_visitors = [
                 KeyReleaseVisitor(input_key, self.merge_methods_context, new_parent_id, needs_lock=True)
-                for input_key in key_relation.inputs[input_name]
+                for input_key in key_relation.inputs[input_param]
             ]
             for release_visitor in release_visitors:
                 error_holder.intercept(input_node.accept, release_visitor)
