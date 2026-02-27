@@ -134,11 +134,13 @@ def merge(
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
+    if merge_device is not None or merge_dtype is not None:
+        cast_visitor = CastInputDicts(merge_device, merge_dtype)
+        recipe = recipe.accept(cast_visitor)
+        cache = {cast_visitor.converted_nodes.get(node, node): cache_dict for node, cache_dict in cache.items()}
+
     if fallback_model is not None:
         recipe = recipe | fallback_model
-
-    if merge_device is not None or merge_dtype is not None:
-        recipe = recipe.accept(CastInputDicts(merge_device, merge_dtype))
 
     if output_device is not None or output_dtype is not None:
         recipe = recipe.to(device=output_device, dtype=output_dtype)
