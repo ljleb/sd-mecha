@@ -43,7 +43,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
             res = create_conversion_recipe(recipe, converter_paths, src_config.identifier, tgt_config)
             if res is not None:
                 return res
-        raise ValueError("Could not infer the intended config to convert from.")
+        raise ValueError(f"Could not convert recipe to config {tgt_config}.")
 
 
 def create_conversion_recipe(recipe, paths, src_config, tgt_config):
@@ -86,7 +86,7 @@ def dijkstra(graph, start, goal):
                 edge_used[neighbor] = edge_id
                 heapq.heappush(heap, (distance_via_current, neighbor))
 
-    if distances[goal] == float('inf'):
+    if distances.get(goal, float("inf")) == float("inf"):
         return None
 
     path_ids = []
