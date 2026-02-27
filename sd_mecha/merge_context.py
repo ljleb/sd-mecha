@@ -6,7 +6,6 @@ from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecip
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 
-# todo: test this function
 def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeNode, Set[str]]) -> Dict[RecipeNode, "MergeMethodContext"]:
     ports_visitor = GetOutputPortsVisitor(active_keys)
     ports_visitor.visit_root(recipe)

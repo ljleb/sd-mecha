@@ -27,7 +27,7 @@ def open_graph(
     solve_model_config: bool = True,
     solve_merge_space: bool = True,
 ) -> ContextManager["RecipeGraph"]:
-    graph, dicts_cache = _open_graph_impl(
+    graph, to_close = _open_graph_impl(
         root=root,
         buffer_size_per_dict=buffer_size_per_dict,
         root_only=root_only,
@@ -38,7 +38,7 @@ def open_graph(
     try:
         yield graph
     finally:
-        for v in dicts_cache.values():
+        for v in to_close:
             v.close()
 
 
@@ -49,7 +49,7 @@ def _open_graph_impl(
     root_only: bool,
     solve_model_config: bool,
     solve_merge_space: bool,
-) -> Tuple["RecipeGraph", Dict[pathlib.Path, SafetensorsMapping]]:
+) -> Tuple["RecipeGraph", Iterable[SafetensorsMapping]]:
     component_types = set()
     if solve_model_config:
         component_types.add(ModelConfigComponentType)
@@ -75,7 +75,7 @@ def _open_graph_impl(
 
     graph = RecipeGraph(root, node_to_indices, new_nodes_map, processed_nodes, candidates, root_only)
 
-    return graph, opener.dicts_cache
+    return graph, opener.dicts_to_close
 
 
 @dataclasses.dataclass
@@ -265,7 +265,7 @@ class ResolvePathsVisitor(RecipeVisitor):
 class OpenActiveStateDictsVisitor(RecipeVisitor):
     buffer_size_per_dict: int
     active_nodes: Set[RecipeNode]
-
+    dicts_to_close: List[SafetensorsMapping] = dataclasses.field(default_factory=list)
     dicts_cache: Dict[pathlib.Path, SafetensorsMapping] = dataclasses.field(default_factory=dict)
     transform_cache: Dict[RecipeNode, RecipeNode] = dataclasses.field(default_factory=dict)
 
@@ -322,6 +322,7 @@ class OpenActiveStateDictsVisitor(RecipeVisitor):
 
             sd = matching_formats[0].get_read_dict(node.path, self.buffer_size_per_dict)
             self.dicts_cache[node.path] = sd
+            self.dicts_to_close.append(sd)
 
         return OpenModelRecipeNode(sd, node.path, node.model_config, node.merge_space)
 
