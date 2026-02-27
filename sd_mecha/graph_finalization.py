@@ -566,7 +566,7 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
 
     def __iter__(self):
         if self.stats is None:
-            return
+            return ()
 
         for cfg, stat in sorted(self.stats.items(), key=lambda kv: kv[1].state_dict_misses):
             yield model_configs.resolve(cfg)
@@ -668,7 +668,7 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
 
     def __iter__(self):
         if self.allowed is None:
-            return
+            return ()
 
         yield from self.allowed
 
