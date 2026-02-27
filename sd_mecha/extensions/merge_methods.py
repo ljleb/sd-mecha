@@ -259,7 +259,7 @@ class MergeMethod:
             return self.__wrapped__()
         return None
 
-    def key_map(self, args_configs, kwargs_configs, return_config) -> KeyMap:
+    def key_map(self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig) -> KeyMap:
         input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
         input_configs = {
             p.name: input_configs.get(p.name) if input_configs.get(p.name) is not None else p.annotation.data.model_config if p.annotation.data.model_config is not None else return_config
@@ -744,7 +744,7 @@ def validate_config_converter(merge_method: MergeMethod):
     args_varargs = params.args if params.args else params.args_varargs()
     assert len(args_varargs) == 1, f"the merge method should be able to take exactly 1 positional argument"
     configs = merge_method.get_input_configs()
-    input_config = configs.args if configs.args else configs.args_varargs()[0]
+    input_config = configs.args[0] if configs.args else configs.args_varargs()[0]
     assert input_config is not None, f"the input model config is missing. It should be declared in the type of `{args_varargs[0]}`"
     return merge_method
 
