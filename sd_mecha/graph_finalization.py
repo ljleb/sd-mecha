@@ -73,7 +73,7 @@ def _open_graph_impl(
     for t in component_types:
         candidates[t] = t.build_candidates(node_to_indices, processed_nodes)
 
-    graph = RecipeGraph(root, node_to_indices, processed_nodes, candidates, root_only)
+    graph = RecipeGraph(root, node_to_indices, new_nodes_map, processed_nodes, candidates, root_only)
 
     return graph, opener.dicts_cache
 
@@ -82,6 +82,7 @@ def _open_graph_impl(
 class RecipeGraph:
     root: RecipeNode
     node_to_indices: Dict[RecipeNode, "ComponentIndices"]
+    to_open_node: Dict[RecipeNode, RecipeNode]
     processed_nodes: Set[RecipeNode]
     candidates: Dict[type["ComponentType"], Dict["ComponentIndex", "ComponentCandidates"]]
     is_root_only: bool
@@ -135,6 +136,8 @@ class RecipeGraph:
         )
         finalized_root = self.root.accept(finalizer)
 
+        to_finalized_node = {original: finalizer.to_new_node[open] for original, open in self.to_open_node.items()}
+
         node_to_keys = {}
         if ModelConfigComponentType in candidates and not self.is_root_only:
             t = ModelConfigComponentType
@@ -155,7 +158,7 @@ class RecipeGraph:
                 for node in node_to_index.keys()
             }
 
-        return FinalizeReturn(finalized_root, node_to_keys)
+        return FinalizeReturn(finalized_root, node_to_keys, to_finalized_node)
 
     def root_candidates(
         self,
@@ -216,6 +219,7 @@ class RecipeGraph:
 class FinalizeReturn:
     root: RecipeNode
     node_to_keys: Mapping[RecipeNode, Set[str]]
+    to_finalized_node: Mapping[RecipeNode, RecipeNode]
 
 
 @dataclasses.dataclass
@@ -1023,8 +1027,9 @@ class FinalizeVisitor(RecipeVisitor):
 
         if node.is_open:
             if cfg == node.model_config and ms == node.merge_space:
-                return node
-            res = OpenModelRecipeNode(node.state_dict, node.path, cfg, ms)
+                res = node
+            else:
+                res = OpenModelRecipeNode(node.state_dict, node.path, cfg, ms)
         else:
             res = ClosedModelRecipeNode(node.path, cfg, ms)
         self.to_new_node[node] = res

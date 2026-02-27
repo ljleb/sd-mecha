@@ -165,7 +165,6 @@ def merge(
         recipe,
         buffer_size_per_file,
     ) as graph:
-        # todo: fix cache not referring to the new nodes
         finalized_res = graph.finalize(
             check_extra_keys=omit_extra_keys,
             check_mandatory_keys=check_mandatory_keys,
@@ -175,6 +174,7 @@ def merge(
         )
         recipe, node_to_keys = finalized_res.root, finalized_res.node_to_keys
         minimal_keys = node_to_keys[recipe]
+        cache = {finalized_res.to_finalized_node[node]: cache_dict for node, cache_dict in cache.items()}
 
         model_config = recipe.model_config
         graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in minimal_keys}
