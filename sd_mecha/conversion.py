@@ -27,8 +27,6 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         ValueError:
             If no conversion path is found.
     """
-    converter_paths = get_converter_paths()
-
     if config is None:
         return recipe
 
@@ -37,6 +35,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
             config = config_graph.finalize(check_mandatory_keys=False, check_extra_keys=False).root.model_config
 
     tgt_config = config if isinstance(config, str) else config.identifier
+    converter_paths = get_converter_paths()
 
     with open_graph(recipe, root_only=True, solve_merge_space=False) as recipe_graph:
         src_candidates = recipe_graph.root_candidates(model_config_preference=(tgt_config,)).model_config
