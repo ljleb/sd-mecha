@@ -1,14 +1,12 @@
-from typing import Dict, Iterable
-from unittest.mock import patch
-
 import torch
-from torch import Tensor
-
 import sd_mecha
 from sd_mecha import merge_method, Parameter, Return, StateDict
 from sd_mecha.extensions import model_configs
 from sd_mecha.merge_context import MergeMethodContext
 from sd_mecha.recipe_nodes import RecipeNode
+from torch import Tensor
+from typing import Dict
+from unittest.mock import patch
 
 
 dtype = torch.float32
@@ -83,18 +81,19 @@ def make_value2(value, merge_space=None):
     return sd_mecha.literal({"key.0": torch.tensor([value, value], dtype=dtype), "key.1": torch.tensor([value, value], dtype=dtype)}, config=test_config2, merge_space=merge_space)
 
 
-class CreateContextPatch:
-    def __init__(self):
-        self.original_fn = sd_mecha.merge_context.create_merge_method_context
-        self.context = None
+class InterceptReturnPatch:
+    def __init__(self, original_fn):
+        self.original_fn = original_fn
+        self.return_value = None
 
-    def __call__(self, recipe: RecipeNode, root_keys: Iterable[str]) -> Dict[RecipeNode, MergeMethodContext]:
-        self.context = self.original_fn(recipe, root_keys)
-        return self.context
+    def __call__(self, *args, **kwargs) -> Dict[RecipeNode, MergeMethodContext]:
+        self.return_value = self.original_fn(*args, **kwargs)
+        return self.return_value
 
 
 def patch_create_context():
-    return patch("sd_mecha.merging.create_merge_method_context", new=CreateContextPatch())
+    create_merge_method_context_patch = InterceptReturnPatch(sd_mecha.merge_context.create_merge_method_context)
+    return patch("sd_mecha.merging.create_merge_method_context", new=create_merge_method_context_patch)
 
 
 def call_merge(recipe):
@@ -113,7 +112,7 @@ def act_assert_no_leak(recipe):
     with patch_create_context() as create_context_patch:
         call_merge(recipe)
 
-    for node, mm_context in create_context_patch.context.items():
+    for node, mm_context in create_context_patch.return_value.items():
         num_leaked = sum(not output_ref.was_freed() for output_ref in mm_context.output_refs.values())
         assert num_leaked == 0
 
