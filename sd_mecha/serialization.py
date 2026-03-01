@@ -2,7 +2,10 @@ import logging
 import pathlib
 from typing import List, Optional, Hashable
 from .extensions import merge_methods
-from .recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode, MergeRecipeNode
+from .recipe_nodes import (
+    ClosedModelRecipeNode, RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode,
+    MergeRecipeNode,
+)
 
 
 MECHA_FORMAT_VERSION = "0.1.0"
@@ -56,7 +59,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
             results.append(LiteralRecipeNode(*positional_args, **keyword_args))
         elif command == "model":
             path = pathlib.Path(positional_args[0])
-            results.append(ModelRecipeNode(path, *positional_args[1:], **keyword_args))
+            results.append(ClosedModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
             method, *positional_args = positional_args
             method = merge_methods.resolve(method)

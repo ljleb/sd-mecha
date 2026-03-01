@@ -32,7 +32,7 @@ AnyMergeSpace = Set[MergeSpace] | MergeSpaceSymbol
 
 def register_merge_space(identifier: str):
     if identifier in _merge_space_registry:
-        raise ValueError(f"merge space {identifier} already exists")
+        raise KeyError(f"merge space {identifier} already exists")
     _merge_space_registry[identifier] = MergeSpace(identifier)
 
 
@@ -41,7 +41,7 @@ def resolve(identifier: str) -> MergeSpace:
         return _merge_space_registry[identifier]
     except KeyError as e:
         suggestion = fuzzywuzzy.process.extractOne(str(e), _merge_space_registry.keys())[0]
-        raise ValueError(f"unknown merge space: {e}. Nearest match is '{suggestion}'")
+        raise KeyError(f"unknown merge space: {e}. Nearest match is '{suggestion}'")
 
 
 def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
@@ -50,7 +50,7 @@ def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
     elif isinstance(merge_space, MergeSpaceSymbol):
         return get_identifiers(merge_space.merge_spaces)
     else:
-        raise TypeError(f"expected {MergeSpaceSymbol.__name__} or Tuple[{MergeSpace.__name__}, ...], got {type(merge_space)}")
+        raise TypeError(f"expected {MergeSpaceSymbol.__name__} or Set[{MergeSpace.__name__}, ...], got {type(merge_space)}")
 
 
 def get_all() -> Set[MergeSpace]:
