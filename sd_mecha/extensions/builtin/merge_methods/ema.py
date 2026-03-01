@@ -33,5 +33,5 @@ to_ema_key_fns = {
 }
 
 
-for config, key_fn in to_ema_key_fns.items():
-    implement_exchange_ema(config, key_fn)
+for config, to_ema_key_fn in to_ema_key_fns.items():
+    implement_exchange_ema(config, to_ema_key_fn)
