@@ -464,7 +464,8 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 try:
                     key_map = node.key_map()
-                    assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
+                    if self.validate_mm_contract:
+                        assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
                     key_relation = key_map[self.output_key]
 
                     merged_args, merged_kwargs = self.__visit_deeper_first(node, key_relation)
