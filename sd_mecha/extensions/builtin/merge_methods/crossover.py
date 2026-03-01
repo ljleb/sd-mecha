@@ -2,7 +2,7 @@ import math
 import torch
 from typing import Tuple
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, Return
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return
 
 
 @merge_method
@@ -19,8 +19,8 @@ def crossover(
     if tilt == 1:
         return torch.lerp(a, b, alpha)
 
-    if len(a.shape) == 0 or torch.allclose(a.half(), b.half()):
-        return torch.lerp(a, b, tilt)
+    if len(a.shape) == 0 or torch.allclose(a, b):
+        return torch.lerp(a, b, alpha)
 
     shape = a.shape
 

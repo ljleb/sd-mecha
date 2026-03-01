@@ -18,3 +18,4 @@ from .convert_sd1_kohya_to_original import convert_sd1_kohya_to_original
 from . import convert_sdxl_blocks
 from . import convert_sd1_blocks
 from . import convert_sdxl_sgm_split
+from . import convert_singleton_to_any

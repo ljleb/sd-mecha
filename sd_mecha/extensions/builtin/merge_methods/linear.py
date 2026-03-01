@@ -1,7 +1,7 @@
 import math
 import torch
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, Return, StateDict
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
 
 
 @merge_method
@@ -29,7 +29,15 @@ def n_average(
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
-    return sum(model[key] for model in models) / len(models)
+    assert models
+
+    res = None
+    for i, model in enumerate(models, start=1):
+        if res is None:
+            res = model[key]
+        else:
+            res = torch.lerp(res, model[key], 1/i)
+    return res
 
 
 @merge_method
@@ -66,6 +74,23 @@ def add_difference(
 
     b_val = b[key]  # try to load b from memory first in case it fails to merge before a
     return a[key].addcmul(b_val, alpha)
+
+
+@merge_method
+def scale(
+    a: Parameter(StateDict[Tensor], "delta"),
+    alpha: Parameter(Tensor) = 1.0,
+    **kwargs,
+) -> Return(Tensor, "delta"):
+    key = kwargs["key"]
+    if alpha.numel() == 1:
+        alpha_item = alpha.item()
+        if math.isclose(alpha_item, 0.0):
+            return 0.0
+        if math.isclose(alpha_item, 1.0):
+            return a[key]
+
+    return a[key] * alpha
 
 
 @merge_method

@@ -16,11 +16,26 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
     identifier=f"convert_'{sdxl_diffusers_unet_config.identifier}'_to_'{sdxl_sgm_config.identifier}'",
     is_conversion=True,
 )
-def convert_sdxl_diffusers_unet_to_original(
-    diffusers_sd: Parameter(StateDict[Tensor], model_config=sdxl_diffusers_unet_config),
-    **kwargs,
-) -> Return(Tensor, model_config=sdxl_sgm_config):
-    sgm_key = kwargs["key"]
+class convert_sdxl_diffusers_unet_to_original:
+    @staticmethod
+    def map_keys(b):
+        for sgm_key in sdxl_sgm_config.keys():
+            if sgm_key.startswith("model.diffusion_model"):
+                b[sgm_key] = b.keys[convert_unet_key(sgm_key)]
+
+    def __call__(
+        self,
+        diffusers_sd: Parameter(StateDict[Tensor], model_config=sdxl_diffusers_unet_config),
+        **kwargs,
+    ) -> Return(Tensor, model_config=sdxl_sgm_config):
+        diffusers_key = kwargs["key_relation"].input_keys["diffusers_sd"][0]
+        return diffusers_sd[diffusers_key]
+
+
+def convert_unet_key(
+    sgm_key: str,
+    prefix: str = None
+) -> str:
     if not sgm_key.startswith("model.diffusion_model"):
         raise StateDictKeyError(sgm_key)
 
@@ -34,7 +49,11 @@ def convert_sdxl_diffusers_unet_to_original(
             kohya_key = kohya_key.replace(sd_part, hf_part)
 
     kohya_key = unet_conversion_map.get(kohya_key, kohya_key)
-    return diffusers_sd[kohya_key]
+
+    if prefix is not None:
+        kohya_key = prefix + kohya_key
+
+    return kohya_key
 
 
 unet_conversion_map = {
@@ -102,12 +121,11 @@ for i in range(3):
         sd_downsample_prefix = f"input_blocks.{3*(i+1)}.0.op."
         unet_conversion_map_layer[sd_downsample_prefix] = hf_downsample_prefix
 
-        # no upsample in up_blocks.3
-        hf_upsample_prefix = f"up_blocks.{i}.upsamplers.0."
-        sd_upsample_prefix = f"output_blocks.{3*i + 2}.{1 if i == 0 else 2}."
-        unet_conversion_map_layer[sd_upsample_prefix] = hf_upsample_prefix
-unet_conversion_map_layer["output_blocks.2.2.conv."] = "output_blocks.2.1.conv."
+        base = f"output_blocks.{3*i + 2}."
+        sd_upsample_prefix = base + ("2." if (base + "1.") in unet_conversion_map_layer else "1.")
+        unet_conversion_map_layer[sd_upsample_prefix] = f"up_blocks.{i}.upsamplers.0."
 
+unet_conversion_map_layer["output_blocks.2.2.conv."] = "output_blocks.2.1.conv."
 hf_mid_atn_prefix = "mid_block.attentions.0."
 sd_mid_atn_prefix = "middle_block.1."
 unet_conversion_map_layer[sd_mid_atn_prefix] = hf_mid_atn_prefix
