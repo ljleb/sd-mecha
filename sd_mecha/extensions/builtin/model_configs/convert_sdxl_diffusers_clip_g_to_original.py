@@ -1,5 +1,4 @@
 from typing import Iterable, Tuple
-import torch
 
 
 def convert_clip_g_key(sgm_key: str) -> Tuple[Iterable[str], bool]:
