@@ -89,12 +89,12 @@ def merge(
             `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
             If it is None or omitted, an empty dict is created and returned when the merge completes.
         validate_mm_contract (optional):
-            If True, validates that merge methods return the right amount of outputs indicated by `output_groups`
-            and do not read other inputs than those reported by `input_keys_for_output`
+            If True, validates that merge methods return the right amount of outputs indicated by `map_keys`
+            and do not read other inputs than those reported by `map_keys`
         cache (optional):
-            If set, specifies cache dicts for certain recipe nodes.
-            The dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls.
-            This can speed up certain merge methods when testing multiple parameter variations with fixed models.
+            Dictionary of caches for each recipe node in `recipe`. Each dict should be empty on the first call.
+            If set, the dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls to merge().
+            This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
 
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
