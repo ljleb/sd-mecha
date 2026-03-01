@@ -180,7 +180,7 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, fn_or_cls: Callable | type, identifier: str):
+    def __init__(self, fn_or_cls: Callable | type, identifier: str, default_merge_space: MergeSpaceSymbol, interface: Optional["MergeMethodInterface"] = None):
         self.__wrapped__ = fn_or_cls
         self.wrapped_is_class = inspect.isclass(fn_or_cls)
         if self.wrapped_is_class:
@@ -190,13 +190,8 @@ class MergeMethod:
         else:
             fn = fn_or_cls
 
-        try:
-            # merge method is overloaded if an interface is registered for it
-            self.__interface = _module_state.interfaces_registry[identifier]
-        except KeyError:
-            self.__interface = None
-
-        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+        self.default_merge_space = default_merge_space
+        self.__interface = interface
 
         signature = inspect.signature(fn)
         return_annotation = _ensure_return(signature.return_annotation, self.default_merge_space)
@@ -431,11 +426,11 @@ class MergeMethod:
 
 
 class MergeMethodInterface:
-    def __init__(self, identifier: str, fn: Callable):
+    def __init__(self, identifier: str, fn: Callable, default_merge_space: MergeSpaceSymbol):
         self.identifier = identifier
         self.candidates = []
 
-        self.default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+        self.default_merge_space = default_merge_space
 
         signature = inspect.signature(fn)
         for param in signature.parameters.values():
@@ -651,18 +646,24 @@ def _merge_method_impl(
                 raise ValueError(f"Another merge method named {identifier} is already registered.")
 
         module_state_copy = _module_state.copy()
-        try:
-            if is_interface:
-                _register_interface(fn, identifier)
-            fn_object = MergeMethod(fn, identifier)
-            _module_state.merge_methods_registry[identifier] = fn_object
-            if is_conversion:
-                _register_config_converter(fn_object)
-            if implements is not None:
-                _module_state.interfaces_registry[implements].register_implementation(fn_object)
-        except BaseException:
-            _module_state = module_state_copy
-            raise
+
+        if implements is not None:
+            default_merge_space = module_state_copy.merge_methods_registry[implements].default_merge_space
+        else:
+            default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
+
+        if is_interface:
+            _register_interface(fn, identifier, default_merge_space, module_state_copy)
+
+        fn_object = MergeMethod(fn, identifier, default_merge_space, module_state_copy.interfaces_registry.get(identifier))
+        module_state_copy.merge_methods_registry[identifier] = fn_object
+
+        if is_conversion:
+            _register_config_converter(fn_object, module_state_copy)
+        if implements is not None:
+            module_state_copy.interfaces_registry[implements].register_implementation(fn_object)
+
+        _module_state = module_state_copy
 
     return fn_object
 
@@ -680,7 +681,7 @@ class ModuleState:
             self.registry_lock,
             self.merge_methods_registry.copy(),
             self.conversion_registry.copy(),
-            self.converter_paths.copy(),
+            defaultdict(list, ((k, v.copy()) for k, v in self.converter_paths.items())),
             self.interfaces_registry.copy(),
         )
 
@@ -708,34 +709,34 @@ def get_converter_paths() -> Dict[str, List[Tuple[str, MergeMethod]]]:
     return _module_state.converter_paths.copy()
 
 
-def _register_config_converter(converter: MergeMethod):
+def _register_config_converter(converter: MergeMethod, module_state: ModuleState):
     validate_config_converter(converter)
     input_configs = converter.get_input_configs()
     return_config = converter.get_signature().return_annotation.data.model_config
     src_config = input_configs.args[0].identifier
     tgt_config = return_config.identifier if return_config is not None else None
 
-    _module_state.conversion_registry[converter.identifier] = converter
-    _module_state.converter_paths[src_config].append((tgt_config, converter))
+    module_state.conversion_registry[converter.identifier] = converter
+    module_state.converter_paths[src_config].append((tgt_config, converter))
 
 
 def _register_interface(
     fn: Callable,
-    identifier: Optional[str]
+    identifier: Optional[str],
+    default_merge_space: MergeSpaceSymbol,
+    module_state: ModuleState,
 ) -> MergeMethodInterface:
-    global _module_state
-
     if identifier is None:
         identifier = fn.__name__
-    fn_object = MergeMethodInterface(identifier, fn)
+    fn_object = MergeMethodInterface(identifier, fn, default_merge_space)
 
-    if identifier in _module_state.interfaces_registry:
+    if identifier in module_state.interfaces_registry:
         raise KeyError(f"Another merge method interface named {identifier} is already registered.")
 
     if not _is_empty_body_fn(fn):
         raise ValueError("register() must be applied to an empty function (the body must be either nothing, `pass`, `...`, `return` or `return None`. docstrings are allowed)")
 
-    _module_state.interfaces_registry[identifier] = fn_object
+    module_state.interfaces_registry[identifier] = fn_object
     return fn_object
 
 

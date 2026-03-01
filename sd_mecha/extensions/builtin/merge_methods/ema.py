@@ -2,12 +2,18 @@ from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, S
 from torch import Tensor
 
 
-# todo: make class merge method
-@merge_method
+@merge_method(is_interface=True)
 def exchange_ema(
     model: Parameter(StateDict[Tensor]),
-    **kwargs,
 ) -> Return(Tensor):
+    ...
+
+
+@merge_method(implements=exchange_ema)
+def exchange_ema_sd1(
+    model: Parameter(StateDict[Tensor], model_config="sd1-ldm"),
+    **kwargs,
+) -> Return(Tensor, model_config="sd1-ldm"):
     input_keys = model.model_config.keys()
     target_key = kwargs["key"]
     to_ema_key_fn = to_ema_key_fns.get(model.model_config.identifier, lambda k: k)
@@ -15,11 +21,11 @@ def exchange_ema(
 
     if ema_key in input_keys:
         return model[ema_key]
-    else:
-        for input_key in input_keys:
-            if to_ema_key_fn(input_key) == target_key:
-                return model[input_key]
-        return model[target_key]
+
+    for input_key in input_keys:
+        if to_ema_key_fn(input_key) == target_key:
+            return model[input_key]
+    return model[target_key]
 
 
 to_ema_key_fns = {
