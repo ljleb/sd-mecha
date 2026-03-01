@@ -483,7 +483,7 @@ class KeyMergeVisitor(RecipeVisitor):
                         node.accept(release_visitor)
                 if isinstance(res, dict):
                     if self.validate_mm_contract:
-                        assert all(k in key_relation.outputs for k in res.keys()), (
+                        assert set(key_relation.outputs) == set(res.keys()), (
                             f"Merge method {node.merge_method.identifier} returned an unexpected set of keys: {list(res)}",
                         )
                     for key, value in res.items():
@@ -512,7 +512,7 @@ class KeyMergeVisitor(RecipeVisitor):
         error_holder = ErrorHolder()
         merged = {}
         input_types = node.merge_method.get_input_types().as_dict(len(node.bound_args.args))
-        input_names = node.merge_method.get_param_names().as_dict(len(node.bound_args.args)) if self.validate_mm_contract is not None else None
+        input_names = node.merge_method.get_param_names().as_dict(len(node.bound_args.args))
         indices = (*range(len(node.bound_args.args)), *node.bound_args.kwargs.keys())
 
         for index in sorted(indices, key=depth_of_value, reverse=True):
@@ -521,11 +521,11 @@ class KeyMergeVisitor(RecipeVisitor):
             input_visitor = dataclasses.replace(self, parent_id=new_parent_id)
             if is_subclass(input_types[index], StateDict):
                 if self.validate_mm_contract:
-                    nested_input_keys = key_relation.inputs[input_name]
+                    input_keys_constraints = key_relation.inputs[input_name]
                 else:
-                    nested_input_keys = None
+                    input_keys_constraints = None
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, nested_input_keys)
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, input_keys_constraints)
             else:
                 merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
 
