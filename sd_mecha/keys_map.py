@@ -112,14 +112,14 @@ def _to_tuple(x: object, *, what: str) -> Tuple[str, ...]:
         return (_norm_one(x, what=what),)
 
     try:
-        it = iter(x)
+        out: list[str] = []
+        for v in x:
+            if not isinstance(v, str):
+                raise TypeError
+            out.append(_norm_one(v, what=what))
+        return tuple(out)
     except TypeError:
         raise ValueError(f"{what} must be a str or iterable[str], got {type(x).__name__}")
-
-    out: list[str] = []
-    for v in it:
-        out.append(_norm_one(v, what=what))
-    return tuple(out)
 
 
 def _ensure_no_dupes(seq: Tuple[str, ...], *, what: str) -> None:

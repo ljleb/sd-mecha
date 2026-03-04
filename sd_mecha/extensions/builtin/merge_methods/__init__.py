@@ -46,5 +46,5 @@ from .wrappers import (
     add_ties_with_dare,
     n_model_stock,
 )
-from .rebasin import sdxl_sgm_split_rebasin, sdxl_sgm_split_randperm
-from .align_attention import sdxl_sgm_align_attention
+from .rebasin import rebasin, randperm
+from .align_attention import align_attention, balance_attention_energy

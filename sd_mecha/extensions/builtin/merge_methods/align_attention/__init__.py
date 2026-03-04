@@ -1,1 +1,2 @@
-from .sdxl_sgm import sdxl_sgm_align_attention
+from .interface import align_attention, balance_attention_energy
+from . import sdxl_sgm
