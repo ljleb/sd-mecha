@@ -58,7 +58,7 @@ class SdxlSgmAttentionBase:
     clip_l_re = re.compile(r"layers\.(\d+)\.self_attn\.(.+)")
     clip_g_re = re.compile(r"resblocks\.(\d+)\.attn\.(.+)")
     vae_re = re.compile(r"\.([a-z]+)\.mid\.attn_1\.(.+)")
-    unet_re = re.compile(r"\.([a-z]+)_blocks?\.(\d+\.)(?:\d+\.)?transformer_blocks\.(\d+)\.attn[12]\.(.+)")
+    unet_re = re.compile(r"\.([a-z]+)_blocks?\.(\d+\.)(?:\d+\.)?transformer_blocks\.(\d+)\.attn([12])\.(.+)")
 
     @classmethod
     def map_keys(cls, b: KeyMapBuilder):
@@ -71,10 +71,10 @@ class SdxlSgmAttentionBase:
                 layer_id = ("clip_g", match.group(1))
                 attention_keys[layer_id].append(key)
             elif (match := cls.vae_re.search(key)) and match.group(2) != "proj_out.bias":
-                layer_id = ("vae", match.group(1), match.group(2))
+                layer_id = ("vae", *match.group(1, 2))
                 attention_keys[layer_id].append(key)
-            elif (match := cls.unet_re.search(key)) and match.group(4) != "to_out.0.bias":
-                layer_id = ("unet", match.group(1), match.group(2), match.group(3))
+            elif (match := cls.unet_re.search(key)) and match.group(5) != "to_out.0.bias":
+                layer_id = ("unet", *match.group(1, 2, 3, 4))
                 attention_keys[layer_id].append(key)
             else:
                 b[key] = b.keys[key]

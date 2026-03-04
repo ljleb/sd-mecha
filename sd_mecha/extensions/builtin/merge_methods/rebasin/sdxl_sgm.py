@@ -285,17 +285,9 @@ def _solve_component(
             if not torch.equal(new_p, pid_perm[pid]):
                 pid_perm[pid] = new_p
                 changed = True
-                if not _is_identity(new_p):
-                    print(
-                        f"[rebasin] pid={pid} width={closure.pid_to_width[pid]} non-identity (keys touched: {set(n.key for n in closure.pid_to_nodes[pid])})"
-                    )
 
         if not changed:
             break
-
-
-def _is_identity(p: Tensor) -> bool:
-    return bool(torch.equal(p, torch.arange(p.numel(), device=p.device, dtype=p.dtype)))
 
 
 def _apps_by_key_for_component(closure, comp: Tuple[int, ...]):
