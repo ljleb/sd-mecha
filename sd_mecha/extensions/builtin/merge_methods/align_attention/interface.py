@@ -1,5 +1,5 @@
 from torch import Tensor
-from sd_mecha import merge_method, Parameter, Return, StateDict
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
 
 
 @merge_method(is_interface=True)

@@ -26,6 +26,12 @@ class MergeSpaceSymbol:
             for merge_space in merge_spaces
         }
 
+    def __iter__(self):
+        return iter(self.merge_spaces)
+
+    def __contains__(self, item):
+        return item in self.merge_spaces
+
 
 AnyMergeSpace = Set[MergeSpace] | MergeSpaceSymbol
 

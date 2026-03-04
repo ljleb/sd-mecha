@@ -171,7 +171,6 @@ class PermGraph:
                 pid_to_perm={pid: self._perms[pid] for pid in closure_pids},
             ))
 
-        out.sort(key=lambda item: item[1].perms[0])
         return out
 
     def _interaction_components(self, pids: Tuple[int, ...]) -> Tuple[Tuple[int, ...], ...]:

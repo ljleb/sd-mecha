@@ -1,6 +1,7 @@
 import logging
 import pathlib
 from typing import List, Optional, Hashable
+
 from .extensions import merge_methods
 from .recipe_nodes import (
     ClosedModelRecipeNode, RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode,
@@ -154,8 +155,10 @@ def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None
     Returns:
         A string representation of the recipe, suitable for writing to a .mecha file.
     """
+    from . import open_graph
     serializer = SerializerVisitor()
-    recipe.accept(serializer)
+    with open_graph(recipe) as graph:
+        graph.finalize().root.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
     serialized = "\n".join([version_header] + serializer.instructions)
 
@@ -178,7 +181,7 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_literal(self, node: LiteralRecipeNode):
-        value = self.__serialize_value(node.value)
+        value = self.__serialize_value(node.value_dict)
         if node.model_config is None:
             return value
         else:
@@ -198,10 +201,10 @@ class SerializerVisitor(RecipeVisitor):
         identifier = self.__serialize_value(node.merge_method.get_identifier())
         parts = ["merge", identifier] + [
             self.__serialize_value(v)
-            for v in node.args
+            for v in node.bound_args.args
         ] + [
             f"{k}={self.__serialize_value(v)}"
-            for k, v in node.kwargs.items()
+            for k, v in node.bound_args.kwargs.items()
         ]
         line = " ".join(parts)
         return self.__add_instruction(line)

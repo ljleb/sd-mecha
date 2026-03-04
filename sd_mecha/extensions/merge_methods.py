@@ -441,6 +441,7 @@ class MergeMethodInterface:
             parameters=[
                 p.replace(annotation=_ensure_parameter(p.annotation, p.name, p.default, self.default_merge_space, return_annotation.data.interface))
                 for p in signature.parameters.values()
+                if p.kind != inspect.Parameter.VAR_KEYWORD
             ],
             return_annotation=return_annotation,
         )
@@ -476,7 +477,7 @@ class MergeMethodInterface:
 
         candidate_data = candidate_signature.return_annotation.data
         contract_data = self.signature.return_annotation.data
-        if candidate_data.interface != contract_data.interface:
+        if not _same_state_dict_interface(candidate_data.interface, contract_data.interface):
             raise TypeError(f"Expected return type {contract_data.interface} but got {candidate_data.interface}.")
         if contract_data.merge_space is not None and candidate_data.merge_space != contract_data.merge_space:
             raise TypeError(f"Expected return merge space {contract_data.merge_space} but got {candidate_data.merge_space}.")
@@ -507,20 +508,30 @@ class MergeMethodInterface:
 
                         argument_candidates = argument_graph.root_candidates(
                             model_config=contract_model_config,
-                            merge_space_preference=contract_merge_spaces,
+                            merge_space_preference=(contract_merge_spaces,),
                         )
                         mc_satisfied = bool(argument_candidates.model_config)
-                        ms_satisfied = contract_merge_spaces is None or any(ms in contract_merge_spaces for ms in argument_candidates.merge_space)
+                        ms_satisfied = contract_merge_spaces is None or (
+                            any(ms in contract_merge_spaces for ms in argument_candidates.merge_space)
+                        )
                         if not (mc_satisfied and ms_satisfied):
                             raise TypeError
 
                     bound_args.apply_defaults()
                     return candidate.create_recipe(bound_args)
 
-                except TypeError:
-                    pass
+                except TypeError as e:
+                    raise e
 
         raise TypeError(f"No candidate matched the given arguments: {self.identifier}(*{args}, **{kwargs})")
+
+
+def _same_state_dict_interface(i1, i2):
+    if typing.get_origin(i1) == StateDict:
+        i1 = typing.get_args(i1)[0]
+    if typing.get_origin(i2) == StateDict:
+        i2 = typing.get_args(i2)[0]
+    return i1 == i2
 
 
 def _ensure_parameter(hint: type, param_name: str, default: Any, default_merge_space: MergeSpaceSymbol, return_interface: type):

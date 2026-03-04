@@ -64,16 +64,16 @@ class SdxlSgmAttentionBase:
     def map_keys(cls, b: KeyMapBuilder):
         attention_keys = defaultdict(list)
         for key in b.keys():
-            if (match := cls.clip_l_re.match(key)) and match.group(2) != "out_proj.bias":
+            if (match := cls.clip_l_re.search(key)) and match.group(2) != "out_proj.bias":
                 layer_id = ("clip_l", match.group(1))
                 attention_keys[layer_id].append(key)
-            elif (match := cls.clip_g_re.match(key)) and match.group(2) != "out_proj.bias":
+            elif (match := cls.clip_g_re.search(key)) and match.group(2) != "out_proj.bias":
                 layer_id = ("clip_g", match.group(1))
                 attention_keys[layer_id].append(key)
-            elif (match := cls.vae_re.match(key)) and match.group(2) != "proj_out.bias":
+            elif (match := cls.vae_re.search(key)) and match.group(2) != "proj_out.bias":
                 layer_id = ("vae", match.group(1), match.group(2))
                 attention_keys[layer_id].append(key)
-            elif (match := cls.unet_re.match(key)) and match.group(4) != "to_out.0.bias":
+            elif (match := cls.unet_re.search(key)) and match.group(4) != "to_out.0.bias":
                 layer_id = ("unet", match.group(1), match.group(2), match.group(3))
                 attention_keys[layer_id].append(key)
             else:

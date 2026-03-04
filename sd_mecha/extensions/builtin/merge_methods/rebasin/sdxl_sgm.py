@@ -153,7 +153,7 @@ def unet_perms(key: str, meta: TensorMetadata, perm_graph: PermGraph, num_heads:
     if ".ff.net.2." in key and key.endswith(".weight"):  # unet ff
         perm_width = meta.shape[1]
 
-        fc1_key = key.replace(".ff.net.2.", ".ff.net.0.")
+        fc1_key = key.replace(".ff.net.2.", ".ff.net.0.proj.")
         fc1_bias_key = fc1_key.replace(".weight", ".bias")
         fc2_key = key
 
@@ -225,7 +225,7 @@ class rebasin_sdxl:
         self,
         a: Parameter(StateDict[Tensor], model_config=sdxl_config),
         ref: Parameter(StateDict[Tensor], model_config=sdxl_config),
-        iters: Parameter(int),
+        iters: Parameter(int, model_config=sdxl_config),
         **kwargs,
     ) -> Return(StateDict[Tensor], model_config=sdxl_config):
         out_keys, closure = _get_request(kwargs)
@@ -285,9 +285,17 @@ def _solve_component(
             if not torch.equal(new_p, pid_perm[pid]):
                 pid_perm[pid] = new_p
                 changed = True
+                if not _is_identity(new_p):
+                    print(
+                        f"[rebasin] pid={pid} width={closure.pid_to_width[pid]} non-identity (keys touched: {set(n.key for n in closure.pid_to_nodes[pid])})"
+                    )
 
         if not changed:
             break
+
+
+def _is_identity(p: Tensor) -> bool:
+    return bool(torch.equal(p, torch.arange(p.numel(), device=p.device, dtype=p.dtype)))
 
 
 def _apps_by_key_for_component(closure, comp: Tuple[int, ...]):
@@ -428,7 +436,7 @@ class randperm_sdxl:
     def __call__(
         self,
         a: Parameter(StateDict[Tensor], model_config=sdxl_config),
-        seed: Parameter(int) = None,
+        seed: Parameter(int, model_config=sdxl_config) = None,
         **kwargs,
     ) -> Return(StateDict[Tensor], model_config=sdxl_config):
         out_keys, closure = _get_request(kwargs)
