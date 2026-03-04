@@ -46,3 +46,5 @@ from .wrappers import (
     add_ties_with_dare,
     n_model_stock,
 )
+from .rebasin import rebasin, randperm
+from .align_attention import align_attention, balance_attention_energy
