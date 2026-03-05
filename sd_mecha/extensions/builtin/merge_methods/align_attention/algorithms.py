@@ -1,7 +1,6 @@
 import torch
 from scipy.optimize import linear_sum_assignment
 from typing import Tuple
-from ..svd import svd_lowrank
 
 
 def balance_head_energy(q: torch.Tensor, k: torch.Tensor, eps: float = 1e-6):
@@ -106,24 +105,3 @@ def split_weight_bias(wb):
     b = wb[..., -1]
     w = wb[..., :-1]
     return w, b
-
-
-def canonical_svd(a: torch.Tensor, *, rank=None):
-    if rank is not None:
-        u, s, vh = svd_lowrank(a, rank)
-    else:
-        driver = "gesvd" if a.is_cuda else None
-        u, s, vh = torch.linalg.svd(a, full_matrices=False, driver=driver)
-
-    if u.dtype.is_complex:
-        phases = torch.angle(u.diagonal(offset=0, dim1=-2, dim2=-1))
-        flips = torch.exp(-1j * phases)
-    else:
-        pivots = u.diagonal(offset=0, dim1=-2, dim2=-1)
-        flips = torch.sign(pivots)
-        flips = flips + (flips == 0)
-
-    u_can = u * flips.unsqueeze(-2)
-    vh_can = vh * flips.unsqueeze(-1)
-
-    return u_can, s, vh_can

@@ -6,11 +6,12 @@ def _load_builtin_extensions():
 _load_builtin_extensions()
 
 
+from .recipe_nodes import RecipeNodeOrValue, RecipeNode
 from .merging import merge
 from .graph_finalization import open_graph
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
-from .extensions.merge_methods import merge_method, value_to_node, RecipeNodeOrValue, Parameter, Return, StateDict
+from .extensions.merge_methods import merge_method, value_to_node, Parameter, Return, StateDict
 from .extensions import model_dirs
 from .conversion import convert
 from sd_mecha.extensions.builtin.merge_methods import (

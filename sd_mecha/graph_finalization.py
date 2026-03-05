@@ -1147,12 +1147,13 @@ class PropagatableKeyVisitor(RecipeVisitor):
             if output_key not in key_map:
                 return False
 
-            for child_name, child in node.bound_args.arguments.items():
+            for child_name, children in node.all_args().items():
                 child_keys = key_map[output_key].inputs.get(child_name)
                 if not child_keys:
                     continue
                 for child_key in child_keys:
-                    can_merge = can_merge and child.accept(self, child_key)
+                    for child in children:
+                        can_merge = can_merge and child.accept(self, child_key)
 
         if can_merge:
             self._filtered_keys(node).add(output_key)

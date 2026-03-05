@@ -283,6 +283,14 @@ class MergeRecipeNode(RecipeNode):
         inputs = f"{argc} args, {kwc} kwargs"
         return f"MergeRecipeNode(method={self.merge_method.identifier}, inputs={inputs})"
 
+    @functools.cache
+    def all_args(self) -> Dict[str, RecipeNode]:
+        vararg_name = self.merge_method.get_param_names().vararg
+        return {
+            k: vs if k == vararg_name else (vs,)
+            for k, vs in self.bound_args.arguments.items()
+        }
+
 
 class RecipeVisitor(abc.ABC):
     @abc.abstractmethod
@@ -311,7 +319,8 @@ class ModelDepthRecipeVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode):
         return max(
             child.accept(self)
-            for child in node.bound_args.arguments.values()
+            for children in node.all_args().values()
+            for child in children
         ) + 1
 
 
@@ -334,7 +343,8 @@ class ModelsCountVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode) -> int:
         return sum(
             child.accept(self)
-            for child in node.bound_args.arguments.values()
+            for children in node.all_args().values()
+            for child in children
         )
 
 
@@ -354,7 +364,7 @@ class ContainsVisitor(RecipeVisitor):
     def visit_merge(self, node: MergeRecipeNode):
         return node == self.item or any(
             v.accept(self)
-            for v in set(node.bound_args.arguments.values())
+            for v in set(child for children in node.all_args().values() for child in children)
         )
 
 
@@ -370,8 +380,9 @@ class IterVisitor(RecipeVisitor):
         yield node
 
     def visit_merge(self, node: MergeRecipeNode):
-        for v in node.bound_args.arguments.values():
-            yield from v.accept(self)
+        for vs in node.all_args().values():
+            for v in vs:
+                yield from v.accept(self)
         yield node
 
 

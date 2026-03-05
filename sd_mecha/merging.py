@@ -265,7 +265,7 @@ class MinimalMetadataVisitor(RecipeVisitor):
         meta = node.model_config.keys()
         key_map = node.key_map()
 
-        for param, args in node.bound_args.arguments.items():
+        for param, args in node.all_args().items():
             for arg in (args if isinstance(args, tuple) else (args,)):
                 arg_res = arg.accept(self)
                 for input_key in arg_res:
@@ -331,7 +331,7 @@ class ForwardableNodesVisitor(RecipeVisitor):
             ))
 
     def visit_merge(self, node: MergeRecipeNode):
-        for arg in node.bound_args.arguments.values():
+        for arg in node.all_args():
             arg.accept(self)
 
 
@@ -702,6 +702,8 @@ class CastInputDicts(RecipeVisitor):
                 converted_dict[k] = torch.tensor(v, device=self.device, dtype=self.dtype)
             elif isinstance(v, torch.Tensor):
                 converted_dict[k] = v.to(device=self.device, dtype=self.dtype)
+            elif isinstance(v, str):
+                converted_dict[k] = v
             else:
                 raise RuntimeError(f"Cannot cast type {type(v)} to device={self.device}, dtype={self.dtype}")
 
