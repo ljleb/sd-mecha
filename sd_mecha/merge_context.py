@@ -117,10 +117,6 @@ class MergeMethodOutputRef:
     lock: contextlib.AbstractContextManager
     locked: bool = False
 
-    def __post_init__(self):
-        if len(self.remaining_ports) <= 1:
-            self.lock = contextlib.nullcontext()
-
     def use_once(self, port: Optional[Tuple[RecipeNode, str]]) -> Any:
         assert self.locked
         res = self.cache
