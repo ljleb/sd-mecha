@@ -210,7 +210,7 @@ def merge(
                     del graph_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(recipe, node_to_keys, memoize=reuse_outputs)
+        merge_methods_context = create_merge_method_context(recipe, node_to_keys, enable_outputs_reuse=reuse_outputs)
 
         with (
             executor,
