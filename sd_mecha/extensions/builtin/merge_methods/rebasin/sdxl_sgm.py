@@ -208,7 +208,7 @@ perm_graph = create_graph()
 
 
 @merge_method(implements=rebasin)
-class rebasin_sdxl:
+class rebasin_sdxl_sgm:
     @staticmethod
     def map_keys(b: KeyMapBuilder):
         used: Set[str] = set()
@@ -412,7 +412,7 @@ def _apply_inverse_one(
 
 
 @merge_method(implements=randperm)
-class randperm_sdxl:
+class randperm_sdxl_sgm:
     @staticmethod
     def map_keys(b: KeyMapBuilder):
         used: Set[str] = set()

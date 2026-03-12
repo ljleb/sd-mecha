@@ -47,4 +47,4 @@ from .wrappers import (
     n_model_stock,
 )
 from .rebasin import rebasin, randperm
-from .align_attention import align_attention, balance_attention_energy
+from .balance_attention import balance_attention

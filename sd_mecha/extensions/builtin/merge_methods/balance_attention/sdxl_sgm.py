@@ -5,13 +5,13 @@ from torch import Tensor
 from typing import Optional, Tuple
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
 from sd_mecha.keys_map import KeyMapBuilder
-from .algorithms import balance_head_energy, permute_heads as do_permute_heads, align_heads, bundle_weight_bias, split_weight_bias
-from .interface import balance_attention_energy, align_attention
+from .algorithms import balance_head_energy, bundle_weight_bias, split_weight_bias
+from .interface import balance_attention
 
 
 def implement_merge_methods(config, base, extract_qkvo, return_qkvo):
-    @merge_method(implements=balance_attention_energy)
-    class sdxl_sgm_balance_attention_energy(base):
+    @merge_method(implements=balance_attention)
+    class balance_attention_sdxl_sgm(base):
         def __call__(
             self,
             a: Parameter(StateDict[Tensor], model_config=config),
@@ -27,31 +27,6 @@ def implement_merge_methods(config, base, extract_qkvo, return_qkvo):
             q, k = balance_head_energy(q, k)
             v, o = balance_head_energy(v, o)
             return return_qkvo(q, k, v, o, keys)
-
-    @merge_method(implements=align_attention)
-    class sdxl_sgm_align_attention(base):
-        def __call__(
-            self,
-            a: Parameter(StateDict[Tensor], model_config=config),
-            ref: Parameter(StateDict[Tensor], model_config=config),
-            permute_heads: Parameter(bool, model_config=config) = False,
-            **kwargs,
-        ) -> Return(StateDict[Tensor], model_config=config):
-            keys = kwargs["key_relation"].outputs
-            a_qkvo = extract_qkvo(a, keys)
-            if a_qkvo is None:
-                return a[keys[0]]
-
-            a_q, a_k, a_v, a_o = a_qkvo
-            b_q, b_k, b_v, b_o = extract_qkvo(ref, keys)
-
-            if permute_heads:
-                a_q, a_k, a_v, a_o = do_permute_heads(a_q, a_k, a_v, a_o, b_q, b_k, b_v, b_o)
-
-            a_q, a_k = align_heads(a_q, a_k, b_q, b_k)
-            a_v, a_o = align_heads(a_v, a_o, b_v, b_o)
-
-            return return_qkvo(a_q, a_k, a_v, a_o, keys)
 
 
 class SdxlSgmAttentionBase:
