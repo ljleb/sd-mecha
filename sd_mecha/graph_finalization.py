@@ -148,24 +148,26 @@ class RecipeGraph:
                 finalized_node = finalizer.to_new_node[old_node]
                 finalized_node_to_indices[finalized_node].add(indices.ids[t])
 
-            component_keys = {
-                idx: candidates[t][idx].stats[solutions[t][idx].identifier].intersection.copy()
-                for idxs in finalized_node_to_indices.values()
-                for idx in idxs
-            }
+            component_keys: Dict[ComponentIndex, Set[str]] = {}
+            component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
 
-            component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {
-                idx: (
-                    candidates[t][idx].common_keys
-                    if solutions[t][idx].identifier == "structural"
-                    else solutions[t][idx].keys()
-                )
-                for idxs in finalized_node_to_indices.values()
-                for idx in idxs
-            }
+            for idxs in finalized_node_to_indices.values():
+                for idx in idxs:
+                    solved = solutions[t][idx]
+                    cand = candidates[t][idx]
+
+                    if solved.identifier == "structural":
+                        metadata = cand.common_keys
+                        component_metadata[idx] = metadata
+                        component_keys[idx] = set(metadata.keys()) if metadata is not None else set()
+                    else:
+                        component_metadata[idx] = solved.keys()
+                        stats = cand.stats or {}
+                        match = stats.get(solved.identifier)
+                        component_keys[idx] = match.intersection.copy() if match is not None else set(solved.keys().keys())
 
             node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
-            node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
+            node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]] = {}
 
             for node, idxs in finalized_node_to_indices.items():
                 idxs = set(idxs)
@@ -1113,7 +1115,7 @@ def _intersect_key_sets(key_sets: Iterable[Set[str]]) -> Set[str]:
 
 def _merge_component_metadata(
     metadata_dicts: Iterable[Optional[Dict[str, TensorMetadata | KeyMetadata]]]
-) -> Optional[Dict[str, TensorMetadata | KeyMetadata]]:
+) -> Optional[Dict[str, KeyMetadata]]:
     metadata_dicts = [d for d in metadata_dicts if d is not None]
     if not metadata_dicts:
         return None
@@ -1122,14 +1124,19 @@ def _merge_component_metadata(
     for d in metadata_dicts[1:]:
         common_keys.intersection_update(d.keys())
 
-    out: Dict[str, TensorMetadata | KeyMetadata] = {}
+    out: Dict[str, KeyMetadata] = {}
     for k in common_keys:
         best = metadata_dicts[0][k]
         for d in metadata_dicts[1:]:
             cand = d[k]
             # Keep the less informative / more conservative metadata.
             # This matches the spirit of ModelConfigCandidates._update_common_keys().
-            best = best if _meta_score(best) >= _meta_score(cand) else cand
+            best = KeyMetadata(
+                best.shape if cand.shape == best.shape else None,
+                best.dtype if cand.dtype == best.dtype else None,
+                [a for a in getattr(best, "aliases", ()) if a in set(getattr(cand, "aliases", ()))],
+                getattr(best, "optional", True) and getattr(cand, "optional", True),
+            )
         out[k] = best
 
     return out
@@ -1138,7 +1145,7 @@ def _merge_component_metadata(
 @dataclasses.dataclass
 class PropagatableKeyVisitor(RecipeVisitor):
     node_to_key_domain: Dict[RecipeNode, Set[str]]
-    node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, TensorMetadata | KeyMetadata]]]
+    node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]]
     filtered_node_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
 
     def visit_all_keys(self, root: RecipeNode):
@@ -1191,7 +1198,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
     def _key_optional(self, node: RecipeNode, key: str) -> bool:
         metadata = self.node_to_metadata_domain[node]
         if metadata is not None and key in metadata:
-            return getattr(metadata[key], "optional", True)
+            return metadata[key].optional
         return True
 
     def _filtered_keys(self, node: RecipeNode) -> Set[str]:
