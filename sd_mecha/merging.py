@@ -225,7 +225,7 @@ def merge(
             futures = []
             for key, key_metadata in graph_metadata.items():
                 fn = recipe.accept
-                fn = _track_output(fn, output_dict, key, key_metadata, check_finite)
+                fn = _track_output(fn, output_dict, key, key_metadata, check_finite, check_mandatory_keys)
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache)))
@@ -391,7 +391,7 @@ def _get_output_dict(
         yield output
 
 
-def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool):
+def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool, check_mandatory_keys: bool):
     @functools.wraps(fn)
     def track_output(*args, **kwargs):
         try:
@@ -407,7 +407,7 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
 
             output[key] = res
         except StateDictKeyError as e:
-            if key_metadata.optional:
+            if key_metadata.optional or not check_mandatory_keys:
                 logging.debug(f"skipping key {e}")
             else:
                 raise RuntimeError(f"could not merge mandatory key: {e}") from e

@@ -52,7 +52,7 @@ def resolve(identifier: str) -> MergeSpace:
 
 def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
     if isinstance(merge_space, Set):
-        return [merge_space.identifier for merge_space in merge_space]
+        return [merge_space if isinstance(merge_space, str) else merge_space.identifier for merge_space in merge_space]
     elif isinstance(merge_space, MergeSpaceSymbol):
         return get_identifiers(merge_space.merge_spaces)
     else:

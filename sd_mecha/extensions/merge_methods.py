@@ -191,7 +191,7 @@ class MergeMethod:
             fn = fn_or_cls
 
         self.default_merge_space = default_merge_space
-        self.__interface = interface
+        self.interface = interface
 
         signature = inspect.signature(fn)
         return_annotation = _ensure_return(signature.return_annotation, self.default_merge_space)
@@ -243,7 +243,7 @@ class MergeMethod:
         is_conversion_implicitly = len(configs_involved) > 1
         is_return_dict = is_subclass(return_data.interface, StateDict)
         is_map_keys_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "map_keys", None), (staticmethod, classmethod))
-        if self.__interface is None:
+        if self.interface is None:
             if (is_conversion_implicitly or is_return_dict) and not is_map_keys_defined:
                 raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'map_keys(builder)'")
         else:
@@ -336,8 +336,8 @@ class MergeMethod:
             for k, arg in bound_args.kwargs.items()
         }
 
-        if self.__interface is not None:
-            return self.__interface.dispatch(*args, **kwargs)
+        if self.interface is not None:
+            return self.interface.dispatch(*args, **kwargs)
 
         return MergeRecipeNode(self, self.__f_signature.bind(*args, **kwargs))
 
