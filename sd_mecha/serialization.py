@@ -185,15 +185,15 @@ class SerializerVisitor(RecipeVisitor):
         if node.model_config is None:
             return value
         else:
-            config = self.__serialize_value(node.model_config.identifier)
-            merge_space = self.__serialize_value(node.merge_space.identifier)
+            config = self.__serialize_value(getattr(node.model_config, "identifier", None))
+            merge_space = self.__serialize_value(getattr(node.merge_space, "identifier", None))
             line = f"literal {value} model_config={config} merge_space={merge_space}"
             return self.__add_instruction(line)
 
     def visit_model(self, node: ModelRecipeNode) -> str:
         path = self.__serialize_value(str(node.path))
         config = self.__serialize_value(getattr(node.model_config, "identifier", None))
-        merge_space = self.__serialize_value(node.merge_space.identifier)
+        merge_space = self.__serialize_value(getattr(node.merge_space, "identifier", None))
         line = f"model {path} model_config={config} merge_space={merge_space}"
         return self.__add_instruction(line)
 
