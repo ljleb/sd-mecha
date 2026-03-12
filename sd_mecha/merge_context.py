@@ -18,7 +18,7 @@ def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeN
 @dataclasses.dataclass
 class GetOutputPortsVisitor(RecipeVisitor):
     active_keys: Mapping[RecipeNode, Set[str]]
-    parent_ports: Dict[RecipeNode, Dict[str, Set[Optional[Tuple[RecipeNode, str]]]]] = dataclasses.field(default_factory=lambda: defaultdict(lambda: defaultdict(set)))
+    parent_ports: Dict[RecipeNode, Dict[str, Set[Optional[Tuple[RecipeNode, str, int | str]]]]] = dataclasses.field(default_factory=lambda: defaultdict(lambda: defaultdict(set)))
 
     def visit_root(self, root: RecipeNode):
         for k in self.active_keys[root]:
@@ -46,7 +46,7 @@ class GetOutputPortsVisitor(RecipeVisitor):
 
                 child_output_keys = self.active_keys[child_node].intersection(key_map[output_key].inputs[param_name])
                 for child_output_key in child_output_keys:
-                    self.parent_ports[child_node][child_output_key].add((node, output_key))
+                    self.parent_ports[child_node][child_output_key].add((node, output_key, input_idx))
 
         for input_node in (*node.bound_args.args, *node.bound_args.kwargs.values()):
             input_node.accept(self)
@@ -55,7 +55,7 @@ class GetOutputPortsVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class CreateMergeMethodContextVisitor(RecipeVisitor):
     active_keys: Mapping[RecipeNode, Set[str]]
-    parent_ports: Mapping[RecipeNode, Mapping[str, Set[Optional[Tuple[RecipeNode, str]]]]]
+    parent_ports: Mapping[RecipeNode, Mapping[str, Set[Optional[Tuple[RecipeNode, str, int | str]]]]]
     enable_outputs_reuse: bool
 
     def visit_literal(self, node: LiteralRecipeNode) -> Dict[RecipeNode, "MergeMethodContext"]:
