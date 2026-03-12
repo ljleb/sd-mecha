@@ -492,42 +492,106 @@ class MergeMethodInterface:
         self.candidates.append((candidate, candidate_signature))
 
     def dispatch(self, *args, **kwargs):
-        from .. import open_graph
-
         argument_graphs = {}
+        failures: list[tuple[str, str]] = []
+
         with contextlib.ExitStack() as stack:
             for candidate, candidate_signature in self.candidates:
                 try:
-                    bound_args: inspect.BoundArguments = candidate_signature.bind(*args, **kwargs)
-
-                    for parameter_name, argument_node in bound_args.arguments.copy().items():
-                        contract_data = candidate_signature.parameters[parameter_name].annotation.data
-                        contract_model_config = contract_data.model_config
-                        contract_merge_spaces = contract_data.merge_space
-
-                        if argument_node not in argument_graphs:
-                            argument_graph = argument_graphs[argument_node] = stack.enter_context(open_graph(argument_node, root_only=True))
-                        else:
-                            argument_graph = argument_graphs[argument_node]
-
-                        argument_candidates = argument_graph.root_candidates(
-                            model_config=contract_model_config,
-                            merge_space_preference=(contract_merge_spaces,),
-                        )
-                        mc_satisfied = bool(argument_candidates.model_config)
-                        ms_satisfied = contract_merge_spaces is None or (
-                            any(ms in contract_merge_spaces for ms in argument_candidates.merge_space)
-                        )
-                        if not (mc_satisfied and ms_satisfied):
-                            raise TypeError
-
-                    bound_args.apply_defaults()
+                    bound_args = self._try_candidate(
+                        candidate,
+                        candidate_signature,
+                        argument_graphs,
+                        stack,
+                        args,
+                        kwargs,
+                    )
                     return candidate.create_recipe(bound_args)
-
-                except TypeError as e:
-                    raise e
+                except CandidateDispatchError as e:
+                    failures.append((candidate.identifier, str(e)))
+                except Exception as e:
+                    failures.append((candidate.identifier, f"unexpected error: {e}"))
+        if failures:
+            lines = [
+                f"No candidate matched the given arguments for interface '{self.identifier}'.",
+                "Attempted candidates:",
+            ]
+            lines.extend(f"  - {candidate_id}: {reason}" for candidate_id, reason in failures)
+            raise TypeError("\n".join(lines))
 
         raise TypeError(f"No candidate matched the given arguments: {self.identifier}(*{args}, **{kwargs})")
+
+    def _try_candidate(
+        self,
+        candidate: MergeMethod,
+        candidate_signature: inspect.Signature,
+        argument_graphs: dict,
+        stack: contextlib.ExitStack,
+        args,
+        kwargs,
+    ) -> inspect.BoundArguments:
+        from sd_mecha import open_graph
+
+        try:
+            bound_args: inspect.BoundArguments = candidate_signature.bind(*args, **kwargs)
+        except TypeError as e:
+            raise CandidateDispatchError(candidate.identifier, f"signature mismatch: {e}") from e
+
+        for parameter_name, argument_node in bound_args.arguments.copy().items():
+            contract_data = candidate_signature.parameters[parameter_name].annotation.data
+            contract_model_config = contract_data.model_config
+            contract_merge_spaces = contract_data.merge_space
+
+            try:
+                if argument_node not in argument_graphs:
+                    argument_graph = argument_graphs[argument_node] = stack.enter_context(
+                        open_graph(argument_node, root_only=True)
+                    )
+                else:
+                    argument_graph = argument_graphs[argument_node]
+
+                argument_candidates = argument_graph.root_candidates(
+                    model_config=contract_model_config,
+                    merge_space_preference=(contract_merge_spaces,),
+                )
+            except Exception as e:
+                raise CandidateDispatchError(
+                    candidate.identifier,
+                    f"parameter '{parameter_name}': failed to analyze argument graph: {e}"
+                ) from e
+
+            mc_satisfied = bool(argument_candidates.model_config)
+            ms_satisfied = contract_merge_spaces is None or (
+                    argument_candidates.merge_space is not None and
+                    any(ms in contract_merge_spaces for ms in argument_candidates.merge_space)
+            )
+
+            if not mc_satisfied or not ms_satisfied:
+                details = []
+                if contract_model_config is not None and not mc_satisfied:
+                    details.append(f"model_config requirement not satisfied ({contract_model_config.identifier})")
+                if contract_merge_spaces is not None and not ms_satisfied:
+                    want = sorted(ms.identifier for ms in contract_merge_spaces)
+                    got = (
+                        sorted(ms.identifier for ms in argument_candidates.merge_space)
+                        if argument_candidates.merge_space is not None else
+                        None
+                    )
+                    details.append(f"merge_space requirement not satisfied (wanted one of {want}, got {got})")
+
+                raise CandidateDispatchError(
+                    candidate.identifier,
+                    f"parameter '{parameter_name}': " + "; ".join(details)
+                )
+
+        bound_args.apply_defaults()
+        return bound_args
+
+
+class CandidateDispatchError(TypeError):
+    def __init__(self, candidate_identifier: str, message: str):
+        super().__init__(message)
+        self.candidate_identifier = candidate_identifier
 
 
 def _same_state_dict_interface(i1, i2):
