@@ -5,7 +5,7 @@ from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, S
 T = TypeVar("T")
 
 
-@merge_method(is_conversion=True)
+@merge_method(is_conversion=True, reuse_outputs=False)
 class convert_singleton:
     @staticmethod
     def map_keys(b):

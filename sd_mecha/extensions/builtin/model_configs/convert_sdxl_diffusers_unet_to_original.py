@@ -15,6 +15,7 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
 @merge_method(
     identifier=f"convert_'{sdxl_diffusers_unet_config.identifier}'_to_'{sdxl_sgm_config.identifier}'",
     is_conversion=True,
+    reuse_outputs=False,
 )
 class convert_sdxl_diffusers_unet_to_original:
     @staticmethod

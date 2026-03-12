@@ -13,6 +13,7 @@ sdxl_sgm_config = model_configs.resolve('sdxl-sgm')
 @merge_method(
     identifier=f"convert_'{sdxl_kohya_config.identifier}'_to_'{sdxl_sgm_config.identifier}'",
     is_conversion=True,
+    reuse_outputs=False,
 )
 class convert_sdxl_kohya_to_original:
     @staticmethod
@@ -46,6 +47,7 @@ sdxl_kohya_diffusers_config = model_configs.resolve('sdxl-kohya_but_diffusers')
 @merge_method(
     identifier=f"convert_'{sdxl_kohya_diffusers_config.identifier}'_to_'{sdxl_sgm_config.identifier}'",
     is_conversion=True,
+    reuse_outputs=False,
 )
 class convert_sdxl_kohya_but_diffusers_to_original:
     @staticmethod

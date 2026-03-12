@@ -10,7 +10,7 @@ def exchange_ema(
 
 
 def implement_exchange_ema(config, to_ema_key_fn):
-    @merge_method(identifier=f"exchange_ema_'{config}'", implements=exchange_ema)
+    @merge_method(identifier=f"exchange_ema_'{config}'", implements=exchange_ema, reuse_outputs=False)
     def exchange_ema_impl(
         model: Parameter(StateDict[Tensor], model_config=config),
         **kwargs,

@@ -19,7 +19,7 @@ T = TypeVar("T")
 # - https://github.com/hako-mikan/sd-webui-supermerger/blob/f14b3e5d0be9c510d199cca502c4148160f901bb/scripts/mergers/mergers.py#L1376
 # - https://github.com/s1dlx/meh/blob/04af2c8d63744fb6c02d35d328a2c84380cca444/sd_meh/merge.py#L360
 # - https://github.com/vladmandic/automatic/blob/e22d0789bddd3894364b0d59a4c9b3e456e89079/modules/merging/merge_utils.py#L64
-@merge_method(is_conversion=True)
+@merge_method(is_conversion=True, reuse_outputs=False)
 class convert_sdxl_blocks_to_sgm:
     @staticmethod
     def map_keys(b):

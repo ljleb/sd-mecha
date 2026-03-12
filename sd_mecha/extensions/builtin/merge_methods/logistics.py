@@ -8,7 +8,7 @@ from sd_mecha.streaming import StateDictKeyError, NonFiniteStateDictKeyError
 T = TypeVar("T")
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def fallback(
     a: Parameter(StateDict[T]),
     default: Parameter(StateDict[T]),
@@ -21,7 +21,7 @@ def fallback(
         return default[key]
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def cast(
     a: Parameter(Tensor),
     device: Parameter(str) = None,
@@ -56,21 +56,21 @@ for dtype_str in ("uint8", "uint16", "uint32", "uint64", "float8_e4m3fn", "float
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def get_dtype(
     a: Parameter(Tensor),
 ) -> Return(str, "param"):
     return cast_dtype_map_reversed[a.dtype]
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def get_device(
     a: Parameter(Tensor),
 ) -> Return(str, "param"):
     return str(a.device)
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def pick_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
@@ -89,7 +89,7 @@ def pick_component(
         raise StateDictKeyError(key)
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def omit_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
@@ -108,14 +108,14 @@ def omit_component(
         return a[key]
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def stack(
     *values: Parameter(Tensor),
 ) -> Return(Tensor):
     return torch.stack(values)
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def omit_non_finite(
     a: Parameter(StateDict[Tensor]),
     omit_mandatory: Parameter(bool) = False,

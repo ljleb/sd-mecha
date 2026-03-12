@@ -6,14 +6,11 @@ from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecip
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 
-def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeNode, Set[str]], memoize: bool) -> Dict[RecipeNode, "MergeMethodContext"]:
-    if memoize:
-        ports_visitor = GetOutputPortsVisitor(active_keys)
-        ports_visitor.visit_root(recipe)
-        parent_ports = ports_visitor.parent_ports
-    else:
-        parent_ports = {node: {} for node in recipe}
-    create_context_visitor = CreateMergeMethodContextVisitor(parent_ports)
+def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeNode, Set[str]], enable_outputs_reuse: bool) -> Dict[RecipeNode, "MergeMethodContext"]:
+    ports_visitor = GetOutputPortsVisitor(active_keys)
+    ports_visitor.visit_root(recipe)
+    parent_ports = ports_visitor.parent_ports
+    create_context_visitor = CreateMergeMethodContextVisitor(active_keys, parent_ports, enable_outputs_reuse)
     res = recipe.accept(create_context_visitor)
     return res
 
@@ -57,7 +54,9 @@ class GetOutputPortsVisitor(RecipeVisitor):
 
 @dataclasses.dataclass
 class CreateMergeMethodContextVisitor(RecipeVisitor):
-    parent_ports: Mapping[RecipeNode, Mapping[str, Set[Optional[Tuple[RecipeNode, str]]]]] = dataclasses.field(default_factory=dict)
+    active_keys: Mapping[RecipeNode, Set[str]]
+    parent_ports: Mapping[RecipeNode, Mapping[str, Set[Optional[Tuple[RecipeNode, str]]]]]
+    enable_outputs_reuse: bool
 
     def visit_literal(self, node: LiteralRecipeNode) -> Dict[RecipeNode, "MergeMethodContext"]:
         res = {}
@@ -74,21 +73,27 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
         for input_node in (*node.bound_args.args, *node.bound_args.kwargs.values()):
             res |= input_node.accept(self)
 
+        if not node.merge_method.reuse_outputs:
+            res[node] = MergeMethodContext({}, node.merge_method.instantiate(), reused_output_keys=self.active_keys[node])
+            return res
+
         key_map = node.key_map()
 
         node_parent_ports = self.parent_ports[node]
-        locks_map = defaultdict(lambda: defaultdict(threading.Lock))
+        locks_map = defaultdict(lambda: defaultdict(threading.Lock if self.enable_outputs_reuse else contextlib.nullcontext))
 
+        refs = {
+            output_key: MergeMethodOutputRef(parent_ports, None, locks_map[node][key_map[output_key].outputs])
+            for output_key, parent_ports in node_parent_ports.items()
+            if (
+                len(parent_ports) > 1 or
+                len(parent_ports) > 0 and len(key_map[output_key].outputs) > 1
+            )
+        }
         res[node] = MergeMethodContext(
-            {
-                output_key: MergeMethodOutputRef(parent_ports, None, locks_map[node][key_map[output_key].outputs])
-                for output_key, parent_ports in node_parent_ports.items()
-                if (
-                    len(parent_ports) > 1 or
-                    len(parent_ports) > 0 and len(key_map[output_key].outputs) > 1
-                )
-            },
+            refs if self.enable_outputs_reuse else {},
             node.merge_method.instantiate(),
+            self.active_keys[node] if self.enable_outputs_reuse else (self.active_keys[node] - set(refs)),
         )
 
         return res
@@ -98,6 +103,7 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
 class MergeMethodContext:
     output_refs: Dict[str, "MergeMethodOutputRef"]
     instance: Any
+    reused_output_keys: Set[str]
 
     @contextlib.contextmanager
     def output_ref_context(self, key: str, lock: bool = True) -> "MergeMethodOutputRef":

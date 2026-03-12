@@ -15,6 +15,7 @@ sd1_ldm = model_configs.resolve("sd1-ldm")
 @merge_method(
     identifier=f"convert_'{sd1_kohya.identifier}'_to_'{sd1_ldm.identifier}'",
     is_conversion=True,
+    reuse_outputs=False,
 )
 class convert_sd1_kohya_to_original:
     @staticmethod

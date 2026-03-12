@@ -50,7 +50,7 @@ def merge(
     tqdm: type = ...,
     validate_mm_contract: bool = ...,
     cache: Dict[RecipeNode, dict] = ...,
-    memoize: bool = ...,
+    reuse_outputs: bool = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
@@ -104,8 +104,9 @@ def merge(
             Dictionary of caches for each recipe node in `recipe`. Each dict should be empty on the first call.
             If set, the dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls to merge().
             This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
-        memoize (optional):
-            If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations. Defaults to True.
+        reuse_outputs (optional):
+            If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations.
+            To minimize extra memory usage, each memoized output is freed as soon as all its consumers consumed it. Defaults to True.
 
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
@@ -148,8 +149,8 @@ def merge(
         validate_mm_contract = True
     if cache is ...:
         cache = {}
-    if memoize is ...:
-        memoize = True
+    if reuse_outputs is ...:
+        reuse_outputs = True
 
     if threads is not None and (not isinstance(threads, int) or threads < 0):
         raise RuntimeError("threads should be a non-negative integer or None")
@@ -209,7 +210,7 @@ def merge(
                     del graph_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(recipe, node_to_keys, memoize=memoize)
+        merge_methods_context = create_merge_method_context(recipe, node_to_keys, memoize=reuse_outputs)
 
         with (
             executor,
@@ -497,6 +498,7 @@ class KeyMergeVisitor(RecipeVisitor):
                         key_relation,
                         self.merge_methods_caches.get(node),
                         context.instance,
+                        self.output_key in context.reused_output_keys,
                     )
                 finally:
                     if self.parent_id is None:
