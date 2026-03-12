@@ -24,7 +24,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
         A new recipe node describing the entire conversion.
 
     Raises:
-        ValueError:
+        TypeError:
             If no conversion path is found.
     """
     if config is None:
