@@ -187,6 +187,10 @@ class StateDictKeyError(KeyError):
     """
 
 
+class NonFiniteStateDictKeyError(StateDictKeyError):
+    pass
+
+
 @dataclasses.dataclass
 class OutSafetensorsDictThreadState:
     buffer: bytearray

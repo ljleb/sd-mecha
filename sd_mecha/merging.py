@@ -9,6 +9,8 @@ import sys
 import threading
 import typing
 import torch
+
+import sd_mecha
 from .extensions import model_dirs
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
 from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT
@@ -40,6 +42,8 @@ def merge(
     total_buffer_size: int = ...,
     strict_weight_space: bool = ...,
     check_finite: bool = ...,
+    check_finite_mandatory_inputs: bool = ...,
+    check_finite_optional_inputs: bool = ...,
     omit_extra_keys: bool = ...,
     omit_ema: bool = ...,
     check_mandatory_keys: bool = ...,
@@ -76,6 +80,10 @@ def merge(
             in other merge spaces (like "delta" or "param"). Defaults to True.
         check_finite (optional):
             If True, warns if any non-finite values appear in the output model. Defaults to True.
+        check_finite_mandatory_inputs (optional):
+            If True, automatically discards (raises StateDictKeyError) directly from model nodes for mandatory key containing non-finite values. Defaults to False.
+        check_finite_optional_inputs (optional):
+            If True, automatically discards (raises StateDictKeyError) directly from model nodes for optional key containing non-finite values. Defaults to True.
         omit_extra_keys (optional):
             If True, warns about and removes unrecognized keys from the output model. Defaults to True.
         omit_ema (optional):
@@ -107,6 +115,7 @@ def merge(
         merge_device = "cpu"
     if merge_dtype is ...:
         merge_dtype = torch.float32
+    cast_inputs = merge_device is not None and merge_dtype is not None
     if output_device is ...:
         output_device = "cpu"
     if output_dtype is ...:
@@ -119,6 +128,11 @@ def merge(
         strict_weight_space = True
     if check_finite is ...:
         check_finite = True
+    if check_finite_mandatory_inputs is ...:
+        check_finite_mandatory_inputs = False
+    if check_finite_optional_inputs is ...:
+        check_finite_optional_inputs = True
+    check_finite_inputs = check_finite_mandatory_inputs or check_finite_optional_inputs
     if omit_extra_keys is ...:
         omit_extra_keys = True
     if omit_ema is ...:
@@ -132,10 +146,13 @@ def merge(
     if cache is ...:
         cache = {}
 
+    if threads is not None and (not isinstance(threads, int) or threads < 0):
+        raise RuntimeError("threads should be a non-negative integer or None")
+
     recipe = value_to_node(recipe)
     original_recipe = recipe
-    if merge_device is not None or merge_dtype is not None:
-        cast_visitor = CastInputDicts(merge_device, merge_dtype)
+    if cast_inputs or check_finite_inputs:
+        cast_visitor = CastInputDicts(merge_device, merge_dtype, check_finite_mandatory_inputs, check_finite_optional_inputs)
         recipe = recipe.accept(cast_visitor)
         cache = {cast_visitor.converted_nodes.get(node, node): cache_dict for node, cache_dict in cache.items()}
 
@@ -145,16 +162,13 @@ def merge(
     if output_device is not None or output_dtype is not None:
         recipe = recipe.to(device=output_device, dtype=output_dtype)
 
-    if threads is not None and (threads < 0 or not isinstance(threads, int)):
-        raise RuntimeError("threads should be a non-negative integer or None")
-
     total_files_open = (
         recipe.accept(recipe_nodes.ModelsCountVisitor()) +
         int(isinstance(output, (str, pathlib.Path)))
     )
     buffer_size_per_file = total_buffer_size // max(1, total_files_open)
     if threads is None:
-        threads = min(max(total_files_open, 2), os.cpu_count() or 0, 8)
+        threads = min(max(total_files_open, 2), os.cpu_count() or 0, 4)
 
     if threads == 0:
         thread_local_data = SimpleNamespace()
@@ -387,8 +401,11 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
                     logging.warning(f"there are non finite values in key '{key}': {key_metadata}")
 
             output[key] = res
-        except StateDictKeyError as k:
-            logging.debug(f"skipping key {k}")
+        except StateDictKeyError as e:
+            if key_metadata.optional:
+                logging.debug(f"skipping key {e}")
+            else:
+                raise RuntimeError(f"could not merge mandatory key: {e}") from e
     return track_output
 
 
@@ -688,7 +705,12 @@ def cast_node_value(value, expected_type):
 class CastInputDicts(RecipeVisitor):
     device: str | torch.device
     dtype: torch.dtype
+    check_finite_mandatory: bool
+    check_finite_optional: bool
     converted_nodes: Dict[RecipeNode, RecipeNode] = dataclasses.field(default_factory=dict)
+
+    def __post_init__(self):
+        self.check_finite = self.check_finite_mandatory or self.check_finite_optional
 
     def visit_literal(self, node: LiteralRecipeNode):
         if node in self.converted_nodes:
@@ -699,22 +721,29 @@ class CastInputDicts(RecipeVisitor):
             if isinstance(v, RecipeNode):
                 converted_dict[k] = v.accept(self)
             elif isinstance(v, (int, float, bool)):
-                converted_dict[k] = torch.tensor(v, device=self.device, dtype=self.dtype)
+                v = torch.tensor(v, device=self.device, dtype=self.dtype)
+                converted_dict[k] = v
             elif isinstance(v, torch.Tensor):
-                converted_dict[k] = v.to(device=self.device, dtype=self.dtype)
+                v = v.to(device=self.device, dtype=self.dtype)
+                converted_dict[k] = v
             elif isinstance(v, str):
                 converted_dict[k] = v
             else:
                 raise RuntimeError(f"Cannot cast type {type(v)} to device={self.device}, dtype={self.dtype}")
 
         res = LiteralRecipeNode(converted_dict, node.model_config, node.merge_space)
+        if self.check_finite:
+            res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
         self.converted_nodes[node] = res
         return res
 
     def visit_model(self, node: ModelRecipeNode):
         if node in self.converted_nodes:
             return self.converted_nodes[node]
+
         res = node.to(device=self.device, dtype=self.dtype)
+        if self.check_finite:
+            res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
         self.converted_nodes[node] = res
         return res
 
@@ -731,5 +760,7 @@ class CastInputDicts(RecipeVisitor):
             node.model_config,
             node.merge_space,
         )
+        # if self.check_finite and node.merge_method == sd_mecha.extensions.merge_methods.resolve("convert_singleton"):
+        #     res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
         self.converted_nodes[node] = res
         return res

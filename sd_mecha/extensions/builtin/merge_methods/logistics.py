@@ -2,7 +2,7 @@ import torch
 from torch import Tensor
 from typing import TypeVar
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from sd_mecha.streaming import StateDictKeyError
+from sd_mecha.streaming import StateDictKeyError, NonFiniteStateDictKeyError
 
 
 T = TypeVar("T")
@@ -113,3 +113,20 @@ def stack(
     *values: Parameter(Tensor),
 ) -> Return(Tensor):
     return torch.stack(values)
+
+
+@merge_method
+def omit_non_finite(
+    a: Parameter(StateDict[Tensor]),
+    omit_mandatory: Parameter(bool) = False,
+    omit_optional: Parameter(bool) = True,
+    **kwargs,
+) -> Return(Tensor):
+    key = kwargs["key"]
+    v = a[key]
+    optional = a.model_config.keys()[key].optional
+    check_finite = omit_mandatory and not optional or omit_optional and optional
+    if check_finite and not v.isfinite().all():
+        raise NonFiniteStateDictKeyError(key)
+    else:
+        return v

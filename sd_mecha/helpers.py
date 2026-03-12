@@ -3,7 +3,7 @@ import pathlib
 import torch
 from .streaming import StateDictKeyError
 from .extensions.merge_spaces import MergeSpace
-from .extensions.model_configs import ModelConfig
+from .extensions.model_configs import ModelConfig, resolve as resolve_model_config
 from .extensions import merge_methods
 from .merging import merge
 from .conversion import convert
@@ -67,10 +67,13 @@ def literal(
     Returns:
         RecipeNode: A recipe node representing the literal value.
     """
+    if isinstance(config, str):
+        config = resolve_model_config(config)
+
     initial_config = config
     if not isinstance(value, dict):
         value = {"key": value}
-        initial_config = "singleton-mecha"
+        initial_config = resolve_model_config("singleton-mecha")
 
     res = LiteralRecipeNode(value, model_config=initial_config, merge_space=merge_space)
     if config != initial_config:

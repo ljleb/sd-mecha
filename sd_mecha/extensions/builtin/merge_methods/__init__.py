@@ -24,6 +24,7 @@ from .logistics import (
     cast_dtype_map,
     cast_dtype_map_reversed,
     stack,
+    omit_non_finite,
 )
 from .slicing import top_k_tensor_sum
 from .svd import truncate_rank

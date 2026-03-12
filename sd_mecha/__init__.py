@@ -39,6 +39,7 @@ from sd_mecha.extensions.builtin.merge_methods import (
     cast_dtype_map,
     cast_dtype_map_reversed,
     stack,
+    omit_non_finite,
     rebasin,
     randperm,
     balance_attention,

@@ -16,6 +16,7 @@ from sd_mecha.recipe_nodes import (
 )
 from sd_mecha.streaming import SafetensorsMapping, TensorMetadata
 
+
 T = TypeVar("T")
 
 
@@ -142,21 +143,38 @@ class RecipeGraph:
         if ModelConfigComponentType in candidates and not self.is_root_only:
             t = ModelConfigComponentType
 
-            node_to_index = {finalizer.to_new_node[node]: indices.ids[t] for node, indices in self.node_to_indices.items()}
+            finalized_node_to_indices: Dict[RecipeNode, Set[ComponentIndex]] = defaultdict(set)
+            for old_node, indices in self.node_to_indices.items():
+                finalized_node = finalizer.to_new_node[old_node]
+                finalized_node_to_indices[finalized_node].add(indices.ids[t])
+
             component_keys = {
                 idx: candidates[t][idx].stats[solutions[t][idx].identifier].intersection.copy()
-                for idx in set(node_to_index.values())
+                for idxs in finalized_node_to_indices.values()
+                for idx in idxs
             }
+
             component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {
-                idx: (candidates[t][idx].common_keys if solutions[t][idx].identifier == "structural" else solutions[t][idx].keys())
-                for idx in set(node_to_index.values())
+                idx: (
+                    candidates[t][idx].common_keys
+                    if solutions[t][idx].identifier == "structural"
+                    else solutions[t][idx].keys()
+                )
+                for idxs in finalized_node_to_indices.values()
+                for idx in idxs
             }
-            keys_visitor = PropagatableKeyVisitor(node_to_index, component_keys, component_metadata)
+
+            node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
+            node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
+
+            for node, idxs in finalized_node_to_indices.items():
+                idxs = set(idxs)
+                node_to_key_domain[node] = _intersect_key_sets(component_keys[idx] for idx in idxs)
+                node_to_metadata_domain[node] = _merge_component_metadata(component_metadata[idx] for idx in idxs)
+
+            keys_visitor = PropagatableKeyVisitor(node_to_key_domain, node_to_metadata_domain)
             keys_visitor.visit_all_keys(finalized_root)
-            node_to_keys = {
-                node: keys_visitor.filtered_component_keys[node_to_index[node]]
-                for node in node_to_index.keys()
-            }
+            node_to_keys = dict(keys_visitor.filtered_node_keys)
 
         return FinalizeReturn(finalized_root, node_to_keys, to_finalized_node)
 
@@ -906,33 +924,6 @@ class DiscoverComponentsVisitor(RecipeVisitor):
         return indices
 
 
-def _components_to_solve(
-    node_to_indices: Dict[RecipeNode, ComponentIndices],
-    processed_nodes: Set[RecipeNode],
-    component_type: type[ComponentType],
-) -> Set[ComponentIndex]:
-    components: Set[ComponentIndex] = set()
-    for n in processed_nodes:
-        idxs = node_to_indices.get(n)
-        if idxs is None:
-            continue
-        components.add(idxs.ids[component_type])
-    return components
-
-
-def _nodes_in_components(
-    node_to_indices: Dict[RecipeNode, ComponentIndices],
-    component_type: type[ComponentType],
-    ids_to_solve: Set[ComponentIndex],
-) -> Dict[ComponentIndex, Set[RecipeNode]]:
-    component_nodes: Dict[ComponentIndex, Set[RecipeNode]] = {}
-    for n, idxs in node_to_indices.items():
-        idx = idxs.ids[component_type]
-        if idx in ids_to_solve:
-            component_nodes.setdefault(idx, set()).add(n)
-    return component_nodes
-
-
 @dataclasses.dataclass
 class ConfigMatchStats:
     intersection: Set[str] = dataclasses.field(default_factory=set)
@@ -1109,20 +1100,54 @@ def check_model_config(
             )
 
 
+def _intersect_key_sets(key_sets: Iterable[Set[str]]) -> Set[str]:
+    key_sets = list(key_sets)
+    if not key_sets:
+        return set()
+
+    out = set(key_sets[0])
+    for ks in key_sets[1:]:
+        out.intersection_update(ks)
+    return out
+
+
+def _merge_component_metadata(
+    metadata_dicts: Iterable[Optional[Dict[str, TensorMetadata | KeyMetadata]]]
+) -> Optional[Dict[str, TensorMetadata | KeyMetadata]]:
+    metadata_dicts = [d for d in metadata_dicts if d is not None]
+    if not metadata_dicts:
+        return None
+
+    common_keys = set(metadata_dicts[0].keys())
+    for d in metadata_dicts[1:]:
+        common_keys.intersection_update(d.keys())
+
+    out: Dict[str, TensorMetadata | KeyMetadata] = {}
+    for k in common_keys:
+        best = metadata_dicts[0][k]
+        for d in metadata_dicts[1:]:
+            cand = d[k]
+            # Keep the less informative / more conservative metadata.
+            # This matches the spirit of ModelConfigCandidates._update_common_keys().
+            best = best if _meta_score(best) >= _meta_score(cand) else cand
+        out[k] = best
+
+    return out
+
+
 @dataclasses.dataclass
 class PropagatableKeyVisitor(RecipeVisitor):
-    node_to_indices: Dict[RecipeNode, ComponentIndex]
-    component_keys: Dict[ComponentIndex, Set[str]]
-    component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]]
-    filtered_component_keys: Dict[ComponentIndex, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
+    node_to_key_domain: Dict[RecipeNode, Set[str]]
+    node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, TensorMetadata | KeyMetadata]]]
+    filtered_node_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
 
     def visit_all_keys(self, root: RecipeNode):
-        root_id = self.node_to_indices[root]
-        for root_output_key in self.component_keys[root_id]:
-            key_visitor = dataclasses.replace(self, filtered_component_keys=defaultdict(set))
+        root_keys = self.node_to_key_domain[root]
+        for root_output_key in root_keys:
+            key_visitor = dataclasses.replace(self, filtered_node_keys=defaultdict(set))
             if root.accept(key_visitor, root_output_key):
-                for idx, keys in key_visitor.filtered_component_keys.items():
-                    self.filtered_component_keys[idx].update(keys)
+                for node, keys in key_visitor.filtered_node_keys.items():
+                    self.filtered_node_keys[node].update(keys)
 
     def visit_literal(self, node: LiteralRecipeNode, output_key: str) -> bool:
         if output_key in self._possible_keys(node) and output_key in node.value_dict:
@@ -1160,17 +1185,17 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
         return can_merge or self._key_optional(node, output_key)
 
-    def _possible_keys(self, node):
-        return self.component_keys[self.node_to_indices[node]]
+    def _possible_keys(self, node: RecipeNode) -> Set[str]:
+        return self.node_to_key_domain[node]
 
-    def _key_optional(self, node, key) -> bool:
-        metadata = self.component_metadata[self.node_to_indices[node]]
+    def _key_optional(self, node: RecipeNode, key: str) -> bool:
+        metadata = self.node_to_metadata_domain[node]
         if metadata is not None and key in metadata:
             return getattr(metadata[key], "optional", True)
         return True
 
-    def _filtered_keys(self, node):
-        return self.filtered_component_keys[self.node_to_indices[node]]
+    def _filtered_keys(self, node: RecipeNode) -> Set[str]:
+        return self.filtered_node_keys[node]
 
 
 def _fmt_list(items, limit=12) -> str:
