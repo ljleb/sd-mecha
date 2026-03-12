@@ -20,8 +20,8 @@ StateDictKey = str
 
 @dataclasses.dataclass
 class KeyMetadata:
-    shape: Optional[List[int]] | torch.Size
-    dtype: Optional[str] | torch.dtype
+    shape: Optional[List[int]] | torch.Size = None
+    dtype: Optional[str] | torch.dtype = None
     aliases: Iterable[str] = dataclasses.field(default_factory=tuple, metadata={"exclude": lambda p: bool(p)})
     optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
 
@@ -69,9 +69,11 @@ class ModelComponent:
 
 @runtime_checkable
 class ModelConfig(Protocol):
-    def eq(self, other):
-        other_identifier = getattr(other, "identifier", None)
-        return self.identifier == other_identifier
+    def __eq__(self, other):
+        return isinstance(other, ModelConfig) and self.identifier == other.identifier
+
+    def __hash__(self):
+        return hash(self.identifier)
 
     def __repr__(self):
         return f"<model config '{self.identifier}'>"
@@ -105,6 +107,10 @@ class ModelConfig(Protocol):
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
         ...
 
+    @abc.abstractmethod
+    def resolve_alias(self, key: StateDictKey) -> StateDictKey:
+        ...
+
 
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
@@ -114,6 +120,7 @@ class ModelConfigImpl(ModelConfig):
     _keys_cache: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
     _metadata_cache: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
     _aliases_cache: Mapping[StateDictKey, Iterable[StateDictKey]] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _resolve_alias_cache: Mapping[StateDictKey, StateDictKey] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
@@ -131,6 +138,12 @@ class ModelConfigImpl(ModelConfig):
             else:
                 components[k] = v
         self._components = components
+
+    def __eq__(self, other):
+        return isinstance(other, ModelConfig) and self.identifier == other.identifier
+
+    def __hash__(self):
+        return hash(self.identifier)
 
     @property
     def identifier(self) -> str:
@@ -166,11 +179,20 @@ class ModelConfigImpl(ModelConfig):
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
         if self._aliases_cache is None:
             self._aliases_cache = OrderedDict(
-                (k, v)
+                (key, aliases)
                 for component in self.components().values()
-                for k, v in component.aliases().items()
+                for key, aliases in component.aliases().items()
             )
         return self._aliases_cache
+
+    def resolve_alias(self, key: StateDictKey) -> StateDictKey:
+        if self._resolve_alias_cache is None:
+            self._resolve_alias_cache = {
+                alias: key
+                for key, aliases in self.aliases().items()
+                for alias in aliases
+            }
+        return self._resolve_alias_cache.get(key, key)
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):
@@ -227,6 +249,7 @@ class StructuralModelConfig(ModelConfig):
         self._keys_cache = {k: KeyMetadata(v.shape, v.dtype) for k, v in keys.items()}
         self._metadata_cache = None
         self._aliases_cache = None
+        self._resolve_alias_cache = None
 
     @property
     def identifier(self) -> str:
@@ -255,10 +278,22 @@ class StructuralModelConfig(ModelConfig):
             )
         return self._aliases_cache
 
+    def resolve_alias(self, key: StateDictKey) -> StateDictKey:
+        if self._resolve_alias_cache is None:
+            self._resolve_alias_cache = {
+                alias: key
+                for key, aliases in self.aliases().items()
+                for alias in aliases
+            }
+        return self._resolve_alias_cache.get(key, key)
+
 
 class InferModelConfig(ModelConfig):
-    def eq(self, other):
+    def __eq__(self, other):
         raise RuntimeError("the config has not yet been inferred")
+
+    def __hash__(self):
+        return hash(self.identifier)
 
     @property
     def identifier(self) -> str:
@@ -280,6 +315,9 @@ class InferModelConfig(ModelConfig):
         raise RuntimeError("the config has not yet been inferred")
 
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
+        raise RuntimeError("the config has not yet been inferred")
+
+    def resolve_alias(self, key: StateDictKey) -> StateDictKey:
         raise RuntimeError("the config has not yet been inferred")
 
 
@@ -398,7 +436,7 @@ def resolve(identifier: str) -> ModelConfig:
     postfix = ""
     if suggestions is not None:
         postfix = f". Nearest match is '{suggestions[0]}'"
-    raise ValueError(f"unknown model implementation: {identifier}{postfix}")
+    raise KeyError(f"unknown model implementation: {identifier}{postfix}")
 
 
 def get_all() -> List[ModelConfig]:

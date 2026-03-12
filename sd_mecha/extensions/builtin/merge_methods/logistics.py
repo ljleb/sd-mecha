@@ -2,13 +2,13 @@ import torch
 from torch import Tensor
 from typing import TypeVar
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from sd_mecha.streaming import StateDictKeyError
+from sd_mecha.streaming import StateDictKeyError, NonFiniteStateDictKeyError
 
 
 T = TypeVar("T")
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def fallback(
     a: Parameter(StateDict[T]),
     default: Parameter(StateDict[T]),
@@ -21,7 +21,7 @@ def fallback(
         return default[key]
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def cast(
     a: Parameter(Tensor),
     device: Parameter(str) = None,
@@ -47,32 +47,30 @@ cast_dtype_map = {
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
     "int16": torch.int16,
-    "float8_e4m3fn": torch.float8_e4m3fn,
-    "float8_e5m2": torch.float8_e5m2,
     "int8": torch.int8,
     "bool": torch.bool,
 }
-for dtype_str in ("uint8", "uint16", "uint32", "uint64"):
+for dtype_str in ("uint8", "uint16", "uint32", "uint64", "float8_e4m3fn", "float8_e4m3fnuz", "float8_e5m2", "float8_e5m2fnuz", "float8_e8m0fnu"):
     if hasattr(torch, dtype_str):
         cast_dtype_map[dtype_str] = getattr(torch, dtype_str)
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def get_dtype(
     a: Parameter(Tensor),
 ) -> Return(str, "param"):
     return cast_dtype_map_reversed[a.dtype]
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def get_device(
     a: Parameter(Tensor),
 ) -> Return(str, "param"):
     return str(a.device)
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def pick_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
@@ -91,7 +89,7 @@ def pick_component(
         raise StateDictKeyError(key)
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def omit_component(
     a: Parameter(StateDict[T]),
     component: Parameter(str, "param"),
@@ -110,8 +108,25 @@ def omit_component(
         return a[key]
 
 
-@merge_method
+@merge_method(reuse_outputs=False)
 def stack(
     *values: Parameter(Tensor),
 ) -> Return(Tensor):
     return torch.stack(values)
+
+
+@merge_method(reuse_outputs=False)
+def omit_non_finite(
+    a: Parameter(StateDict[Tensor]),
+    omit_mandatory: Parameter(bool) = False,
+    omit_optional: Parameter(bool) = True,
+    **kwargs,
+) -> Return(Tensor):
+    key = kwargs["key"]
+    v = a[key]
+    optional = a.model_config.keys()[key].optional
+    check_finite = omit_mandatory and not optional or omit_optional and optional
+    if check_finite and not v.isfinite().all():
+        raise NonFiniteStateDictKeyError(key)
+    else:
+        return v

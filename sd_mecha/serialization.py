@@ -1,8 +1,12 @@
 import logging
 import pathlib
 from typing import List, Optional, Hashable
+
 from .extensions import merge_methods
-from .recipe_nodes import RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode, MergeRecipeNode
+from .recipe_nodes import (
+    ClosedModelRecipeNode, RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode,
+    MergeRecipeNode,
+)
 
 
 MECHA_FORMAT_VERSION = "0.1.0"
@@ -56,7 +60,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
             results.append(LiteralRecipeNode(*positional_args, **keyword_args))
         elif command == "model":
             path = pathlib.Path(positional_args[0])
-            results.append(ModelRecipeNode(path, *positional_args[1:], **keyword_args))
+            results.append(ClosedModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
             method, *positional_args = positional_args
             method = merge_methods.resolve(method)
@@ -151,8 +155,10 @@ def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None
     Returns:
         A string representation of the recipe, suitable for writing to a .mecha file.
     """
+    from . import open_graph
     serializer = SerializerVisitor()
-    recipe.accept(serializer)
+    with open_graph(recipe) as graph:
+        graph.finalize().root.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
     serialized = "\n".join([version_header] + serializer.instructions)
 
@@ -175,19 +181,19 @@ class SerializerVisitor(RecipeVisitor):
         self.instructions = instructions if instructions is not None else []
 
     def visit_literal(self, node: LiteralRecipeNode):
-        value = self.__serialize_value(node.value)
+        value = self.__serialize_value(node.value_dict)
         if node.model_config is None:
             return value
         else:
-            config = self.__serialize_value(node.model_config.identifier)
-            merge_space = self.__serialize_value(node.merge_space.identifier)
+            config = self.__serialize_value(getattr(node.model_config, "identifier", None))
+            merge_space = self.__serialize_value(getattr(node.merge_space, "identifier", None))
             line = f"literal {value} model_config={config} merge_space={merge_space}"
             return self.__add_instruction(line)
 
     def visit_model(self, node: ModelRecipeNode) -> str:
         path = self.__serialize_value(str(node.path))
         config = self.__serialize_value(getattr(node.model_config, "identifier", None))
-        merge_space = self.__serialize_value(node.merge_space.identifier)
+        merge_space = self.__serialize_value(getattr(node.merge_space, "identifier", None))
         line = f"model {path} model_config={config} merge_space={merge_space}"
         return self.__add_instruction(line)
 
@@ -195,10 +201,10 @@ class SerializerVisitor(RecipeVisitor):
         identifier = self.__serialize_value(node.merge_method.get_identifier())
         parts = ["merge", identifier] + [
             self.__serialize_value(v)
-            for v in node.args
+            for v in node.bound_args.args
         ] + [
             f"{k}={self.__serialize_value(v)}"
-            for k, v in node.kwargs.items()
+            for k, v in node.bound_args.kwargs.items()
         ]
         line = " ".join(parts)
         return self.__add_instruction(line)

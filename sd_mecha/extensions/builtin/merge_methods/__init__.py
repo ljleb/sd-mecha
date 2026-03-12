@@ -1,4 +1,4 @@
-from .clamp import clamp
+from .limiting import clamp
 from .cosine import add_cosine_a, add_cosine_b
 from .crossover import crossover
 from .ema import exchange_ema
@@ -6,7 +6,6 @@ from .linear import (
     weighted_sum,
     n_average,
     slerp,
-    add_difference,
     subtract,
     perpendicular_component,
     train_difference_mask,
@@ -25,14 +24,28 @@ from .logistics import (
     cast_dtype_map,
     cast_dtype_map_reversed,
     stack,
+    omit_non_finite,
 )
-from .slicing import tensor_sum, top_k_tensor_sum
-from .svd import rotate, truncate_rank
-from .ties_sum import (
+from .slicing import top_k_tensor_sum
+from .svd import truncate_rank
+from .ties import (
     ties_sum_with_dropout,
     ties_sum,
     ties_sum_extended,
     model_stock,
     geometric_median,
-    dropout,
 )
+from .wrappers import (
+    add_difference,
+    add_perpendicular,
+    add_difference_ties,
+    add_difference_ties_extended,
+    copy_region,
+    tensor_sum,
+    rotate,
+    dropout,
+    add_ties_with_dare,
+    n_model_stock,
+)
+from .rebasin import rebasin, randperm
+from .balance_attention import balance_attention
