@@ -50,6 +50,7 @@ def merge(
     tqdm: type = ...,
     validate_mm_contract: bool = ...,
     cache: Dict[RecipeNode, dict] = ...,
+    memoize: bool = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
@@ -103,6 +104,8 @@ def merge(
             Dictionary of caches for each recipe node in `recipe`. Each dict should be empty on the first call.
             If set, the dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls to merge().
             This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
+        memoize (optional):
+            If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations. Defaults to True.
 
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
@@ -145,6 +148,8 @@ def merge(
         validate_mm_contract = True
     if cache is ...:
         cache = {}
+    if memoize is ...:
+        memoize = True
 
     if threads is not None and (not isinstance(threads, int) or threads < 0):
         raise RuntimeError("threads should be a non-negative integer or None")
@@ -204,7 +209,7 @@ def merge(
                     del graph_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(recipe, node_to_keys)
+        merge_methods_context = create_merge_method_context(recipe, node_to_keys, memoize=memoize)
 
         with (
             executor,
@@ -236,7 +241,7 @@ def merge(
                 if num_leaked:
                     logging.warning(f"memory leaked during the merge: {node}, number of entries: {num_leaked}")
 
-            if isinstance(output_dict, MutableMapping):
+            if output is None:
                 return output_dict
 
 
@@ -717,22 +722,21 @@ class CastInputDicts(RecipeVisitor):
             return self.converted_nodes[node]
 
         converted_dict = {}
+        can_check_finite = False
         for k, v in node.value_dict.items():
             if isinstance(v, RecipeNode):
-                converted_dict[k] = v.accept(self)
-            elif isinstance(v, (int, float, bool)):
-                v = torch.tensor(v, device=self.device, dtype=self.dtype)
-                converted_dict[k] = v
+                v = v.accept(self)
+            elif isinstance(v, (int, float, bool, str)):
+                v = v
             elif isinstance(v, torch.Tensor):
                 v = v.to(device=self.device, dtype=self.dtype)
-                converted_dict[k] = v
-            elif isinstance(v, str):
-                converted_dict[k] = v
+                can_check_finite = True
             else:
                 raise RuntimeError(f"Cannot cast type {type(v)} to device={self.device}, dtype={self.dtype}")
+            converted_dict[k] = v
 
         res = LiteralRecipeNode(converted_dict, node.model_config, node.merge_space)
-        if self.check_finite:
+        if can_check_finite and self.check_finite:
             res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
         self.converted_nodes[node] = res
         return res

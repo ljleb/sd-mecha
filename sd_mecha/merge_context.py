@@ -6,10 +6,14 @@ from sd_mecha.recipe_nodes import LiteralRecipeNode, MergeRecipeNode, ModelRecip
 from typing import Any, Dict, Mapping, Optional, Set, Tuple
 
 
-def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeNode, Set[str]]) -> Dict[RecipeNode, "MergeMethodContext"]:
-    ports_visitor = GetOutputPortsVisitor(active_keys)
-    ports_visitor.visit_root(recipe)
-    create_context_visitor = CreateMergeMethodContextVisitor(ports_visitor.parent_ports)
+def create_merge_method_context(recipe: RecipeNode, active_keys: Mapping[RecipeNode, Set[str]], memoize: bool) -> Dict[RecipeNode, "MergeMethodContext"]:
+    if memoize:
+        ports_visitor = GetOutputPortsVisitor(active_keys)
+        ports_visitor.visit_root(recipe)
+        parent_ports = ports_visitor.parent_ports
+    else:
+        parent_ports = {node: {} for node in recipe}
+    create_context_visitor = CreateMergeMethodContextVisitor(parent_ports)
     res = recipe.accept(create_context_visitor)
     return res
 
