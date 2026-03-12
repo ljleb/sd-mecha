@@ -43,7 +43,7 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
             res = create_conversion_recipe(recipe, converter_paths, src_config.identifier, tgt_config)
             if res is not None:
                 return res
-        raise ValueError(f"Could not convert recipe to config {tgt_config}.")
+        raise TypeError(f"Could not convert recipe to config {tgt_config}.")
 
 
 def create_conversion_recipe(recipe, paths, src_config, tgt_config):
