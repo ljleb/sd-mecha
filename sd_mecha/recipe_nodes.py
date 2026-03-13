@@ -9,7 +9,7 @@ import torch
 from .extensions import model_configs, merge_methods, merge_spaces, model_dirs
 from .extensions.merge_spaces import MergeSpace
 from typing import Any, Callable, cast, List, Optional, Dict, Set, Tuple, Union
-from .keys_map import KeyMap
+from .keys_map import KeyMap, KeyRelation
 from .streaming import SafetensorsMapping
 from .typing_ import is_instance
 
@@ -265,14 +265,14 @@ class MergeRecipeNode(RecipeNode):
     def accept(self, visitor, *args, **kwargs):
         return visitor.visit_merge(self, *args, **kwargs)
 
-    def key_map(self) -> KeyMap:
+    def key_map(self) -> KeyMap[KeyRelation]:
         if self.model_config is None:
             raise RuntimeError("Cannot call key_map() on a non-finalized merge node.")
 
         if self.__key_map is None:
             args_configs = [v.model_config for v in self.bound_args.args]
             kwargs_configs = {k: v.model_config for k, v in self.bound_args.kwargs.items()}
-            self.__key_map = self.merge_method.key_map(args_configs, kwargs_configs, self.model_config)
+            self.__key_map = self.merge_method.build_key_map(args_configs, kwargs_configs, self.model_config)
         return self.__key_map
 
     def __eq__(self, other):

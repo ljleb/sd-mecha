@@ -9,16 +9,23 @@ T = TypeVar("T")
 
 
 @merge_method(reuse_outputs=False)
-def fallback(
-    a: Parameter(StateDict[T]),
-    default: Parameter(StateDict[T]),
-    **kwargs,
-) -> Return(T):
-    key = kwargs["key"]
-    try:
-        return a[key]
-    except StateDictKeyError:
-        return default[key]
+class fallback:
+    @staticmethod
+    def key_map(b):
+        for key in b.keys():
+            b[key] = b.a.keys[key] | b.default.keys[key]
+
+    def __call__(
+        self,
+        a: Parameter(StateDict[T]),
+        default: Parameter(StateDict[T]),
+        **kwargs,
+    ) -> Return(T):
+        (key,), inputs = kwargs["key_relation"]
+        if "a" in inputs:
+            return a[key]
+        else:  # "default" in inputs
+            return default[key]
 
 
 @merge_method(reuse_outputs=False)

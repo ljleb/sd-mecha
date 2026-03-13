@@ -41,7 +41,7 @@ class convert_sdxl_diffusers_unet_to_original:
     is_conversion=True,
     reuse_outputs=False,
 )
-class convert_sdxl_diffusers_unet_to_original:
+class convert_sdxl_original_to_diffusers_unet:
     @staticmethod
     def map_keys(b):
         for sgm_key in sdxl_sgm_config.keys():

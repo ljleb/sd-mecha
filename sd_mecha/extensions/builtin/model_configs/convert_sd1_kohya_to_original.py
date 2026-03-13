@@ -54,7 +54,7 @@ class convert_sd1_kohya_to_original:
     is_conversion=True,
     reuse_outputs=False,
 )
-class convert_sd1_kohya_to_original:
+class convert_original_to_sd1_kohya:
     @staticmethod
     def map_keys(b):
         for output_key in sd1_ldm.keys():

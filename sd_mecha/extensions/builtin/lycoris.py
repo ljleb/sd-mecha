@@ -58,26 +58,32 @@ def define_conversions(lyco_config, lyco_interfaces):
         @staticmethod
         def map_keys(b: KeyMapBuilder):
             for base_key in base_config.keys():
-                input_keys = tuple(lyco_config.to_lycoris_keys(base_key))
-                if not input_keys:
+                input_keys = None
+                for algo in lycoris_algorithms:
+                    algo_keys = tuple(lyco_config.to_lycoris_keys(base_key, algos=(algo,)))
+                    if algo_keys:
+                        input_keys = input_keys | b.keys[algo_keys] @ lycoris_compose_fns[algo]
+
+                if input_keys is None:
                     continue
-                b[base_key] = b.keys[input_keys]
+
+                b[base_key] = input_keys
 
         def __call__(
             self,
             lora: Parameter(StateDict[torch.Tensor], "weight", lyco_config_id),
             **kwargs,
         ) -> Return(torch.Tensor, "delta", base_config_id):
-            (base_key,), input_keys = kwargs["key_relation"]
+            (base_key,), input_keys = key_relation = kwargs["key_relation"]
             target_shape = base_config.keys()[base_key].shape
+            compose_fn = key_relation.meta
 
             key_prefix = input_keys["lora"][0].split(".")[0]
             sd_helper = StateDictKeyHelper(lora, key_prefix)
-            for compose_fn in (compose_lora, compose_lokr):
-                try:
-                    return compose_fn(sd_helper, target_shape)
-                except StateDictKeyError:
-                    pass
+            try:
+                return compose_fn(sd_helper, target_shape)
+            except StateDictKeyError:
+                pass
 
             raise StateDictKeyError(base_key)
 
@@ -307,6 +313,10 @@ def _to_lycoris_keys(
 lycoris_algorithms = {
     "lora": ("lora_up.weight", "lora_mid.weight", "lora_down.weight", "alpha"),
     "lokr": ("lokr_w1", "lokr_w1_a", "lokr_w1_b", "lokr_w2", "lokr_w2_a", "lokr_w2_b", "lokr_t2", "alpha"),
+}
+lycoris_compose_fns = {
+    "lora": compose_lora,
+    "lokr": compose_lokr,
 }
 
 

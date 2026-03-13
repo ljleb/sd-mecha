@@ -84,7 +84,7 @@ class convert_sdxl_kohya_but_diffusers_to_original:
     is_conversion=True,
     reuse_outputs=False,
 )
-class convert_sdxl_kohya_to_original:
+class convert_sdxl_original_to_kohya:
     @staticmethod
     def map_keys(b):
         for output_key in sdxl_sgm_config.keys():
@@ -119,7 +119,7 @@ class convert_sdxl_kohya_to_original:
     is_conversion=True,
     reuse_outputs=False,
 )
-class convert_sdxl_kohya_but_diffusers_to_original:
+class convert_sdxl_original_to_kohya_but_diffusers:
     @staticmethod
     def map_keys(b):
         needs_transpose = False

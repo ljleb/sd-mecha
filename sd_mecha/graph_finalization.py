@@ -10,6 +10,7 @@ from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_f
 from sd_mecha.extensions.merge_methods import value_to_node
 from sd_mecha.extensions.merge_spaces import MergeSpace, MergeSpaceSymbol
 from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfig, StructuralModelConfig
+from sd_mecha.keys_map import ActiveKeyMap, KeyMap, RealizedKeyRelation
 from sd_mecha.recipe_nodes import (
     ClosedModelRecipeNode, LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode,
     OpenModelRecipeNode, RecipeNode, RecipeNodeOrValue, RecipeVisitor, TracingRecipeVisitor,
@@ -140,7 +141,9 @@ class RecipeGraph:
 
         to_finalized_node = {original: finalizer.node_map[opened] for original, opened in self.node_map.items()}
 
-        node_to_keys = {}
+        node_to_keys: Dict[RecipeNode, Set[str]] = {}
+        realized_key_maps: Dict[MergeRecipeNode, ActiveKeyMap[RealizedKeyRelation]] = {}
+
         if ModelConfigComponentType in candidates and not self.is_root_only:
             t = ModelConfigComponentType
 
@@ -165,7 +168,11 @@ class RecipeGraph:
                         component_metadata[idx] = solved.keys()
                         stats = cand.stats or {}
                         match = stats.get(solved.identifier)
-                        component_keys[idx] = match.intersection.copy() if match is not None else set(solved.keys().keys())
+                        component_keys[idx] = (
+                            match.intersection.copy()
+                            if match is not None
+                            else set(solved.keys().keys())
+                        )
 
             node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
             node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]] = {}
@@ -177,9 +184,29 @@ class RecipeGraph:
 
             keys_visitor = PropagatableKeyVisitor(node_to_key_domain, node_to_metadata_domain)
             keys_visitor.visit_all_keys(finalized_root)
-            node_to_keys = dict(keys_visitor.filtered_node_keys)
 
-        return FinalizeReturn(finalized_root, node_to_keys, to_finalized_node)
+            node_to_keys = {
+                node: set(keys)
+                for node, keys in keys_visitor.filtered_node_keys.items()
+            }
+            realized_key_maps = dict(keys_visitor.realized_key_maps)
+
+        return FinalizeReturn(finalized_root, node_to_keys, realized_key_maps, to_finalized_node)
+
+    @staticmethod
+    def _dedupe_relations(relations: Iterable[RealizedKeyRelation]) -> List[RealizedKeyRelation]:
+        seen = set()
+        out = []
+        for rel in relations:
+            key = (
+                rel.outputs,
+                tuple((p, tuple(ks)) for p, ks in rel.inputs.items()),
+                id(rel.meta) if callable(rel.meta) else repr(rel.meta),
+            )
+            if key not in seen:
+                seen.add(key)
+                out.append(rel)
+        return out
 
     def root_candidates(
         self,
@@ -239,6 +266,7 @@ class RecipeGraph:
 class FinalizeReturn:
     root: RecipeNode
     node_to_keys: Mapping[RecipeNode, Set[str]]
+    realized_key_maps: Mapping[RecipeNode, ActiveKeyMap[RealizedKeyRelation]]
     to_finalized_node: Mapping[RecipeNode, RecipeNode]
 
 
@@ -1126,61 +1154,185 @@ def _merge_component_metadata(
     return out
 
 
+import dataclasses
+from collections import defaultdict
+from typing import Dict, Optional, Set, Tuple
+
+
 @dataclasses.dataclass
 class PropagatableKeyVisitor(RecipeVisitor):
     node_to_key_domain: Dict[RecipeNode, Set[str]]
     node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]]
+
     filtered_node_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
+    realized_key_maps: Dict[MergeRecipeNode, ActiveKeyMap[RealizedKeyRelation]] = dataclasses.field(default_factory=dict)
+
+    # Exact-key memo for literal/model nodes only
+    _key_memo: Dict[Tuple[RecipeNode, str], bool] = dataclasses.field(default_factory=dict)
+
+    # Partition memo for merge nodes
+    _partition_memo: Dict[
+        Tuple[MergeRecipeNode, Tuple[str, ...]],
+        Optional[RealizedKeyRelation],
+    ] = dataclasses.field(default_factory=dict)
+
+    # Exact active output-key -> realized relation
+    _active_relations_by_key: Dict[
+        MergeRecipeNode,
+        Dict[str, RealizedKeyRelation],
+    ] = dataclasses.field(default_factory=lambda: defaultdict(dict))
+
+    _root: Optional[RecipeNode] = None
+    _MISSING = object()
 
     def visit_all_keys(self, root: RecipeNode):
-        root_keys = self._possible_keys(root)
-        for root_output_key in root_keys:
-            key_visitor = dataclasses.replace(self, filtered_node_keys=defaultdict(set))
-            if root.accept(key_visitor, root_output_key):
-                for node, keys in key_visitor.filtered_node_keys.items():
-                    self._filtered_keys(node).update(keys)
+        self._root = root
+
+        if isinstance(root, MergeRecipeNode):
+            for outputs in self._root_output_groups(root):
+                probe_key = outputs[0]
+                if not root.accept(self, probe_key):
+                    continue
+
+                relation = self._partition_memo[(root, outputs)]
+                assert relation is not None
+
+                # Root is special: if a root partition is realizable,
+                # all outputs in that root partition belong to the final model.
+                for k in outputs:
+                    self.filtered_node_keys[root].add(k)
+                    self._active_relations_by_key[root][k] = relation
+        else:
+            for k in self._possible_keys(root):
+                root.accept(self, k)
+
+        self.realized_key_maps = {
+            node: ActiveKeyMap(by_key)
+            for node, by_key in self._active_relations_by_key.items()
+        }
 
     def visit_literal(self, node: LiteralRecipeNode, output_key: str) -> bool:
+        cached = self._key_memo.get((node, output_key), self._MISSING)
+        if cached is not self._MISSING:
+            if cached:
+                self.filtered_node_keys[node].add(output_key)
+            return cached
+
+        ok = False
         if output_key in self._possible_keys(node) and output_key in node.value_dict:
-            self._filtered_keys(node).add(output_key)
             child = node.value_dict[output_key]
             if isinstance(child, RecipeNode):
-                return child.accept(self, output_key)
-            return True
+                ok = child.accept(self, output_key)
+            else:
+                ok = True
 
-        return False
+        if ok:
+            self.filtered_node_keys[node].add(output_key)
+
+        self._key_memo[(node, output_key)] = ok
+        return ok
 
     def visit_model(self, node: ModelRecipeNode, output_key: str) -> bool:
-        if output_key in self._possible_keys(node) and output_key in node.state_dict:
-            self._filtered_keys(node).add(output_key)
-            return True
+        cached = self._key_memo.get((node, output_key), self._MISSING)
+        if cached is not self._MISSING:
+            if cached:
+                self.filtered_node_keys[node].add(output_key)
+            return cached
 
-        return False
+        ok = (
+            output_key in self._possible_keys(node)
+            and output_key in node.state_dict
+        )
+
+        if ok:
+            self.filtered_node_keys[node].add(output_key)
+
+        self._key_memo[(node, output_key)] = ok
+        return ok
 
     def visit_merge(self, node: MergeRecipeNode, output_key: str) -> bool:
-        can_merge = False
-        if output_key in self._possible_keys(node):
-            key_map = node.key_map()
-            if output_key not in key_map:
+        if output_key not in self._possible_keys(node):
+            return False
+
+        relation = node.key_map().get(output_key)
+        if relation is None:
+            return False
+
+        outputs = tuple(relation.outputs)
+        memo_key = (node, outputs)
+
+        cached = self._partition_memo.get(memo_key, self._MISSING)
+        if cached is not self._MISSING:
+            if cached is None:
                 return False
 
-            for child_name, children in node.all_args().items():
-                child_keys = key_map[output_key].inputs.get(child_name, ())
-                for child_key in child_keys:
-                    for child in children:
-                        child_can_merge = child.accept(self, child_key)
-                        can_merge = can_merge or child_can_merge
+            # Exact-key activation only
+            self.filtered_node_keys[node].add(output_key)
+            self._active_relations_by_key[node][output_key] = cached
+            return True
 
-        if can_merge:
-            self._filtered_keys(node).add(output_key)
+        all_args = node.all_args()
 
-        return can_merge
+        for clause in relation.clauses:
+            if self._clause_succeeds(all_args, clause.by_param):
+                realized = RealizedKeyRelation(
+                    outputs=relation.outputs,
+                    inputs=clause.by_param,
+                    meta=clause.meta,
+                )
+                self._partition_memo[memo_key] = realized
+
+                # Exact-key activation only
+                self.filtered_node_keys[node].add(output_key)
+                self._active_relations_by_key[node][output_key] = realized
+                return True
+
+        self._partition_memo[memo_key] = None
+        return False
+
+    def _clause_succeeds(self, all_args, by_param) -> bool:
+        for child_name, required_child_keys in by_param.items():
+            children = all_args.get(child_name)
+            if not children:
+                return False
+
+            for child_key in required_child_keys:
+                found = False
+                for child in children:
+                    if child.accept(self, child_key):
+                        found = True
+                        break
+                if not found:
+                    return False
+
+        return True
+
+    def _root_output_groups(self, node: MergeRecipeNode) -> list[Tuple[str, ...]]:
+        possible = self._possible_keys(node)
+        key_map = node.key_map()
+        seen = set()
+        out = []
+
+        for k in possible:
+            if k in seen:
+                continue
+            relation = key_map.get(k)
+            if relation is None:
+                seen.add(k)
+                out.append((k,))
+                continue
+            group = tuple(x for x in relation.outputs if x in possible)
+            if not group:
+                seen.add(k)
+                out.append((k,))
+                continue
+            seen.update(group)
+            out.append(group)
+
+        return out
 
     def _possible_keys(self, node: RecipeNode) -> Set[str]:
         return self.node_to_key_domain.get(node, set())
-
-    def _filtered_keys(self, node: RecipeNode) -> Set[str]:
-        return self.filtered_node_keys[node]
 
 
 def _fmt_list(items, limit=12) -> str:

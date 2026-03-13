@@ -1,98 +1,89 @@
-"""
-Simple KeyMapBuilder DSL using *existing* ModelConfig objects.
-
-Assumptions about ModelConfig (already defined in your library; imported elsewhere):
-- cfg_a == cfg_b  -> True iff they share the same *set of keys* (transitive)
-- cfg.identifier  -> unique string identifying the keyset
-- cfg.keys()      -> dict[str, Any] mapping key -> properties (value metadata)
-
-What this script provides:
-- Users implement:      def map_keys(b: KeyMapBuilder) -> None
-- They declare relations:
-    b["out1", "out2"] = b.param1.keys["in_a", "in_b"] | b.param2.keys["in_x"]
-    b["out"] = (b.param1.keys["in_a"] | b.param2.keys["in_x"]) @ {"meta": ...}
-
-- Output keys are validated against output_config.
-- Input keys are validated against each param's config.
-- STRICT output key uniqueness:
-    * no duplicates within a single output group
-    * no output key may appear in more than one group
-- STRICT input key uniqueness:
-    * no duplicates within a param selection
-    * combining with | forbids overlap for the same param
-
-- Convenience:
-    * b.param.keys() iterates available keys for that param (in cfg.keys() order)
-    * b.param.keys.items() iterates (key, props) for filtering with metadata
-    * b.keys() / b.keys[...] is only enabled if ALL input configs are equal (same keyset)
-      (checked via cfg equality); otherwise it errors.
-    * output keys are only accepted if they exist in output_config.keys()
-
-Built result:
-- keys_map = b.build()
-- for out_keys, rel in keys_map.items():
-      out_keys, input_keys = rel
-      rel.meta
-where:
-- out_keys is tuple[str, ...] (order preserved)
-- input_keys is a read-only mapping param -> tuple[str, ...] (order preserved)
-"""
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Set, Tuple
+from typing import Any, Callable, Dict, Generic, Iterator, Mapping, Optional, Set, Tuple, TypeVar, Union
 
 
 @dataclass(frozen=True, slots=True)
 class KeyRelation:
-    """
-    One declared relation:
-      outputs -> inputs (+ optional metadata)
+    outputs: Tuple[str, ...]
+    clauses: Tuple["Clause", ...]
 
-    Unpacking yields ONLY (outputs, inputs):
-      out_keys, in_keys = relation
-    """
+    def __iter__(self):
+        yield self.outputs
+        yield self.clauses
+
+
+@dataclass(frozen=True, slots=True)
+class RealizedKeyRelation:
     outputs: Tuple[str, ...]
     inputs: Mapping[str, Tuple[str, ...]]
     meta: Any = None
 
-    def __iter__(self) -> Iterator[object]:
+    def __iter__(self):
         yield self.outputs
         yield self.inputs
 
 
 @dataclass(frozen=True, slots=True)
-class Req:
-    """
-    Requirements:
-      param -> tuple(keys...)  (order preserved; no duplicates allowed)
-    """
+class Clause:
     by_param: Mapping[str, Tuple[str, ...]]
+    meta: Any = None
 
-    def __or__(self, other: "Req") -> "Req":
+    def __and__(self, other: "Clause") -> "Clause":
         merged: Dict[str, Tuple[str, ...]] = OrderedDict(self.by_param)
-
         for p, ks in other.by_param.items():
             if p in merged:
-                raise ValueError("Each parameter should be included at most once for each set of output key.")
+                raise ValueError(
+                    "Each parameter may appear at most once within one conjunction."
+                )
             merged[p] = ks
 
-        return Req(MappingProxyType(merged))
+        meta = self._merge_clause_meta(self.meta, other.meta)
+        return Clause(MappingProxyType(merged), meta=meta)
 
-    def __matmul__(self, meta: Any) -> "AnnotatedReq":
-        return AnnotatedReq(self, meta)
+    def __rand__(self, other: "Clause") -> "Clause":
+        return self & other
+
+    def __or__(self, other: Optional[Union["Clause", "ReqExpr"]]) -> "ReqExpr":
+        if other is None:
+            return ReqExpr((self,))
+        if isinstance(other, Clause):
+            return ReqExpr((self, other))
+        if isinstance(other, ReqExpr):
+            return ReqExpr((self, *other.clauses))
+        return NotImplemented
+
+    def __ror__(self, other: Optional[Union["Clause", "ReqExpr"]]) -> "ReqExpr":
+        return self | other
+
+    def __matmul__(self, meta: Any) -> "Clause":
+        if self.meta is not None:
+            raise ValueError("Clause metadata was already assigned.")
+        return Clause(self.by_param, meta=meta)
+
+    @staticmethod
+    def _merge_clause_meta(a: Any, b: Any) -> Any:
+        if a is None:
+            return b
+        if b is None:
+            return a
+        raise ValueError("Cannot combine two clauses that both carry metadata.")
 
 
 @dataclass(frozen=True, slots=True)
-class AnnotatedReq:
-    req: Req
-    meta: Any
+class ReqExpr:
+    clauses: Tuple[Clause, ...]
 
-    def __or__(self, other: object) -> "AnnotatedReq":
-        raise ValueError("Do not combine after annotating. Use: (req1 | req2) @ meta")
+    def __or__(self, other: object) -> "ReqExpr":
+        if isinstance(other, Clause):
+            return ReqExpr((*self.clauses, other))
+        if isinstance(other, ReqExpr):
+            return ReqExpr((*self.clauses, *other.clauses))
+        return NotImplemented
 
-    def __ror__(self, other: object) -> "AnnotatedReq":
-        raise ValueError("Do not combine after annotating. Use: (req1 | req2) @ meta")
+    def __ror__(self, other: object) -> "ReqExpr":
+        return self | other
 
 
 def _norm_one(s: str, *, what: str) -> str:
@@ -150,14 +141,14 @@ class ParamKeysAccessor:
     def items(self) -> Iterator[Tuple[str, Any]]:
         yield from self._b._input_items_for(self._p)
 
-    def __getitem__(self, sel: object) -> Req:
+    def __getitem__(self, sel: object) -> Clause:
         keys = _to_tuple(sel, what="input key")
         if not keys:
             raise ValueError("Empty key selection")
         _ensure_no_dupes(keys, what=f"input keys (param '{self._p}')")
         for k in keys:
             self._b._validate_input_key(self._p, k)
-        return Req(MappingProxyType({self._p: keys}))
+        return Clause(MappingProxyType({self._p: keys}))
 
 
 class AllKeysAccessor:
@@ -186,7 +177,7 @@ class AllKeysAccessor:
         self._require_enabled()
         yield from self._b._shared_input_items()
 
-    def __getitem__(self, sel: object) -> Req:
+    def __getitem__(self, sel: object) -> Clause:
         self._require_enabled()
         keys = _to_tuple(sel, what="input key")
         if not keys:
@@ -198,8 +189,8 @@ class AllKeysAccessor:
                 hint = ", ".join(list(self._b._shared_input_keyset)[:10])
                 raise ValueError(f"Unknown shared input key '{k}'. Shared keys include: {hint}")
 
-        by: Dict[str, Tuple[str, ...]] = {p: keys for p in self._b.params}
-        return Req(MappingProxyType(by))
+        by = {p: keys for p in self._b.params}
+        return Clause(MappingProxyType(by))
 
 
 class OutputKeysAccessor:
@@ -228,40 +219,64 @@ class OutputProxy:
         self.keys = OutputKeysAccessor(builder)
 
 
-class KeyMap:
-    """
-    Mapping-like container: output-group -> KeyRelation
-    Keys are output-groups: tuple[str, ...]
-    """
-    def __init__(self, n_to_n_map: Mapping[Tuple[str, ...], KeyRelation]):
-        self.n_to_n_map = OrderedDict(n_to_n_map)
-        self.simple_map = {
+T = TypeVar("T")
+
+
+class KeyMap(Generic[T]):
+    def __init__(self, n_to_n_map: Mapping[Tuple[str, ...], T]):
+        self.n_to_n_map = MappingProxyType(n_to_n_map)
+        self.simple_map = MappingProxyType({
             k: g
             for ks, g in self.n_to_n_map.items()
             for k in ks
-        }
-        in_to_out = defaultdict(lambda: defaultdict(list))
-        for outputs, inputs in self:
-            for output in outputs:
-                for param, param_inputs in inputs.items():
-                    for input in param_inputs:
-                        in_to_out[input][param].append(output)
-        self.in_to_out = dict(in_to_out)
+        })
 
     def __iter__(self):
         return iter(self.n_to_n_map.values())
 
-    def __getitem__(self, k: str | Tuple[str, ...]) -> KeyRelation:
+    def __getitem__(self, k: str | Tuple[str, ...]) -> T:
         if isinstance(k, str):
             return self.simple_map[k]
         else:
             return self.n_to_n_map[k]
+
+    def get(self, k, default=None):
+        if isinstance(k, str):
+            return self.simple_map.get(k, default)
+        else:
+            return self.n_to_n_map.get(k, default)
 
     def __contains__(self, k: str | Tuple[str, ...]) -> bool:
         if isinstance(k, str):
             return k in self.simple_map
         else:
             return k in self.n_to_n_map
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveKeyMap(Generic[T]):
+    simple_map: Mapping[str, T]
+
+    def __init__(self, simple_map: Mapping[str, T]):
+        object.__setattr__(self, "simple_map", MappingProxyType(dict(simple_map)))
+
+    def __getitem__(self, k: str) -> T:
+        return self.simple_map[k]
+
+    def get(self, k: str, default=None):
+        return self.simple_map.get(k, default)
+
+    def __contains__(self, k: str) -> bool:
+        return k in self.simple_map
+
+    def __iter__(self) -> Iterator[T]:
+        seen = set()
+        for rel in self.simple_map.values():
+            rid = id(rel)
+            if rid in seen:
+                continue
+            seen.add(rid)
+            yield rel
 
 
 class KeyMapBuilder:
@@ -361,20 +376,17 @@ class KeyMapBuilder:
             )
 
     def __setitem__(self, out_keys: object, rhs: object) -> None:
-        # Normalize outputs, preserve order, STRICTLY forbid duplicates
         if isinstance(out_keys, type(Ellipsis)):
             outs = tuple(self._output_keys())
         else:
             outs = _to_tuple(out_keys, what="output key")
+
         if not outs:
             raise ValueError("Output group must contain at least one key.")
         _ensure_no_dupes(outs, what="output keys (within the same output group)")
 
-        # Validate output keys exist
         for k in outs:
             self._validate_output_key(k)
-
-        # Enforce: an output key can appear in only one group overall
         for k in outs:
             if k in self._out_key_owner:
                 prev = self._out_key_owner[k]
@@ -382,30 +394,26 @@ class KeyMapBuilder:
         for k in outs:
             self._out_key_owner[k] = outs
 
-        # Normalize RHS into (Req, meta)
-        if isinstance(rhs, AnnotatedReq):
-            req = rhs.req
-            meta = rhs.meta
-        elif isinstance(rhs, Req):
-            req = rhs
-            meta = None
+        if isinstance(rhs, Clause):
+            expr = ReqExpr((rhs,))
+        elif isinstance(rhs, ReqExpr):
+            expr = rhs
         else:
-            raise ValueError("RHS must be a Req or (Req @ meta).")
+            raise ValueError("RHS must be a Clause or ReqExpr.")
 
-        # Validate inputs and freeze mapping (param order preserved as provided in req.by_param)
-        inputs_mut: Dict[str, Tuple[str, ...]] = {}
-        for p, ks in req.by_param.items():
-            if p not in self.input_configs:
-                raise ValueError(f"Unknown parameter '{p}' in requirements.")
+        validated_clauses = []
+        for clause in expr.clauses:
+            inputs_mut: Dict[str, Tuple[str, ...]] = {}
+            for p, ks in clause.by_param.items():
+                if p not in self.input_configs:
+                    raise ValueError(f"Unknown parameter '{p}' in requirements.")
+                _ensure_no_dupes(ks, what=f"input keys (param '{p}')")
+                for k in ks:
+                    self._validate_input_key(p, k)
+                inputs_mut[p] = ks
+            validated_clauses.append(Clause(MappingProxyType(inputs_mut), meta=clause.meta))
 
-            _ensure_no_dupes(ks, what=f"input keys (param '{p}')")
-            for k in ks:
-                self._validate_input_key(p, k)
-
-            inputs_mut[p] = ks
-
-        rel = KeyRelation(outputs=outs, inputs=MappingProxyType(inputs_mut), meta=meta)
-        self._relations[outs] = rel
+        self._relations[outs] = KeyRelation(outputs=outs, clauses=tuple(validated_clauses))
 
     def build(self) -> KeyMap:
         return KeyMap(self._relations)

@@ -16,11 +16,11 @@ from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethod
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, KeyMetadata
 from .graph_finalization import open_graph
-from .keys_map import KeyRelation
+from .keys_map import KeyMap, RealizedKeyRelation
 from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
@@ -192,14 +192,12 @@ def merge(
             merge_space="weight" if strict_weight_space else None,
             merge_space_preference=("weight",) if not strict_weight_space else None,
         )
-        recipe, node_to_keys = finalized_res.root, finalized_res.node_to_keys
-        minimal_keys = node_to_keys[recipe]
-        cache = {finalized_res.to_finalized_node[node]: cache_dict for node, cache_dict in cache.items()}
+        recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
+        realized_root_key_map = realized_key_maps[recipe]
+        cache = {finalized_res.to_finalized_node[node]: cache_object for node, cache_object in cache.items()}
 
         model_config = recipe.model_config
-        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in minimal_keys}
-        if not omit_extra_keys:
-            recipe, graph_metadata = copy_extra_keys(recipe)
+        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in realized_root_key_map}
 
         if omit_ema and "ema" in model_config.components():
             for key in model_config.components()["ema"].keys():
@@ -208,7 +206,12 @@ def merge(
                     del graph_metadata[key]
 
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(recipe, node_to_keys, enable_outputs_reuse=reuse_outputs)
+        merge_methods_context = create_merge_method_context(
+            recipe,
+            realized_key_maps,
+            finalized_res.node_to_keys,
+            enable_outputs_reuse=reuse_outputs,
+        )
 
         with (
             executor,
@@ -227,7 +230,8 @@ def merge(
                 fn = _track_output(fn, output_dict, key, key_metadata, check_finite, check_mandatory_keys)
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
-                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache)))
+                merge_visitor = KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache, realized_key_maps)
+                futures.append(executor.submit(fn, merge_visitor))
 
             for future in as_completed(futures):
                 if future.exception() is not None:
@@ -236,7 +240,8 @@ def merge(
                 future.result()
 
             for node, mm_context in merge_methods_context.items():
-                num_leaked = sum(not output_ref.was_freed() for output_ref in mm_context.output_refs.values())
+                unique_refs = {id(ref): ref for ref in mm_context.output_refs.values()}.values()
+                num_leaked = sum(not output_ref.was_freed() for output_ref in unique_refs)
                 if num_leaked:
                     logging.warning(f"memory leaked during the merge: {node}, number of entries: {num_leaked}")
 
@@ -252,50 +257,6 @@ def fix_torch_threading():
         torch.linalg.inv(torch.ones((1, 1), device="cuda"))
 
     globals()['fix_torch_threading'] = lambda: None
-
-
-@dataclasses.dataclass
-class MinimalMetadataVisitor(RecipeVisitor):
-    def visit_literal(self, node: LiteralRecipeNode) -> Mapping[str, KeyMetadata]:
-        meta = node.model_config.keys()
-        res = {}
-
-        child_keys = defaultdict(set)
-        for k, child_node in node.value_dict.items():
-            if isinstance(child_node, RecipeNode):
-                child_keys[child_node].add(k)
-
-        for k, child_node in node.value_dict.items():
-            if isinstance(child_node, RecipeNode):
-                child_res = child_node.accept(dataclasses.replace(self))
-                for k_res in child_keys[child_node]:
-                    child_keys[k_res] = child_res[k_res]
-            else:
-                res[k] = meta[k]
-
-        return res
-
-    def visit_model(self, node: ModelRecipeNode) -> Mapping[str, KeyMetadata]:
-        return {k: v for k, v in node.state_dict.metadata()}
-
-    def visit_merge(self, node: MergeRecipeNode) -> Mapping[str, KeyMetadata]:
-        res = {}
-        meta = node.model_config.keys()
-        key_map = node.key_map()
-
-        for param, args in node.all_args().items():
-            for arg in (args if isinstance(args, tuple) else (args,)):
-                arg_res = arg.accept(self)
-                for input_key in arg_res:
-                    output_keys = key_map.in_to_out.get(input_key)
-                    output_keys = output_keys.get(param) if output_keys is not None else None
-                    if output_keys is None:
-                        continue
-
-                    for output_key in output_keys:
-                        res[output_key] = meta[output_key]
-
-        return res
 
 
 def copy_extra_keys(recipe: RecipeNode):
@@ -451,9 +412,10 @@ class ThisThreadExecutor(nullcontext):
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     output_key: str
-    merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    merge_methods_context: Mapping[RecipeNode, MergeMethodContext]
     validate_mm_contract: bool
-    merge_methods_caches: Dict[RecipeNode, Any]
+    merge_methods_caches: Mapping[RecipeNode, Any]
+    realized_relations: Mapping[RecipeNode, KeyMap[RealizedKeyRelation]]
     parent_port: Optional[Tuple[RecipeNode, str, int | str]] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
@@ -485,7 +447,7 @@ class KeyMergeVisitor(RecipeVisitor):
                 res = output_ref.use_once(self.parent_port)
             else:
                 try:
-                    key_map = node.key_map()
+                    key_map = self.realized_relations[node]
                     if self.output_key not in key_map:
                         raise StateDictKeyError(self.output_key)
                     key_relation = key_map[self.output_key]
@@ -502,7 +464,7 @@ class KeyMergeVisitor(RecipeVisitor):
                     )
                 finally:
                     if self.parent_port is None:
-                        release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.parent_port, needs_lock=False)
+                        release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.realized_relations, self.parent_port, needs_lock=False)
                         node.accept(release_visitor)
                 if isinstance(res, dict):
                     if self.validate_mm_contract:
@@ -522,7 +484,7 @@ class KeyMergeVisitor(RecipeVisitor):
     def __visit_deeper_first(
         self,
         node: MergeRecipeNode,
-        key_relation: KeyRelation,
+        key_relation: RealizedKeyRelation,
     ) -> Tuple[
         Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
@@ -544,7 +506,7 @@ class KeyMergeVisitor(RecipeVisitor):
             input_visitor = dataclasses.replace(self, parent_port=parent_port)
             if is_subclass(input_types[index], StateDict):
                 if self.validate_mm_contract:
-                    input_keys_constraints = key_relation.inputs[input_name]
+                    input_keys_constraints = key_relation.inputs.get(input_name, ())
                 else:
                     input_keys_constraints = None
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
@@ -561,7 +523,8 @@ class KeyMergeVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class KeyReleaseVisitor(RecipeVisitor):
     output_key: str
-    merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    merge_methods_context: Mapping[RecipeNode, MergeMethodContext]
+    realized_relations: Mapping[RecipeNode, KeyMap[RealizedKeyRelation]]
     parent_port: Optional[Tuple[RecipeNode, str, int | str]]
     needs_lock: bool
 
@@ -597,7 +560,7 @@ class KeyReleaseVisitor(RecipeVisitor):
     ):
         error_holder = ErrorHolder()
 
-        key_map = node.key_map()
+        key_map = self.realized_relations[node]
         if self.output_key not in key_map:
             return
 
@@ -607,8 +570,8 @@ class KeyReleaseVisitor(RecipeVisitor):
             input_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
             parent_port = (node, self.output_key, input_idx)
             release_visitors = [
-                KeyReleaseVisitor(input_key, self.merge_methods_context, parent_port, needs_lock=True)
-                for input_key in key_relation.inputs[input_param]
+                KeyReleaseVisitor(input_key, self.merge_methods_context, self.realized_relations, parent_port, needs_lock=True)
+                for input_key in key_relation.inputs.get(input_param, ())
             ]
             for release_visitor in release_visitors:
                 error_holder.intercept(input_node.accept, release_visitor)
