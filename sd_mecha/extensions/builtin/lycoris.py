@@ -5,7 +5,10 @@ from typing import Iterable, Mapping, Dict
 from sd_mecha.extensions import model_configs
 from .merge_methods.kronecker import kron_dims_from_ratio
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
-from sd_mecha.extensions.model_configs import StateDictKey, ModelConfig, ModelConfigImpl, LazyModelConfigBase, KeyMetadata
+from sd_mecha.extensions.model_configs import (
+    ModelComponent, StateDictKey, ModelConfig, ModelConfigImpl,
+    LazyModelConfigBase, KeyMetadata,
+)
 from sd_mecha.streaming import StateDictKeyError
 from sd_mecha.keys_map import KeyMapBuilder
 
@@ -268,7 +271,7 @@ class LycorisModelConfig(LazyModelConfigBase):
     def create_config(self):
         identifier = self.identifier
         components = {
-            k: _to_lycoris_keys(component.keys(), self.algorithms, self.prefix)
+            k: ModelComponent(_to_lycoris_keys(component.keys(), self.algorithms, self.prefix))
             for k, component in self.base_config.components().items()
         }
         return ModelConfigImpl(identifier, components)
@@ -286,7 +289,7 @@ def _to_lycoris_keys(
 
     for key, meta in base_keys.items():
         for algorithm in algorithms:
-            if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True) or meta.optional:
+            if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True):
                 continue
 
             key = key.split('.')

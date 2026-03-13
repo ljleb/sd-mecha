@@ -5,7 +5,7 @@ from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return
 from sd_mecha.extensions.builtin.merge_methods.svd import svd_lowrank
 
 
-@merge_method
+@merge_method(cache_factory=dict)
 def truncate_kronecker(
     a: Parameter(Tensor, merge_space="delta"),
     kronecker_ratio: Parameter(float) = 0.5,

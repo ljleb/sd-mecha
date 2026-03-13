@@ -42,7 +42,7 @@ from sd_mecha.extensions.builtin.merge_methods import (
     omit_non_finite,
     rebasin,
     randperm,
-    balance_attention,
+    align,
     top_k_tensor_sum,
     truncate_rank,
     ties_sum_with_dropout,

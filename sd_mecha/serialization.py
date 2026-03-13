@@ -158,7 +158,8 @@ def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None
     from . import open_graph
     serializer = SerializerVisitor()
     with open_graph(recipe) as graph:
-        graph.finalize().root.accept(serializer)
+        root = graph.finalize(model_config_preference=("singleton-mecha",)).root
+        root.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
     serialized = "\n".join([version_header] + serializer.instructions)
 

@@ -1,7 +1,7 @@
 import torch
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.extensions import model_configs
-from .convert_huggingface_sd_vae_to_original import convert_vae_key, reshape_weight_for_sd
+from .convert_huggingface_sd_vae_to_original import convert_vae_key, reshape_weight_for_sd, reshape_weight_for_hf
 
 
 # hf to sd conversion src:
@@ -30,7 +30,10 @@ class convert_sd1_kohya_to_original:
                 input_keys, needs_reshape = convert_vae_key(output_key)
             else:
                 input_keys = output_key
-            b[output_key] = b.keys[input_keys] @ needs_reshape
+            try:
+                b[output_key] = b.keys[input_keys] @ needs_reshape
+            except ValueError:
+                pass
 
     def __call__(
         self,
@@ -43,6 +46,43 @@ class convert_sd1_kohya_to_original:
         res = kohya_sd[relation["kohya_sd"][0]]
         if needs_reshape:
             res = reshape_weight_for_sd(res)
+        return res
+
+
+@merge_method(
+    identifier=f"convert_'{sd1_ldm.identifier}'_to_'{sd1_kohya.identifier}'",
+    is_conversion=True,
+    reuse_outputs=False,
+)
+class convert_sd1_kohya_to_original:
+    @staticmethod
+    def map_keys(b):
+        for output_key in sd1_ldm.keys():
+            needs_reshape = False
+            if output_key.startswith("model.diffusion_model."):
+                input_key = convert_unet_key(output_key)
+            elif output_key.startswith("cond_stage_model."):
+                input_key = convert_clip_l_key(output_key)
+            elif output_key.startswith("first_stage_model."):
+                input_key, needs_reshape = convert_vae_key(output_key)
+            else:
+                input_key = output_key
+            try:
+                b[input_key] = b.keys[output_key] @ needs_reshape
+            except ValueError:
+                pass
+
+    def __call__(
+        self,
+        ldm_sd: Parameter(StateDict[torch.Tensor], model_config=sd1_ldm),
+        **kwargs,
+    ) -> Return(torch.Tensor, model_config=sd1_kohya):
+        relation = kwargs["key_relation"]
+        needs_reshape = relation.meta
+
+        res = ldm_sd[relation["ldm_sd"][0]]
+        if needs_reshape:
+            res = reshape_weight_for_hf(res)
         return res
 
 

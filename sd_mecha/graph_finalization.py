@@ -60,32 +60,33 @@ def _open_graph_impl(
     resolve_paths_visitor = ResolvePathsVisitor()
     root = resolve_paths_visitor.process(value_to_node(root))
 
-    node_to_indices, processed_nodes = discover_components(root, root_only, set(component_types))
+    node_to_index_by_type: Dict[type[ComponentType], Dict[RecipeNode, ComponentIndex]] = {}
+    for t in component_types:
+        node_to_index_by_type[t] = discover_component(root, t, root_only)
 
-    active_nodes = processed_nodes if root_only else set(node_to_indices)
+    active_nodes = set().union(*(m.keys() for m in node_to_index_by_type.values()))
+
     opener = OpenActiveStateDictsVisitor(buffer_size_per_dict, active_nodes)
     root = opener.process(root)
     node_map = {k: opener.node_map.get(v, v) for k, v in resolve_paths_visitor.node_map.items()}
+    del active_nodes  # open nodes differ from closed nodes, either remap or do not use past this point
 
-    node_to_indices = {opener.node_map.get(k, k): v for k, v in node_to_indices.items()}
-    processed_nodes = {opener.node_map.get(v, v) for v in processed_nodes}
-    del active_nodes
+    for t in component_types:
+        node_to_index_by_type[t] = {opener.node_map.get(k, k): v for k, v in node_to_index_by_type[t].items()}
 
     candidates: Dict[type[ComponentType], Dict[ComponentIndex, ComponentCandidates]] = {}
     for t in component_types:
-        candidates[t] = t.build_candidates(node_to_indices, processed_nodes)
+        candidates[t] = t.build_candidates(node_to_index_by_type[t])
 
-    graph = RecipeGraph(root, node_to_indices, node_map, processed_nodes, candidates, root_only)
-
+    graph = RecipeGraph(root, node_to_index_by_type, node_map, candidates, root_only)
     return graph, opener.dicts_to_close
 
 
 @dataclasses.dataclass
 class RecipeGraph:
     root: RecipeNode
-    node_to_indices: Dict[RecipeNode, "ComponentIndices"]
+    node_to_index_by_type: Dict[type["ComponentType"], Dict[RecipeNode, "ComponentIndex"]]
     node_map: Dict[RecipeNode, RecipeNode]
-    processed_nodes: Set[RecipeNode]
     candidates: Dict[type["ComponentType"], Dict["ComponentIndex", "ComponentCandidates"]]
     is_root_only: bool
 
@@ -118,10 +119,9 @@ class RecipeGraph:
         if MergeSpaceComponentType in candidates:
             component_types[MergeSpaceComponentType] = (merge_space, merge_space_preference)
 
-        root_idx = self.node_to_indices[self.root].ids
         for t, (return_hint, return_preference) in component_types.items():
-            root_idx_t = root_idx[t]
-            root_t_candidates = candidates[t][root_idx_t]
+            root_idx = self.node_to_index_by_type[t][self.root]
+            root_t_candidates = candidates[t][root_idx]
             if return_hint is not None:
                 root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
             if return_preference is not None:
@@ -130,7 +130,7 @@ class RecipeGraph:
         solutions = {t: {idx: c.finalize() for idx, c in candidates[t].items()} for t in candidates}
 
         finalizer = FinalizeVisitor(
-            node_to_indices=self.node_to_indices,
+            node_to_index_by_type=self.node_to_index_by_type,
             solved_cfg=solutions.get(ModelConfigComponentType),
             solved_ms=solutions.get(MergeSpaceComponentType),
             check_extra_keys=check_extra_keys,
@@ -145,9 +145,9 @@ class RecipeGraph:
             t = ModelConfigComponentType
 
             finalized_node_to_indices: Dict[RecipeNode, Set[ComponentIndex]] = defaultdict(set)
-            for old_node, indices in self.node_to_indices.items():
+            for old_node, index in self.node_to_index_by_type[t].items():
                 finalized_node = finalizer.node_map[old_node]
-                finalized_node_to_indices[finalized_node].add(indices.ids[t])
+                finalized_node_to_indices[finalized_node].add(index)
 
             component_keys: Dict[ComponentIndex, Set[str]] = {}
             component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
@@ -211,17 +211,16 @@ class RecipeGraph:
         if ModelConfigComponentType not in candidates:
             raise RuntimeError("The recipe graph was opened without model config analysis.")
 
-        root_idx = self.node_to_indices[self.root].ids
         for t, (return_hint, return_preference) in component_types.items():
-            root_idx_t = root_idx[t]
-            root_t_candidates = candidates[t][root_idx_t]
+            root_idx = self.node_to_index_by_type[t][self.root]
+            root_t_candidates = candidates[t][root_idx]
             if return_hint is not None:
                 root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
             if return_preference is not None:
                 root_t_candidates.apply_preference(return_preference)
 
         return CandidatesReturn(**{
-            t.name: candidates[t][root_idx[t]] if t in candidates else None for t in (
+            t.name: candidates[t][self.node_to_index_by_type[t][self.root]] if t in candidates else None for t in (
                 ModelConfigComponentType,
                 MergeSpaceComponentType,
             )
@@ -426,29 +425,13 @@ class ComponentType(abc.ABC, Generic[T]):
     @classmethod
     def build_candidates(
         cls,
-        node_to_indices: Dict[RecipeNode, "ComponentIndices"],
-        processed_nodes: Set[RecipeNode],
+        node_to_index: Dict[RecipeNode, "ComponentIndex"],
     ) -> Dict["ComponentIndex", ComponentCandidates[T]]:
-        components: Set[ComponentIndex] = set()
-        for n in processed_nodes:
-            idxs = node_to_indices.get(n)
-            if idxs is None:
-                continue
-            components.add(idxs.ids[cls])
-
-        candidates: Dict[ComponentIndex, ComponentCandidates[T]] = {rep: cls.Candidates() for rep in components}
-        for n in processed_nodes:
-            idxs = node_to_indices.get(n)
-            if idxs is None:
-                continue
-            rep = idxs.ids[cls]
-            cc = candidates.get(rep)
-            if cc is None:
-                continue
-
+        candidates = {rep.find(): cls.Candidates() for rep in node_to_index.values()}
+        for n, rep in node_to_index.items():
             n.accept(
-                cc,
-                node_to_indices=node_to_indices,
+                candidates[rep.find()],
+                node_to_index=node_to_index,
                 candidates=candidates,
             )
 
@@ -517,7 +500,7 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
         metadata = OrderedDict(node.state_dict.metadata())
         self._update_with_metadata(metadata, node.model_config)
 
-    def visit_merge(self, node: MergeRecipeNode, node_to_indices: Dict[RecipeNode, "ComponentIndices"], candidates: Dict["ComponentIndex", "ModelConfigCandidates"]):
+    def visit_merge(self, node: MergeRecipeNode, node_to_index: Dict[RecipeNode, "ComponentIndex"], candidates: Dict["ComponentIndex", "ModelConfigCandidates"]):
         return_cfg = node.merge_method.get_signature().return_annotation.data.model_config
         if return_cfg is not None:
             self.requires_known_config = True
@@ -533,7 +516,11 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
             if is_config_stub(cfg):
                 continue
 
-            child_candidates = candidates.get(node_to_indices[child].ids[ModelConfigComponentType])
+            child_rep = node_to_index.get(child)
+            if child_rep is None:
+                continue
+
+            child_candidates = candidates.get(child_rep)
             if child_candidates is None:
                 continue
 
@@ -675,7 +662,7 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
         if node.merge_space is not None:
             self.constrain({node.merge_space}, reason="model merge_space hint")
 
-    def visit_merge(self, node: MergeRecipeNode, node_to_indices: Dict[RecipeNode, "ComponentIndices"], candidates: Dict["ComponentIndex", "MergeSpaceCandidates"]):
+    def visit_merge(self, node: MergeRecipeNode, node_to_index: Dict[RecipeNode, "ComponentIndex"], candidates: Dict["ComponentIndex", "MergeSpaceCandidates"]):
         return_ms = node.merge_method.get_signature().return_annotation.data.merge_space
         if return_ms is None:
             return_ms = node.merge_method.default_merge_space
@@ -690,16 +677,20 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
 
         for k, child in (*enumerate(node.bound_args.args), *node.bound_args.kwargs.items()):
             param_ms = input_ms[k]
-            child_rep = node_to_indices[child].ids[MergeSpaceComponentType]
-            child_c = candidates.get(child_rep)
-            if child_c is None:
+
+            child_rep = node_to_index.get(child)
+            if child_rep is None:
+                continue
+
+            child_candidates = candidates.get(child_rep)
+            if child_candidates is None:
                 continue
 
             if isinstance(param_ms, MergeSpaceSymbol):
-                child_c.constrain(set(param_ms.merge_spaces), reason="merge input symbol constraint")
+                child_candidates.constrain(set(param_ms.merge_spaces), reason="merge input symbol constraint")
             else:
                 assert isinstance(param_ms, set), f"Unexpected merge space type: {type(param_ms)}"
-                child_c.constrain(set(param_ms), reason="merge input fixed-set constraint")
+                child_candidates.constrain(set(param_ms), reason="merge input fixed-set constraint")
 
     def __iter__(self):
         if self.allowed is None:
@@ -826,119 +817,95 @@ class ComponentIndex:
             a._rank += 1
         return a
 
+    def __eq__(self, other):
+        return self.find() is other.find()
 
-@dataclasses.dataclass
-class ComponentIndices:
-    ids: Dict[type[ComponentType], ComponentIndex]
-
-    def copy(self) -> "ComponentIndices":
-        return ComponentIndices(self.ids.copy())
-
-    def __or__(self, other):
-        self = self.copy()
-        for k, v in self.ids.items():
-            if k in other.ids:
-                self.ids[k] |= other.ids[k]
-        return self
+    def __hash__(self):
+        return hash(id(self.find()))
 
 
-def discover_components(
+def discover_component(
     root: RecipeNode,
+    component_type: type[ComponentType],
     root_only: bool,
-    component_types: Optional[Set[type[ComponentType]]],
-) -> Tuple[Dict[RecipeNode, ComponentIndices], Set[RecipeNode]]:
-    if component_types is None:
-        component_types = set(ComponentType.all_components.values())
-    if not component_types:
-        return {}, set()
+) -> Dict[RecipeNode, ComponentIndex]:
+    node_to_index: Dict[RecipeNode, ComponentIndex] = {}
 
-    node_to_indices: Dict[RecipeNode, ComponentIndices] = {}
-    processed_nodes: Set[RecipeNode] = set()
-
+    root_index = ComponentIndex(component_type)
     nodes_queue = deque((
-        (root, ComponentIndices({t: ComponentIndex(t) for t in component_types})),
+        (root, root_index),
     ))
+    seen = set()
 
     while nodes_queue:
         stack = [nodes_queue.popleft()]
-        visitor = DiscoverComponentsVisitor(nodes_queue, stack, node_to_indices, component_types, root_only, processed_nodes)
+        visitor = DiscoverComponentVisitor(nodes_queue, stack, node_to_index, component_type, seen)
         while stack:
             visitor.process(*stack.pop())
 
-    out: Dict[RecipeNode, ComponentIndices] = {}
-    for n, idxs in node_to_indices.items():
-        out[n] = ComponentIndices({t: idxs.ids[t].find() for t in component_types})
-    return out, processed_nodes
+    root_idx = node_to_index[root].find()
+    out: Dict[RecipeNode, ComponentIndex] = {}
+    for n, idx in node_to_index.items():
+        idx = idx.find()
+        if not root_only or idx == root_idx:
+            out[n] = idx
+    return out
 
 
 @dataclasses.dataclass
-class DiscoverComponentsVisitor(RecipeVisitor):
-    queue: deque[Tuple[RecipeNode, ComponentIndices]]
-    stack: List[Tuple[RecipeNode, ComponentIndices]]
-    node_to_indices: Dict[RecipeNode, ComponentIndices]
-    component_types: Set[type[ComponentType]]
-    root_only: bool
-    processed_nodes: Set[RecipeNode]
-    cur_indices: Optional[ComponentIndices] = None
+class DiscoverComponentVisitor(RecipeVisitor):
+    queue: deque[Tuple[RecipeNode, ComponentIndex]]
+    stack: List[Tuple[RecipeNode, ComponentIndex]]
+    node_to_index: Dict[RecipeNode, ComponentIndex]
+    component_type: type[ComponentType]
+    seen: Set[Tuple[RecipeNode, int]]
+    cur_index: Optional[ComponentIndex] = None
 
-    def process(self, node: RecipeNode, indices: ComponentIndices) -> None:
-        self.cur_indices = self._attach_node(node, indices)
-        self.processed_nodes.add(node)
+    def process(self, node: RecipeNode, index: ComponentIndex) -> None:
+        self.cur_index = self._attach_node(node, index)
+        key = node, id(self.cur_index)
+        if key in self.seen:
+            return
+        self.seen.add(key)
         node.accept(self)
 
     def visit_literal(self, node: LiteralRecipeNode):
-        assert self.cur_indices is not None
+        assert self.cur_index is not None
         for child in node.value_dict.values():
             if not isinstance(child, RecipeNode):
                 continue
 
-            child_indices = self.cur_indices.copy()
-            for t in self.component_types:
-                if t.literal_delineates(node):
-                    child_indices.ids[t] = ComponentIndex(t)
+            child_index = self.cur_index
+            if self.component_type.literal_delineates(node):
+                child_index = ComponentIndex(self.component_type)
 
-            self._handle_child(self.cur_indices, child, child_indices)
+            self._handle_child(self.cur_index, child, child_index)
 
     def visit_model(self, node: ModelRecipeNode):
-        assert self.cur_indices is not None
+        assert self.cur_index is not None
 
     def visit_merge(self, node: MergeRecipeNode):
-        assert self.cur_indices is not None
-        per_type_child_indices: Dict[type[ComponentType], Dict[RecipeNode, ComponentIndex]] = {}
-        for t in self.component_types:
-            per_type_child_indices[t] = t.merge_delineate(node, self.cur_indices.ids[t])
+        assert self.cur_index is not None
+        child_indices = self.component_type.merge_delineate(node, self.cur_index)
 
         for child in (*node.bound_args.args, *node.bound_args.kwargs.values()):
-            child_indices = self.cur_indices.copy()
-            for t in self.component_types:
-                child_indices.ids[t] = per_type_child_indices[t][child]
+            child_idx = child_indices[child]
+            self._handle_child(self.cur_index, child, child_idx)
 
-            self._handle_child(self.cur_indices, child, child_indices)
-
-    def _handle_child(self, parent_idx: ComponentIndices, child: RecipeNode, child_indices: ComponentIndices) -> None:
-        if self._is_boundary(parent_idx, child_indices):
-            if self.root_only:
-                attached = self._attach_node(child, child_indices)
-                if not self._is_boundary(parent_idx, attached):
-                    self.stack.append((child, attached))
-            else:
-                self.queue.append((child, child_indices))
+    def _handle_child(self, parent_idx: ComponentIndex, child: RecipeNode, child_idx: ComponentIndex) -> None:
+        child_idx = self._attach_node(child, child_idx)
+        if child_idx == parent_idx:
+            self.stack.append((child, child_idx))
         else:
-            self.stack.append((child, child_indices))
+            self.queue.append((child, child_idx))
 
-    def _is_boundary(self, p: ComponentIndices, c: ComponentIndices) -> bool:
-        for t in self.component_types:
-            if p.ids[t].find() is not c.ids[t].find():
-                return True
-        return False
+    def _attach_node(self, node: RecipeNode, idx: ComponentIndex) -> ComponentIndex:
+        existing_idx = self.node_to_index.get(node)
+        if existing_idx is not None:
+            idx |= existing_idx
 
-    def _attach_node(self, node: RecipeNode, indices: ComponentIndices) -> ComponentIndices:
-        existing = self.node_to_indices.get(node)
-        if existing is not None:
-            indices |= existing
-
-        self.node_to_indices[node] = indices
-        return indices
+        self.node_to_index[node] = idx
+        return idx.find()
 
 
 @dataclasses.dataclass
@@ -1010,7 +977,7 @@ def create_config_stats(config: ModelConfig, dict_keys: Optional[Set[str]] = Non
 
 @dataclasses.dataclass
 class FinalizeVisitor(RecipeVisitor):
-    node_to_indices: Dict[RecipeNode, ComponentIndices]
+    node_to_index_by_type: Dict[type[ComponentType], Dict[RecipeNode, ComponentIndex]]
     solved_cfg: Optional[Dict[ComponentIndex, ModelConfig]]
     solved_ms: Optional[Dict[ComponentIndex, MergeSpace]]
     check_extra_keys: bool
@@ -1059,12 +1026,14 @@ class FinalizeVisitor(RecipeVisitor):
         cfg = node.model_config
         ms = node.merge_space
 
-        idxs = self.node_to_indices.get(node)
-        if idxs is not None:
-            if cfg is None and self.solved_cfg is not None:
-                cfg = self.solved_cfg.get(idxs.ids[ModelConfigComponentType], cfg)
-            if ms is None and self.solved_ms is not None:
-                ms = self.solved_ms.get(idxs.ids[MergeSpaceComponentType], ms)
+        if cfg is None and self.solved_cfg is not None:
+            cfg_idx = self.node_to_index_by_type[ModelConfigComponentType].get(node)
+            if cfg_idx is not None:
+                cfg = self.solved_cfg.get(cfg_idx, cfg)
+        if ms is None and self.solved_ms is not None:
+            ms_idx = self.node_to_index_by_type[MergeSpaceComponentType].get(node)
+            if ms_idx is not None:
+                ms = self.solved_ms.get(ms_idx, ms)
 
         return cfg, ms
 
@@ -1164,12 +1133,12 @@ class PropagatableKeyVisitor(RecipeVisitor):
     filtered_node_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
 
     def visit_all_keys(self, root: RecipeNode):
-        root_keys = self.node_to_key_domain[root]
+        root_keys = self._possible_keys(root)
         for root_output_key in root_keys:
             key_visitor = dataclasses.replace(self, filtered_node_keys=defaultdict(set))
             if root.accept(key_visitor, root_output_key):
                 for node, keys in key_visitor.filtered_node_keys.items():
-                    self.filtered_node_keys[node].update(keys)
+                    self._filtered_keys(node).update(keys)
 
     def visit_literal(self, node: LiteralRecipeNode, output_key: str) -> bool:
         if output_key in self._possible_keys(node) and output_key in node.value_dict:
@@ -1179,42 +1148,36 @@ class PropagatableKeyVisitor(RecipeVisitor):
                 return child.accept(self, output_key)
             return True
 
-        return self._key_optional(node, output_key)
+        return False
 
     def visit_model(self, node: ModelRecipeNode, output_key: str) -> bool:
         if output_key in self._possible_keys(node) and output_key in node.state_dict:
             self._filtered_keys(node).add(output_key)
             return True
 
-        return self._key_optional(node, output_key)
+        return False
 
     def visit_merge(self, node: MergeRecipeNode, output_key: str) -> bool:
-        if can_merge := output_key in self._possible_keys(node):
+        can_merge = False
+        if output_key in self._possible_keys(node):
             key_map = node.key_map()
             if output_key not in key_map:
                 return False
 
             for child_name, children in node.all_args().items():
-                child_keys = key_map[output_key].inputs.get(child_name)
-                if not child_keys:
-                    continue
+                child_keys = key_map[output_key].inputs.get(child_name, ())
                 for child_key in child_keys:
                     for child in children:
-                        can_merge = can_merge and child.accept(self, child_key)
+                        child_can_merge = child.accept(self, child_key)
+                        can_merge = can_merge or child_can_merge
 
         if can_merge:
             self._filtered_keys(node).add(output_key)
 
-        return can_merge or self._key_optional(node, output_key)
+        return can_merge
 
     def _possible_keys(self, node: RecipeNode) -> Set[str]:
-        return self.node_to_key_domain[node]
-
-    def _key_optional(self, node: RecipeNode, key: str) -> bool:
-        metadata = self.node_to_metadata_domain[node]
-        if metadata is not None and key in metadata:
-            return metadata[key].optional
-        return True
+        return self.node_to_key_domain.get(node, set())
 
     def _filtered_keys(self, node: RecipeNode) -> Set[str]:
         return self.filtered_node_keys[node]

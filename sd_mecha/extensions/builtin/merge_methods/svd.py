@@ -6,7 +6,7 @@ from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, StateDict, Return
 
 
-@merge_method
+@merge_method(cache_factory=dict)
 def rotate(
     a: Parameter(StateDict[Tensor]),
     b: Parameter(StateDict[Tensor]),
@@ -89,7 +89,7 @@ def rotate(
     return a_neurons.reshape_as(a)
 
 
-@merge_method
+@merge_method(cache_factory=dict)
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
     rank_ratio: Parameter(float) = 0.5,

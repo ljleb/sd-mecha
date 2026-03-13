@@ -180,7 +180,15 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, fn_or_cls: Callable | type, identifier: str, default_merge_space: MergeSpaceSymbol, interface: Optional["MergeMethodInterface"], reuse_outputs: bool):
+    def __init__(
+        self,
+        fn_or_cls: Callable | type,
+        identifier: str,
+        default_merge_space: MergeSpaceSymbol,
+        interface: Optional["MergeMethodInterface"],
+        reuse_outputs: bool,
+        cache_factory: Callable[[], Any],
+    ):
         self.__wrapped__ = fn_or_cls
         self.wrapped_is_class = inspect.isclass(fn_or_cls)
         if self.wrapped_is_class:
@@ -211,6 +219,7 @@ class MergeMethod:
         self.identifier = identifier
         self.has_varkwargs = any(p.kind == p.VAR_KEYWORD for p in self.__f_signature.parameters.values())
         self.reuse_outputs = reuse_outputs
+        self.cache_factory = cache_factory
 
         self.__validate()
 
@@ -254,6 +263,9 @@ class MergeMethod:
         if self.wrapped_is_class:
             return self.__wrapped__()
         return None
+
+    def create_cache(self):
+        return self.cache_factory()
 
     def key_map(self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig) -> KeyMap:
         input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
@@ -654,6 +666,7 @@ def merge_method(
     implements: Optional[str | MergeMethod] = None,
     is_interface: bool = False,
     reuse_outputs: bool = True,
+    cache_factory: Callable[[], Any] = type(None),
 ) -> MergeMethod | Callable[[F], MergeMethod]:
     """
     Decorator to define a custom merge method.
@@ -679,6 +692,8 @@ def merge_method(
             The appropriate candidate implementation will be resolved during recipe node creation.
         reuse_outputs (bool):
             If True, marks this merge method as computationally heavy.
+        cache_factory (Callable[[], Any])
+            Constructor of cache objects this merge method uses. Defaults to `lambda: None`.
 
     Returns:
         A `MergeMethod` object or a decorator returning such an object.
@@ -688,8 +703,8 @@ def merge_method(
         ValueError: register is False, but is_conversion is True or dispatcher is not None.
     """
     if fn is None:
-        return lambda fn: _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs)
-    return _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs)
+        return lambda fn: _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs, cache_factory=cache_factory)
+    return _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs, cache_factory=cache_factory)
 
 
 def _merge_method_impl(
@@ -700,6 +715,7 @@ def _merge_method_impl(
     implements: Optional[str | MergeMethod],
     is_interface: bool,
     reuse_outputs: bool,
+    cache_factory: Callable[[], Any],
 ) -> MergeMethod:
     global _module_state
 
@@ -738,7 +754,7 @@ def _merge_method_impl(
         if is_interface:
             _register_interface(fn, identifier, default_merge_space, module_state_copy)
 
-        fn_object = MergeMethod(fn, identifier, default_merge_space, module_state_copy.interfaces_registry.get(identifier), reuse_outputs)
+        fn_object = MergeMethod(fn, identifier, default_merge_space, module_state_copy.interfaces_registry.get(identifier), reuse_outputs, cache_factory)
         module_state_copy.merge_methods_registry[identifier] = fn_object
 
         if is_conversion:

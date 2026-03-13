@@ -48,7 +48,7 @@ def merge(
     check_mandatory_keys: bool = ...,
     tqdm: type = ...,
     validate_mm_contract: bool = ...,
-    cache: Dict[RecipeNode, dict] = ...,
+    cache: Dict[RecipeNode, Any] = ...,
     reuse_outputs: bool = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
@@ -100,8 +100,7 @@ def merge(
             If True, validates that merge methods return the right amount of outputs indicated by `map_keys`
             and do not read other inputs than those reported by `map_keys`
         cache (optional):
-            Dictionary of caches for each recipe node in `recipe`. Each dict should be empty on the first call.
-            If set, the dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls to merge().
+            Dictionary of caches for any recipe nodes in `recipe`. Items should be created like this: `node: node.create_cache()`.
             This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
         reuse_outputs (optional):
             If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations.
@@ -406,6 +405,7 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
                     logging.warning(f"there are non finite values in key '{key}': {key_metadata}")
 
             output[key] = res
+            return res
         except StateDictKeyError as e:
             if key_metadata.optional or not check_mandatory_keys:
                 logging.debug(f"skipping key {e}")
@@ -486,7 +486,8 @@ class KeyMergeVisitor(RecipeVisitor):
             else:
                 try:
                     key_map = node.key_map()
-                    assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
+                    if self.output_key not in key_map:
+                        raise StateDictKeyError(self.output_key)
                     key_relation = key_map[self.output_key]
 
                     merged_args, merged_kwargs = self.__visit_deeper_first(node, key_relation)
