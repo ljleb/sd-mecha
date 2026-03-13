@@ -1234,12 +1234,17 @@ class PropagatableKeyVisitor(RecipeVisitor):
             return cached
 
         ok = False
-        if output_key in self._possible_keys(node) and output_key in node.value_dict:
-            child = node.value_dict[output_key]
-            if isinstance(child, RecipeNode):
-                ok = child.accept(self, output_key)
-            else:
-                ok = True
+        if output_key in self._possible_keys(node):
+            for candidate_key in (output_key, *node.model_config.aliases().get(output_key, ())):
+                if candidate_key not in node.value_dict:
+                    continue
+                child = node.value_dict[candidate_key]
+                if isinstance(child, RecipeNode):
+                    ok = child.accept(self, output_key)
+                else:
+                    ok = True
+                if ok:
+                    break
 
         if ok:
             self.filtered_node_keys[node].add(output_key)
@@ -1254,10 +1259,10 @@ class PropagatableKeyVisitor(RecipeVisitor):
                 self.filtered_node_keys[node].add(output_key)
             return cached
 
-        ok = (
-            output_key in self._possible_keys(node)
-            and output_key in node.state_dict
-        )
+        ok = False
+        if output_key in self._possible_keys(node):
+            aliases = node.model_config.aliases().get(output_key, ())
+            ok = any(k in node.state_dict for k in (output_key, *aliases))
 
         if ok:
             self.filtered_node_keys[node].add(output_key)
@@ -1348,6 +1353,13 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
     def _possible_keys(self, node: RecipeNode) -> Set[str]:
         return self.node_to_key_domain.get(node, set())
+
+    def _leaf_has_key(self, node: RecipeNode, output_key: str, mapping) -> bool:
+        cfg = getattr(node, "model_config", None)
+        aliases = ()
+        if cfg is not None:
+            aliases = tuple(cfg.aliases().get(output_key, ()))
+        return any(k in mapping for k in (output_key, *aliases))
 
 
 def _fmt_list(items, limit=12) -> str:

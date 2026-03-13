@@ -1,10 +1,11 @@
+import dataclasses
+import inspect
 from collections import OrderedDict
-from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Callable, Dict, Generic, Iterator, Mapping, Optional, Set, Tuple, TypeVar, Union
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class KeyRelation:
     outputs: Tuple[str, ...]
     clauses: Tuple["Clause", ...]
@@ -14,7 +15,7 @@ class KeyRelation:
         yield self.clauses
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class RealizedKeyRelation:
     outputs: Tuple[str, ...]
     inputs: Mapping[str, Tuple[str, ...]]
@@ -25,12 +26,15 @@ class RealizedKeyRelation:
         yield self.inputs
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class Clause:
     by_param: Mapping[str, Tuple[str, ...]]
     meta: Any = None
 
     def __and__(self, other: "Clause") -> "Clause":
+        if not isinstance(other, Clause):
+            return NotImplemented
+
         merged: Dict[str, Tuple[str, ...]] = OrderedDict(self.by_param)
         for p, ks in other.by_param.items():
             if p in merged:
@@ -68,14 +72,54 @@ class Clause:
             return b
         if b is None:
             return a
-        raise ValueError("Cannot combine two clauses that both carry metadata.")
+        return a | b
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ReqExpr:
     clauses: Tuple[Clause, ...]
 
+    def __and__(self, other: object) -> "ReqExpr":
+        if isinstance(other, Clause):
+            other = ReqExpr((other,))
+        if not isinstance(other, ReqExpr):
+            return NotImplemented
+
+        out = []
+        for a in self.clauses:
+            for b in other.clauses:
+                merged: Dict[str, Tuple[str, ...]] = OrderedDict()
+
+                for src in (a.by_param, b.by_param):
+                    for p, ks in src.items():
+                        prev = merged.get(p, ())
+                        merged[p] = prev + tuple(k for k in ks if k not in prev)
+
+                meta = self._merge_meta(a.meta, b.meta)
+
+                out.append(Clause(MappingProxyType(merged), meta=meta))
+        return ReqExpr(tuple(out))
+
+    @staticmethod
+    def _merge_meta(a, b):
+        if a is None:
+            return b
+        if b is None:
+            return a
+        try:
+            return a | b
+        except TypeError as e:
+            raise ValueError(
+                f"Cannot compose clause metadata of types "
+                f"{type(a).__name__} and {type(b).__name__}"
+            ) from e
+
+    def __rand__(self, other: object) -> "ReqExpr":
+        return self & other
+
     def __or__(self, other: object) -> "ReqExpr":
+        if other is None:
+            return self
         if isinstance(other, Clause):
             return ReqExpr((*self.clauses, other))
         if isinstance(other, ReqExpr):
@@ -84,6 +128,103 @@ class ReqExpr:
 
     def __ror__(self, other: object) -> "ReqExpr":
         return self | other
+
+    def __matmul__(self, meta: Any) -> "ReqExpr":
+        return ReqExpr(tuple(clause @ meta for clause in self.clauses))
+
+
+class ClassObject(type):
+    _type_cache = {}
+
+    def __new__(mcls, name, bases, namespace, **kwargs):
+        bad_methods = [
+            n
+            for n, value in namespace.items()
+            if inspect.isfunction(value)
+        ]
+        if bad_methods:
+            names = ", ".join(sorted(bad_methods))
+            raise TypeError(
+                f"{name} is a class object type and cannot define instance methods: {names}"
+            )
+
+        bases = mcls._reduce_bases(bases)
+        return super().__new__(mcls, name, bases, namespace, **kwargs)
+
+    @staticmethod
+    def _reduce_bases(bases):
+        bases = tuple(dict.fromkeys(bases))
+        return tuple(
+            base
+            for base in bases
+            if not any(base is not other and issubclass(other, base) for other in bases)
+        )
+
+    @staticmethod
+    def _find_bound_hook(cls, name: str):
+        for base in cls.__mro__:
+            hook = base.__dict__.get(name)
+            if hook is not None:
+                return hook.__get__(None, cls)
+        return None
+
+    @classmethod
+    def compose_type(mcls, bases):
+        bases = mcls._reduce_bases(bases)
+
+        if len(bases) == 1:
+            return bases[0]
+
+        cached = mcls._type_cache.get(bases)
+        if cached is not None:
+            return cached
+
+        name = "__".join(base.__name__ for base in bases)
+        composed_cls = mcls(name, bases, {})
+        mcls._type_cache[bases] = composed_cls
+        return composed_cls
+
+    def __call__(cls, *args, **kwargs):
+        hook = ClassObject._find_bound_hook(cls, "__call__")
+        if hook is not None:
+            return hook(*args, **kwargs)
+
+        raise TypeError(
+            f"{cls.__name__} is a class object type and should not be instantiated. "
+            f"Use `{cls.__name__}` directly instead as a regular object."
+        )
+
+    def __or__(cls, other):
+        hook = ClassObject._find_bound_hook(cls, "__or__")
+        if hook is not None:
+            return hook(other)
+        return NotImplemented
+
+    def __ror__(cls, other):
+        hook = ClassObject._find_bound_hook(cls, "__ror__")
+        if hook is not None:
+            return hook(other)
+        return NotImplemented
+
+
+class ComposeObject(metaclass=ClassObject):
+    @classmethod
+    def plan_bases(cls):
+        return (cls,)
+
+    @classmethod
+    def __or__(cls: ClassObject, other):
+        if not (isinstance(other, type) and issubclass(other, ComposeObject)):
+            return NotImplemented
+
+        bases = (cls, *((other,) if other != cls else ()))
+        return type(cls).compose_type(bases)
+
+    @classmethod
+    def __ror__(cls, other):
+        if not (isinstance(other, type) and issubclass(other, ComposeObject)):
+            return NotImplemented
+        return other | cls
 
 
 def _norm_one(s: str, *, what: str) -> str:
@@ -144,7 +285,7 @@ class ParamKeysAccessor:
     def __getitem__(self, sel: object) -> Clause:
         keys = _to_tuple(sel, what="input key")
         if not keys:
-            raise ValueError("Empty key selection")
+            return Clause(MappingProxyType({self._p: ()}))
         _ensure_no_dupes(keys, what=f"input keys (param '{self._p}')")
         for k in keys:
             self._b._validate_input_key(self._p, k)
@@ -181,7 +322,7 @@ class AllKeysAccessor:
         self._require_enabled()
         keys = _to_tuple(sel, what="input key")
         if not keys:
-            raise ValueError("Empty key selection")
+            return Clause(MappingProxyType({p: () for p in self._b.params}))
         _ensure_no_dupes(keys, what="input keys (same-across-all-params selection)")
 
         for k in keys:
@@ -253,7 +394,7 @@ class KeyMap(Generic[T]):
             return k in self.n_to_n_map
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ActiveKeyMap(Generic[T]):
     simple_map: Mapping[str, T]
 
