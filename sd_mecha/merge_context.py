@@ -43,6 +43,10 @@ class GetOutputPortsVisitor(RecipeVisitor):
         pass
 
     def visit_merge(self, node: MergeRecipeNode):
+        key_map = self.realized_key_maps.get(node)
+        if key_map is None:
+            return
+
         param_names = node.merge_method.get_param_names().as_dict(len(node.bound_args.args))
         key_map = self.realized_key_maps[node]
 
@@ -83,6 +87,8 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
             res |= input_node.accept(self)
 
         node_active_keys = self._node_active_keys(node)
+        if not node_active_keys:
+            return res
 
         if not node.merge_method.reuse_outputs:
             res[node] = MergeMethodContext({}, node.merge_method.instantiate(), node_active_keys)
@@ -97,11 +103,7 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
         relation_to_ports: Dict[tuple, Tuple[RealizedKeyRelation, Set[Port]]] = {}
         for output_key, parent_ports in node_parent_ports.items():
             relation = key_map[output_key]
-            relation_key = (
-                relation.outputs,
-                tuple((param, tuple(keys)) for param, keys in relation.inputs.items()),
-                id(relation.meta),
-            )
+            relation_key = relation.outputs
 
             existing = relation_to_ports.get(relation_key)
             if existing is None:
@@ -115,10 +117,17 @@ class CreateMergeMethodContextVisitor(RecipeVisitor):
             if not needs_ref:
                 continue
 
-            ref = MergeMethodOutputRef(set(all_ports), None, lock_factory())
+            lock = lock_factory()
             for sibling_key in relation.outputs:
-                if sibling_key in node_active_keys:
-                    output_refs[sibling_key] = ref
+                if sibling_key not in node_active_keys:
+                    continue
+
+                sibling_ports = set(node_parent_ports.get(sibling_key, ()))
+                output_refs[sibling_key] = MergeMethodOutputRef(
+                    remaining_ports=sibling_ports,
+                    cache=None,
+                    lock=lock,
+                )
 
         res[node] = MergeMethodContext(
             output_refs if self.enable_outputs_reuse else {},

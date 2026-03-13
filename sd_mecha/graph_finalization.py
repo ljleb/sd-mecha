@@ -161,25 +161,23 @@ class RecipeGraph:
                     cand = candidates[t][idx]
 
                     if solved.identifier == "structural":
-                        metadata = cand.common_keys
-                        component_metadata[idx] = metadata
-                        component_keys[idx] = set(metadata.keys()) if metadata is not None else set()
+                        component_metadata[idx] = cand.possible_keys
+                        component_keys[idx] = set(cand.possible_keys.keys())
                     else:
                         component_metadata[idx] = solved.keys()
                         stats = cand.stats or {}
                         match = stats.get(solved.identifier)
-                        component_keys[idx] = (
-                            match.intersection.copy()
-                            if match is not None
-                            else set(solved.keys().keys())
-                        )
+                        if match is not None:
+                            component_keys[idx] = set(match.intersection) | set(cand.possible_keys)
+                        else:
+                            component_keys[idx] = set(cand.possible_keys) or set(solved.keys().keys())
 
             node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
             node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]] = {}
 
             for node, idxs in finalized_node_to_indices.items():
                 idxs = set(idxs)
-                node_to_key_domain[node] = _intersect_key_sets(component_keys[idx] for idx in idxs)
+                node_to_key_domain[node] = _union_key_sets(component_keys[idx] for idx in idxs)
                 node_to_metadata_domain[node] = _merge_component_metadata(component_metadata[idx] for idx in idxs)
 
             keys_visitor = PropagatableKeyVisitor(node_to_key_domain, node_to_metadata_domain)
@@ -484,12 +482,14 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
     stats: Optional[Dict[str, "ConfigMatchStats"]] = None
     requires_known_config: bool = False
     explicit_ids: Set[str] = dataclasses.field(default_factory=set)
+    possible_keys: Dict[str, TensorMetadata] = dataclasses.field(default_factory=dict)
     common_keys: Optional[Dict[str, TensorMetadata]] = None
 
     def clone(self) -> "ModelConfigCandidates":
         out = ModelConfigCandidates()
         out.requires_known_config = self.requires_known_config
         out.explicit_ids = set(self.explicit_ids)
+        out.possible_keys = dict(self.possible_keys)
         out.common_keys = None if self.common_keys is None else dict(self.common_keys)
         if self.stats is None:
             out.stats = None
@@ -556,6 +556,7 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
 
     def _update_with_metadata(self, metadata: Mapping[str, TensorMetadata], hint: Optional[ModelConfig]) -> None:
         self._update_common_keys(metadata)
+        self._update_possible_keys(metadata)
 
         if hint is not None:
             self.requires_known_config = True
@@ -584,7 +585,8 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
             if self.stats is None:
                 self.stats = {hint.identifier: cfg_stat}
             else:
-                prev = self.stats.get(hint.identifier, ConfigMatchStats(set(hint.keys())))
+                hint_keys = set(hint.keys())
+                prev = self.stats.get(hint.identifier, ConfigMatchStats(hint_keys))
                 self.stats[hint.identifier] = prev | cfg_stat
 
     def _update_common_keys(self, metadata: Mapping[str, TensorMetadata]) -> None:
@@ -597,12 +599,21 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
             m2 = metadata.get(k)
             if m2 is None:
                 continue
-            out[k] = m1 if _meta_score(m1) < _meta_score(m2) else m2
+            out[k] = m1 if _meta_cost(m1) < _meta_cost(m2) else m2
         self.common_keys = out
+
+    def _update_possible_keys(self, metadata: Mapping[str, TensorMetadata]) -> None:
+        for k, m2 in metadata.items():
+            m1 = self.possible_keys.get(k)
+            if m1 is None:
+                self.possible_keys[k] = m2
+            else:
+                self.possible_keys[k] = _union_meta(m1, m2)
 
     def _constrain_to_id(self, config: ModelConfig, *, reason: str) -> None:
         if self.stats is None:
-            self.stats = {config.identifier: ConfigMatchStats(set(config.keys()))}
+            keys = set(config.keys())
+            self.stats = {config.identifier: ConfigMatchStats(keys)}
         else:
             common_ids = set(self.stats.keys()).intersection({config.identifier})
             if not common_ids and self.requires_known_config:
@@ -958,7 +969,7 @@ class ConfigMatchStats:
         )
 
 
-def _meta_score(m: TensorMetadata) -> int:
+def _meta_cost(m: TensorMetadata) -> int:
     return int(m.shape is None) + int(m.dtype is None)
 
 
@@ -1114,14 +1125,10 @@ def check_model_config(
             )
 
 
-def _intersect_key_sets(key_sets: Iterable[Set[str]]) -> Set[str]:
-    key_sets = list(key_sets)
-    if not key_sets:
-        return set()
-
-    out = set(key_sets[0])
-    for ks in key_sets[1:]:
-        out.intersection_update(ks)
+def _union_key_sets(key_sets: Iterable[Set[str]]) -> Set[str]:
+    out = set()
+    for ks in key_sets:
+        out.update(ks)
     return out
 
 
@@ -1143,20 +1150,28 @@ def _merge_component_metadata(
             cand = d[k]
             # Keep the less informative / more conservative metadata.
             # This matches the spirit of ModelConfigCandidates._update_common_keys().
-            best = KeyMetadata(
-                best.shape if cand.shape == best.shape else None,
-                best.dtype if cand.dtype == best.dtype else None,
-                [a for a in getattr(best, "aliases", ()) if a in set(getattr(cand, "aliases", ()))],
-                getattr(best, "optional", True) and getattr(cand, "optional", True),
-            )
+            best = _intersect_meta(best, cand)
         out[k] = best
 
     return out
 
 
-import dataclasses
-from collections import defaultdict
-from typing import Dict, Optional, Set, Tuple
+def _intersect_meta(a, b):
+    return KeyMetadata(
+        a.shape if b.shape == a.shape else None,
+        a.dtype if b.dtype == a.dtype else None,
+        [a for a in getattr(a, "aliases", ()) if a in set(getattr(b, "aliases", ()))],
+        getattr(a, "optional", True) and getattr(b, "optional", True),
+    )
+
+
+def _union_meta(a, b):
+    return TensorMetadata(
+        b.shape if a.shape is None else a.shape,
+        b.dtype if a.dtype is None else a.dtype,
+        # [a for a in getattr(a, "aliases", ()) if a not in getattr(b, "aliases", ())] + getattr(b, "aliases", []),
+        # getattr(a, "optional", True) or getattr(b, "optional", True),
+    )
 
 
 @dataclasses.dataclass

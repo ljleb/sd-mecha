@@ -11,9 +11,11 @@ T = TypeVar("T")
 @merge_method(reuse_outputs=False)
 class fallback:
     @staticmethod
-    def key_map(b):
+    def map_keys(b):
         for key in b.keys():
-            b[key] = b.a.keys[key] | b.default.keys[key]
+            a_inputs = b.a.keys[key]
+            default_inputs = b.default.keys[key]
+            b[key] = a_inputs & default_inputs | a_inputs | default_inputs
 
     def __call__(
         self,
@@ -22,10 +24,15 @@ class fallback:
         **kwargs,
     ) -> Return(T):
         (key,), inputs = kwargs["key_relation"]
-        if "a" in inputs:
-            return a[key]
-        else:  # "default" in inputs
-            return default[key]
+        for param in ("a", "default"):
+            if param not in inputs:
+                continue
+            try:
+                return locals()[param][key]
+            except StateDictKeyError:
+                continue
+
+        raise StateDictKeyError(key)
 
 
 @merge_method(reuse_outputs=False)

@@ -103,6 +103,7 @@ def define_conversions(lyco_config, lyco_interfaces):
     class BaseToLora(BaseToLycoris):
         @staticmethod
         def get_output_keys(base_key: str):
+            nonlocal base_config
             keys = lyco_config.to_lycoris_keys(base_key, ("lora",))
             if not keys:
                 return ()
@@ -121,7 +122,7 @@ def define_conversions(lyco_config, lyco_interfaces):
             base_value = base[base_key]
             rank_value = rank[base_key]
             original_shape = base_value.shape
-            shape_vh = torch.Size((rank_value, *original_shape[1:]))
+            shape_vh = torch.Size((min(rank_value, original_shape[0]), *original_shape[1:]))
             shape_2d = torch.Size((original_shape[0], original_shape[1:].numel()))
 
             svd_driver = "gesvd" if base_value.is_cuda else None
@@ -283,7 +284,7 @@ class LycorisModelConfig(LazyModelConfigBase):
         return ModelConfigImpl(identifier, components)
 
     def to_lycoris_keys(self, key: StateDictKey, algos: Iterable[str] = None) -> Mapping[StateDictKey, KeyMetadata]:
-        return _to_lycoris_keys({key: dataclasses.replace(self.base_config.keys()[key], shape=None)}, algos if algos is not None else self.algorithms, self.prefix)
+        return _to_lycoris_keys({key: self.base_config.keys()[key]}, algos if algos is not None else self.algorithms, self.prefix)
 
 
 def _to_lycoris_keys(
@@ -295,7 +296,7 @@ def _to_lycoris_keys(
 
     for key, meta in base_keys.items():
         for algorithm in algorithms:
-            if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True):
+            if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True) or meta.shape is not None and len(meta.shape) < 2:
                 continue
 
             key = key.split('.')
