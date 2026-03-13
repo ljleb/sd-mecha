@@ -87,14 +87,8 @@ class StateDictKeyHelper:
         self.state_dict = state_dict
         self.key_prefix = key_prefix
 
-    def get_tensor(self, name, raise_on_missing=True):
-        try:
-            return self.state_dict[f"{self.key_prefix}.{name}"]
-        except StateDictKeyError as e:
-            if raise_on_missing:
-                raise
-            else:
-                return None
+    def get_tensor(self, lyco_suffix):
+        return self.state_dict[f"{self.key_prefix}.{lyco_suffix}"]
 
 
 def rebuild_tucker(t, wa, wb):
@@ -232,27 +226,27 @@ class LoraAlgorithm(LycorisAlgorithm):
             scale, down_weight = cls.get_scale_down(state_dict)
             delta = cls.build(state_dict, down_weight)
 
-            delta *= scale
+            delta = delta * scale
             delta = delta.reshape(target_shape)
             return delta
 
         @staticmethod
         def get_scale_down(sd: StateDictKeyHelper) -> Tuple[torch.Tensor | float, torch.Tensor]:
-            down = sd.get_tensor("lora_down.weight")
+            down = sd.get_tensor(LoraAlgorithm.suffixes[2])
             alpha = 1
             return alpha, down
 
         @staticmethod
         def build(sd: StateDictKeyHelper, down: torch.Tensor) -> torch.Tensor:
-            up = sd.get_tensor("lora_up.weight")
+            up = sd.get_tensor(LoraAlgorithm.suffixes[0])
             delta = up.view(up.size(0), -1) @ down.view(down.size(0), -1)
             return delta
 
     class compose_mid(compose):
         @staticmethod
         def build(sd: StateDictKeyHelper, down: torch.Tensor) -> torch.Tensor:
-            mid = sd.get_tensor("lora_mid.weight")
-            up = sd.get_tensor("lora_up.weight")
+            mid = sd.get_tensor(LoraAlgorithm.suffixes[1])
+            up = sd.get_tensor(LoraAlgorithm.suffixes[0])
             wa = up.view(up.size(0), -1).transpose(0, 1)
             wb = down.view(down.size(0), -1)
             delta = rebuild_tucker(mid, wa, wb)
@@ -261,8 +255,8 @@ class LoraAlgorithm(LycorisAlgorithm):
     class compose_alpha(compose):
         @staticmethod
         def get_scale_down(sd: StateDictKeyHelper) -> Tuple[torch.Tensor | float, torch.Tensor]:
-            alpha = sd.get_tensor("alpha")
-            down = sd.get_tensor("lora_down.weight")
+            alpha = sd.get_tensor(LoraAlgorithm.suffixes[3])
+            down = sd.get_tensor(LoraAlgorithm.suffixes[2])
             return alpha / down.size(0), down
 
     def define_extract_method(self, lyco_id: str):
@@ -385,12 +379,12 @@ class LokrAlgorithm(LycorisAlgorithm):
 
         @staticmethod
         def get_w1(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w1 = sd.get_tensor("lokr_w1")
+            w1 = sd.get_tensor(LokrAlgorithm.suffixes[0])
             return w1, None
 
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2 = sd.get_tensor("lokr_w2")
+            w2 = sd.get_tensor(LokrAlgorithm.suffixes[3])
             return w2, None
 
         @staticmethod
@@ -400,30 +394,30 @@ class LokrAlgorithm(LycorisAlgorithm):
     class compose_w1_factorized(compose):
         @staticmethod
         def get_w1(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w1a = sd.get_tensor("lokr_w1_a")
-            w1b = sd.get_tensor("lokr_w1_b")
+            w1b = sd.get_tensor(LokrAlgorithm.suffixes[2])
+            w1a = sd.get_tensor(LokrAlgorithm.suffixes[1])
             return w1a @ w1b, w1b.shape[0]
 
     class compose_w2_factorized(compose):
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2a = sd.get_tensor("lokr_w2_a")
-            w2b = sd.get_tensor("lokr_w2_b")
+            w2b = sd.get_tensor(LokrAlgorithm.suffixes[5])
+            w2a = sd.get_tensor(LokrAlgorithm.suffixes[4])
             w2_b_flat = w2b.flatten(1) if w2b.dim() > 1 else w2b
             return w2a @ w2_b_flat, w2b.shape[0]
 
     class compose_w2_tucker(compose):
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2a = sd.get_tensor("lokr_w2_a")
-            w2b = sd.get_tensor("lokr_w2_b")
-            t2 = sd.get_tensor("lokr_t2")
+            t2 = sd.get_tensor(LokrAlgorithm.suffixes[6])
+            w2b = sd.get_tensor(LokrAlgorithm.suffixes[5])
+            w2a = sd.get_tensor(LokrAlgorithm.suffixes[4])
             return rebuild_tucker(t2, w2a, w2b), w2b.shape[0]
 
     class compose_alpha(compose):
         @staticmethod
         def get_scale(sd: StateDictKeyHelper, lora_dim: int | None) -> torch.Tensor | float:
-            alpha = sd.get_tensor("alpha")
+            alpha = sd.get_tensor(LokrAlgorithm.suffixes[7])
             if lora_dim is not None and alpha.isfinite():
                 return alpha / lora_dim
             return 1
