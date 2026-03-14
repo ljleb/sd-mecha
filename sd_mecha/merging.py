@@ -331,7 +331,7 @@ def _get_output_dict(
         logging.info(f"Saving to {output}")
 
         try:
-            serialized_recipe = serialization.serialize(recipe)
+            serialized_recipe = serialization.serialize(recipe, finalize=False)  # already finalized
         except TypeError:
             logging.warning("The recipe graph could not be serialized. The output state dict will not contain the recipe.")
             serialized_recipe = None

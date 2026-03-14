@@ -140,7 +140,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
     return results[-1]
 
 
-def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None) -> str:
+def serialize(recipe: RecipeNode, *, finalize: bool = True, output: Optional[pathlib.Path | str] = None) -> str:
     """
     Convert a recipe graph into a string that captures its merge instructions.
 
@@ -149,6 +149,8 @@ def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None
     Args:
         recipe:
             A `RecipeNode` describing the merge.
+        finalize:
+            Whether to finalize the recipe before serializing.
         output:
             Path to the output file to save.
 
@@ -157,9 +159,13 @@ def serialize(recipe: RecipeNode, *, output: Optional[pathlib.Path | str] = None
     """
     from . import open_graph
     serializer = SerializerVisitor()
-    with open_graph(recipe) as graph:
-        root = graph.finalize(model_config_preference=("singleton-mecha",)).root
-        root.accept(serializer)
+    if finalize:
+        with open_graph(recipe) as graph:
+            root = graph.finalize(model_config_preference=("singleton-mecha",)).root
+    else:
+        root = recipe
+
+    root.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
     serialized = "\n".join([version_header] + serializer.instructions)
 
