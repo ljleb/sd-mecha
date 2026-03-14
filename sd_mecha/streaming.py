@@ -181,14 +181,17 @@ class InSafetensorsDict(SafetensorsMapping):
 class StateDictKeyError(KeyError):
     """
     Exception raised when a requested key is missing from a streamed or in-memory state dict.
-
-    It behaves like a normal `KeyError`, but is specialized for reporting missing keys
-    within streaming merges or recipes.
     """
+    def __init__(self, key: str):
+        super().__init__(key)
 
 
 class NonFiniteStateDictKeyError(StateDictKeyError):
-    pass
+    """
+    Exception raised when a requested key contains non-finite values.
+    """
+    def __init__(self, key):
+        super().__init__(f"key '{key}' contains non-finite values")
 
 
 @dataclasses.dataclass

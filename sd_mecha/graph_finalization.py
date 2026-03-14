@@ -742,7 +742,7 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
 
     def finalize(self) -> MergeSpace:
         if self.allowed is None:
-            all_spaces = tuple(sorted(ms.identifier for ms in merge_spaces.get_all()))
+            all_spaces = tuple(ms.identifier for ms in merge_spaces.get_all())
             raise TypeError(
                 "Merge-space inference failed: no constraints were provided.\n"
                 f"  Known merge spaces: {all_spaces}\n"

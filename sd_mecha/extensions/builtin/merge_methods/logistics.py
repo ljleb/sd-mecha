@@ -132,15 +132,12 @@ def stack(
 @merge_method(reuse_outputs=False)
 def omit_non_finite(
     a: Parameter(StateDict[Tensor]),
-    omit_mandatory: Parameter(bool) = False,
-    omit_optional: Parameter(bool) = True,
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
     v = a[key]
-    optional = a.model_config.keys()[key].optional
-    check_finite = omit_mandatory and not optional or omit_optional and optional
-    if check_finite and not v.isfinite().all():
+
+    if not v.isfinite().all():
         raise NonFiniteStateDictKeyError(key)
     else:
         return v
