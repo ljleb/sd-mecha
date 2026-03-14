@@ -284,7 +284,8 @@ def _get_output_dict(
     else:
         if output is None:
             output = {}
-        output["__metadata__"] = {"mecha_recipe": serialized_recipe}
+        if serialized_recipe is not None:
+            output["__metadata__"] = {"mecha_recipe": serialized_recipe}
         yield output
 
 
