@@ -24,7 +24,7 @@ class fallback:
         default: Parameter(StateDict[T]),
         **kwargs,
     ) -> Return(T):
-        (key,), _, relation = kwargs["key_relation"]
+        (key,), _ = relation = kwargs["key_relation"]
         params = relation.meta
         for param in params:
             try:
