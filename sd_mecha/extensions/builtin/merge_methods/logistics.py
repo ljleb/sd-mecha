@@ -2,6 +2,7 @@ import torch
 from torch import Tensor
 from typing import TypeVar
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from sd_mecha.keys_map import KeyMapBuilder
 from sd_mecha.streaming import StateDictKeyError, NonFiniteStateDictKeyError
 
 
@@ -11,10 +12,10 @@ T = TypeVar("T")
 @merge_method(reuse_outputs=False)
 class fallback:
     @staticmethod
-    def map_keys(b):
+    def map_keys(b: KeyMapBuilder):
         for key in b.keys():
-            a_inputs = b.a.keys[key]
-            default_inputs = b.default.keys[key]
+            a_inputs = b.a.keys[key] @ dict.fromkeys(["a"])
+            default_inputs = b.default.keys[key] @ dict.fromkeys(["default"])
             b[key] = a_inputs & default_inputs | a_inputs | default_inputs
 
     def __call__(
@@ -23,10 +24,9 @@ class fallback:
         default: Parameter(StateDict[T]),
         **kwargs,
     ) -> Return(T):
-        (key,), inputs = kwargs["key_relation"]
-        for param in ("a", "default"):
-            if param not in inputs:
-                continue
+        (key,), _, relation = kwargs["key_relation"]
+        params = relation.meta
+        for param in params:
             try:
                 return locals()[param][key]
             except StateDictKeyError:

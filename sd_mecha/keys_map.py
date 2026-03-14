@@ -438,9 +438,7 @@ class KeyMapBuilder:
         self.input_configs: Dict[str, Any] = OrderedDict(input_configs)
         self.output_config: Any = output_config
         self.params: Tuple[str, ...] = tuple(self.input_configs.keys())
-
-        for p in self.params:
-            setattr(self, p, ParamProxy(self, p))
+        self.param_proxies = {}
 
         self.out = OutputProxy(self)
 
@@ -454,6 +452,19 @@ class KeyMapBuilder:
 
         self._relations: Dict[Tuple[str, ...], KeyRelation] = {}
         self._out_key_owner: Dict[str, Tuple[str, ...]] = {}
+
+    def __getattr__(self, param):
+        if param in self.input_configs:
+            if param not in self.param_proxies:
+                self.param_proxies[param] = ParamProxy(self, param)
+            return self.param_proxies[param]
+
+        available = ", ".join(repr(p) for p in self.params)
+        raise AttributeError(
+            f"{type(self).__name__} has no parameter or attribute {param!r}. "
+            f"This may indicate an invalid input parameter name. "
+            f"Available parameters: {available}"
+        )
 
     def _compute_all_inputs_share_config(self) -> bool:
         cfgs = [self.input_configs[p] for p in self.params]
