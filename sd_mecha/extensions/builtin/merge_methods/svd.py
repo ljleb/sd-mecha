@@ -4,9 +4,10 @@ import torch
 from typing import Optional, Tuple
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, StateDict, Return
+from collections import defaultdict
 
 
-@merge_method(cache_factory=dict)
+@merge_method(cache_factory=lambda: defaultdict(dict))
 def rotate(
     a: Parameter(StateDict[Tensor]),
     b: Parameter(StateDict[Tensor]),
@@ -51,42 +52,35 @@ def rotate(
     else:
         shape_2d = a.shape[:1].numel(), a.shape[1:].numel()
 
-    cache = kwargs.get("cache")
-    if cache is not None:
-        key = kwargs["key"]
-        if key not in cache:
-            cache[key] = {}
-        cache = cache[key]
+    if (cache := kwargs.get("cache")) is not None:
+        cache = cache[kwargs["key"]]
 
-    if cache is not None:
         # if centralization is different from the cached value, invalidate cache
-        if not math.isclose(cache.get("centralization", centralization), centralization):
+        if not math.isclose(cache.setdefault("centralization", centralization), centralization):
             cache.clear()
-        else:
-            cache["centralization"] = centralization
 
-    a_neurons = a.reshape(*shape_2d)
-    b_neurons = b.reshape(*shape_2d)
-    a_centroid = a_neurons.mean(0) * centralization
-    b_centroid = b_neurons.mean(0) * centralization
-    a_neurons -= a_centroid
-    b_neurons -= b_centroid
+    a_2d = a.reshape(*shape_2d)
+    b_2d = b.reshape(*shape_2d)
+    a_mean = a_2d.mean(0) * centralization
+    b_mean = b_2d.mean(0) * centralization
+    a_2d -= a_mean
+    b_2d -= b_mean
 
     alignment_is_float = not math.isclose(alignment, round(alignment))
 
     if cache is not None and "transform" in cache:
         transform = cache["transform"].to(device=a.device, dtype=a.dtype)
     else:
-        transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
+        transform = orthogonal_procrustes(a_2d, b_2d, cancel_reflection=alignment_is_float)
         if cache is not None:
             cache["transform"] = transform.to(device="cpu", dtype=torch.float16)
 
     if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
-        a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
+        a_2d = torch.lerp(a_2d, transform(b_2d, -1, cache, key), alpha)
 
-    a_neurons = transform(a_neurons, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
-    a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
-    return a_neurons.reshape_as(a)
+    a_2d = transform(a_2d, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
+    a_2d += torch.lerp(a_mean, b_mean, alignment)
+    return a_2d.reshape_as(a)
 
 
 @merge_method(cache_factory=dict)
