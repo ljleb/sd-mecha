@@ -92,7 +92,7 @@ def rotate(
 @merge_method(cache_factory=dict)
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
-    rank_ratio: Parameter(float) = 0.5,
+    rank: Parameter(int) = 8,
     use_approximate_basis: Parameter(bool) = True,
     approximate_basis_iters: Parameter(int) = 2,
     approximate_basis_seed: Parameter(int) = None,
@@ -110,7 +110,7 @@ def truncate_rank(
 
     a_2d = a.flatten(start_dim=1)
     max_rank = min(a_2d.shape)
-    target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
+    target_rank = min(max(round(rank), 0), max_rank)
     if target_rank == max_rank:
         return a
     if target_rank == 0:
@@ -144,6 +144,17 @@ def truncate_rank(
                 cache.pop("seed", None)
 
     return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
+
+
+@merge_method(reuse_outputs=False)
+def rank_ratio(
+    a: Parameter(Tensor),
+    ratio: Parameter(float) = 0.5,
+) -> Return(int):
+    shape_2d = torch.Size((a.shape[:1].numel(), a.shape[1:].numel()))
+    max_rank = min(shape_2d)
+    target_rank = min(max(round(max_rank * ratio), 0), max_rank)
+    return target_rank
 
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
