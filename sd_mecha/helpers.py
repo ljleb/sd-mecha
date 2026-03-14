@@ -97,7 +97,7 @@ class Defaults:
     strict_merge_space: MergeSpace | str = ...,
     strict_mandatory_keys: bool = ...,
     check_extra_keys: bool = ...,
-    check_finite: bool = ...,
+    check_finite_output: bool = ...,
     omit_non_finite_inputs: bool = ...,
     memoize_intermediates: bool = ...,
     validate_mm_contract: bool = ...,
@@ -130,7 +130,7 @@ class Defaults:
         strict_merge_space: MergeSpace | str = ...,
         strict_mandatory_keys: bool = ...,
         check_extra_keys: bool = ...,
-        check_finite: bool = ...,
+        check_finite_output: bool = ...,
         omit_non_finite_inputs: bool = ...,
         memoize_intermediates: bool = ...,
         validate_mm_contract: bool = ...,
@@ -161,8 +161,8 @@ class Defaults:
             strict_mandatory_keys = self.strict_mandatory_keys
         if check_extra_keys is ...:
             check_extra_keys = self.check_extra_keys
-        if check_finite is ...:
-            check_finite = self.check_finite
+        if check_finite_output is ...:
+            check_finite_output = self.check_finite_output
         if omit_non_finite_inputs is ...:
             omit_non_finite_inputs = self.omit_non_finite_inputs
         if memoize_intermediates is ...:
@@ -187,7 +187,7 @@ class Defaults:
             strict_merge_space=strict_merge_space,
             strict_mandatory_keys=strict_mandatory_keys,
             check_extra_keys=check_extra_keys,
-            check_finite=check_finite,
+            check_finite_output=check_finite_output,
             omit_non_finite_inputs=omit_non_finite_inputs,
             memoize_intermediates=memoize_intermediates,
             validate_mm_contract=validate_mm_contract,

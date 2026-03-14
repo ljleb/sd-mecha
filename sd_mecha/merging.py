@@ -44,7 +44,7 @@ def merge(
     strict_merge_space: MergeSpace | str = ...,
     strict_mandatory_keys: bool = ...,
     check_extra_keys: bool = ...,
-    check_finite: bool = ...,
+    check_finite_output: bool = ...,
     omit_non_finite_inputs: bool = ...,
     memoize_intermediates: bool = ...,
     validate_mm_contract: bool = ...,
@@ -84,7 +84,7 @@ def merge(
             If True and an input model is missing non-optional keys, raises RuntimeError. Defaults to False.
         check_extra_keys (optional):
             If True, warns about unrecognized keys from the input models. Defaults to True.
-        check_finite (optional):
+        check_finite_output (optional):
             If True, warns if any non-finite values appear in the output model. Defaults to True.
         omit_non_finite_inputs (optional):
             If True, automatically discards input keys containing non-finite values. Defaults to True.
@@ -130,10 +130,10 @@ def merge(
         strict_mandatory_keys = False
     if check_extra_keys is ...:
         check_extra_keys = True
-    if check_finite is ...:
-        check_finite = True
+    if check_finite_output is ...:
+        check_finite_output = True
     if omit_non_finite_inputs is ...:
-        omit_non_finite_inputs = False
+        omit_non_finite_inputs = True
     if memoize_intermediates is ...:
         memoize_intermediates = True
     if validate_mm_contract is ...:
@@ -216,7 +216,7 @@ def merge(
             futures = []
             for key, key_metadata in graph_metadata.items():
                 fn = recipe.accept
-                fn = _track_output(fn, output_dict, key, key_metadata, check_finite, strict_mandatory_keys)
+                fn = _track_output(fn, output_dict, key, key_metadata, check_finite_output, strict_mandatory_keys)
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 merge_visitor = KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache, realized_key_maps)
