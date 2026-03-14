@@ -1,5 +1,7 @@
 import abc
 import dataclasses
+from collections import defaultdict
+
 import torch
 from typing import ClassVar, Iterable, Mapping, Dict, Tuple
 from sd_mecha.extensions import model_configs
@@ -11,6 +13,7 @@ from sd_mecha.extensions.model_configs import (
 )
 from sd_mecha.streaming import StateDictKeyError
 from sd_mecha.keys_map import KeyMapBuilder, ComposeObject
+from .merge_methods.svd import svd_lowrank
 
 
 def _register_all_lycoris_configs():
@@ -262,8 +265,11 @@ class LoraAlgorithm(LycorisAlgorithm):
     def define_extract_method(self, lyco_id: str):
         @merge_method(identifier=f"extract_{lyco_id}_lora", is_interface=True)
         def extract_lora(
-            base: Parameter(StateDict[torch.Tensor], "delta"),
-            rank: Parameter(StateDict[int]) = 8,
+            base: Parameter(torch.Tensor, "delta"),
+            rank: Parameter(int) = 8,
+            use_approximate_basis: Parameter(bool) = True,
+            approximate_basis_iters: Parameter(int) = 2,
+            approximate_basis_seed: Parameter(int) = None,
         ) -> Return(StateDict[torch.Tensor], "weight"):
             ...
         return extract_lora
@@ -276,6 +282,7 @@ class LoraAlgorithm(LycorisAlgorithm):
         @merge_method(
             identifier=f"extract_{algo.name}_'{lyco_config_id}'",
             implements=lyco_interface,
+            cache_factory=lambda: defaultdict(dict),
         )
         class BaseToLora:
             @classmethod
@@ -294,29 +301,56 @@ class LoraAlgorithm(LycorisAlgorithm):
 
             def __call__(
                 self,
-                base: Parameter(StateDict[torch.Tensor], "delta", base_config_id),
-                rank: Parameter(StateDict[int], model_config=base_config_id),
+                base: Parameter(torch.Tensor, "delta", base_config_id),
+                rank: Parameter(int, "param", base_config_id),
+                use_approximate_basis: Parameter(bool, "param", base_config_id),
+                approximate_basis_iters: Parameter(int, "param", base_config_id),
+                approximate_basis_seed: Parameter(int, "param", base_config_id),
                 **kwargs,
             ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
-                (up_key, down_key, alpha_key), input_keys = kwargs["key_relation"]
-                base_key = input_keys["base"][0]
+                (up_key, down_key, alpha_key) = kwargs["key_relation"].outputs
 
-                base_value = base[base_key]
-                rank_value = rank[base_key]
-                original_shape = base_value.shape
-                shape_vh = torch.Size((min(rank_value, original_shape[0]), *original_shape[1:]))
-                shape_2d = torch.Size((original_shape[0], original_shape[1:].numel()))
+                original_shape = base.shape
+                shape_vh = torch.Size((min(rank, original_shape[0]), *original_shape[1:]))
+                shape_2d = torch.Size((original_shape[:1].numel(), original_shape[1:].numel()))
 
-                svd_driver = "gesvd" if base_value.is_cuda else None
-                u, s, vh = torch.linalg.svd(base_value.reshape(shape_2d), full_matrices=False, driver=svd_driver)
-                s = s[..., :rank_value].sqrt()
-                u = u[..., :rank_value] * s.unsqueeze(-2)
-                vh = s.unsqueeze(-1) * vh[..., :rank_value, :]
+                if (cache := kwargs["cache"]) is not None:
+                    cache = cache[kwargs["key"]]
+
+                if (
+                    cache is not None and
+                    "s" in cache and cache["s"].numel() >= rank and
+                    cache.get("iters", approximate_basis_iters) == approximate_basis_iters and
+                    cache.get("seed", approximate_basis_seed) == approximate_basis_seed
+                ):
+                    u = cache["u"][..., :rank].to(base)
+                    s = cache["s"][..., :rank].to(base)
+                    vh = cache["vh"][..., :rank, :].to(base)
+                else:
+                    svd_driver = "gesvda" if base.is_cuda else None
+                    if use_approximate_basis:
+                        u, s, vh = svd_lowrank(base.reshape(shape_2d), rank=rank, iters=approximate_basis_iters, seed=approximate_basis_seed, driver=svd_driver)
+                    else:
+                        u, s, vh = torch.linalg.svd(base.reshape(shape_2d), full_matrices=False, driver=svd_driver)
+                    if cache is not None:
+                        cache["u"] = u.to(device="cpu", dtype=torch.float16)
+                        cache["s"] = s.to(device="cpu", dtype=torch.float16)
+                        cache["vh"] = vh.to(device="cpu", dtype=torch.float16)
+                        if use_approximate_basis:
+                            cache["iters"] = approximate_basis_iters
+                            cache["seed"] = approximate_basis_seed
+                        else:
+                            cache.pop("iters", None)
+                            cache.pop("seed", None)
+
+                s = s[..., :rank].sqrt()
+                u = u[..., :rank] * s.unsqueeze(-2)
+                vh = s.unsqueeze(-1) * vh[..., :rank, :]
 
                 return {
                     up_key: u,
                     down_key: vh.reshape(shape_vh),
-                    alpha_key: torch.tensor(rank_value, device=base_value.device, dtype=base_value.dtype),
+                    alpha_key: torch.tensor(rank, device=base.device, dtype=base.dtype),
                 }
 
 
@@ -425,8 +459,8 @@ class LokrAlgorithm(LycorisAlgorithm):
     def define_extract_method(self, lyco_id: str):
         @merge_method(identifier=f"extract_{lyco_id}_lokr", is_interface=True)
         def extract_lokr(
-            base: Parameter(StateDict[torch.Tensor], "delta"),
-            kronecker_ratio: Parameter(StateDict[float]) = 0.5,
+            base: Parameter(torch.Tensor, "delta"),
+            kronecker_ratio: Parameter(float) = 0.5,
         ) -> Return(StateDict[torch.Tensor], "weight"):
             ...
         return extract_lokr
@@ -457,26 +491,26 @@ class LokrAlgorithm(LycorisAlgorithm):
 
             def __call__(
                 self,
-                base: Parameter(StateDict[torch.Tensor], "delta", base_config_id),
-                kronecker_ratio: Parameter(StateDict[float], model_config=base_config_id),
+                base: Parameter(torch.Tensor, "delta", base_config_id),
+                kronecker_ratio: Parameter(float, model_config=base_config_id),
                 **kwargs,
             ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
-                (w1_key, w2_key), input_keys = kwargs["key_relation"]
-                base_key = input_keys["base"][0]
+                w1_key, w2_key = kwargs["key_relation"].outputs
 
-                base_value = base[base_key]
-                kronecker_ratio_value = kronecker_ratio[base_key]
-                shape_original = base_value.shape
-                m1, m2, n1, n2 = kron_dims_from_ratio(shape_original, kronecker_ratio_value)
+                shape_original = base.shape
+                m1, m2, n1, n2 = kron_dims_from_ratio(shape_original, kronecker_ratio)
                 shape_w1 = torch.Size((m1, n1))
                 shape_w2 = torch.Size((m2, n2, *shape_original[2:]))
                 p2 = shape_original[2:].numel()
 
-                value_2d = base_value.reshape(m1, m2, n1, n2 * p2).permute(0, 2, 1, 3).reshape(
-                    shape_w1.numel(), shape_w2.numel()
+                value_2d = (
+                    base
+                    .reshape(m1, m2, n1, n2 * p2)
+                    .permute(0, 2, 1, 3)
+                    .reshape(shape_w1.numel(), shape_w2.numel())
                 )
 
-                svd_driver = "gesvd" if base_value.is_cuda else None
+                svd_driver = "gesvda" if base.is_cuda else None
                 u, s, vh = torch.linalg.svd(value_2d, full_matrices=False, driver=svd_driver)
                 s = s[..., 0].sqrt()
                 u = u[..., 0] * s

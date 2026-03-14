@@ -159,13 +159,13 @@ def rank_ratio(
 
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     n, p = a.shape[-2:]
+    svd_driver = "gesvd" if a.is_cuda else None
     if n < p:
-        svd_driver = "gesvd" if a.is_cuda else None
-        u, _, vh = svd_lowrank(a.mH @ b, rank=a.shape[0], driver=svd_driver)
-        return LowRankOrthogonalMatmul(u, vh)
+        b_q, b_r = torch.linalg.qr(b.mH)
+        u, _, vh = torch.linalg.svd(a.mH @ b_r.mH, driver=svd_driver, full_matrices=False)
+        return LowRankOrthogonalMatmul(u, vh @ b_q.mH)
     else:
-        svd_driver = "gesvd" if a.is_cuda else None
-        u, _, vh = torch.linalg.svd(a.mH @ b, driver=svd_driver)
+        u, _, vh = torch.linalg.svd(a.mH @ b, driver=svd_driver, full_matrices=False)
         if cancel_reflection:
             u[..., -1] /= torch.slogdet(u @ vh)[0]
 
@@ -175,28 +175,23 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
 class LowRankOrthogonalMatmul:
     def __init__(self, u, vh):
         self.u = u
-        self.vh = vh
+        self.v = vh.mH
 
     def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None, stiefel_eps=1e-8, stiefel_max_iters=100, **_kwargs):
-        def x_proj(): return x - x @ self.vh.mH @ self.vh
-
         if math.isclose(t, 0.0):
             return x
         elif math.isclose(t, 1.0):
-            return x_proj() + x @ self.u @ self.vh
+            return x - x @ self.v @ self.v.mH + x @ self.u @ self.v.mH
         elif math.isclose(t, -1.0):
-            return x_proj() + x @ self.vh.mH @ self.u.mH
-        elif math.isclose(t, round(t)):
-            if t > 0:
-                return x_proj() + x @ self.u @ torch.linalg.matrix_power(self.vh @ self.u, round(t) - 1) @ self.vh
-            else:
-                return x_proj() + x @ self.vh.mH @ torch.linalg.matrix_power(self.u.mH @ self.vh.mH, abs(round(t)) - 1) @ self.u.mH
+            return x - x @ self.u @ self.u.mH + x @ self.v @ self.u.mH
         else:
-            u = stiefel_interpolate(self.vh.mH, self.u, t, stiefel_eps, stiefel_max_iters, cache, key)
-            return x_proj() + x @ u @ self.vh
+            uv_log = log_stiefel(self.v, self.u, cache=cache, key=key)
+            l = exp_stiefel(self.v, uv_log * (t+1)/2)
+            r = exp_stiefel(self.v, uv_log * (1-t)/2)
+            return x - x @ r @ r.mH + x @ l @ r.mH
 
     def to(self, *args, **kwargs):
-        return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.vh.to(*args, **kwargs))
+        return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.v.mH.to(*args, **kwargs))
 
 
 class FullRankOrthogonalMatmul:
