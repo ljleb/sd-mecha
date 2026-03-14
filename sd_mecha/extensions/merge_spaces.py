@@ -59,8 +59,8 @@ def get_identifiers(merge_space: AnyMergeSpace) -> List[str]:
         raise TypeError(f"expected {MergeSpaceSymbol.__name__} or Set[{MergeSpace.__name__}, ...], got {type(merge_space)}")
 
 
-def get_all() -> Set[MergeSpace]:
-    return set(_merge_space_registry.values())
+def get_all() -> List[MergeSpace]:
+    return list(_merge_space_registry.values())
 
 
 @functools.cache

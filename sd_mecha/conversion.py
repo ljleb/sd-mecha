@@ -1,7 +1,7 @@
 import functools
 import heapq
 from .extensions.merge_methods import get_converter_paths
-from .extensions.model_configs import ModelConfig
+from .extensions.model_configs import ModelConfig, resolve as resolve_model_config
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
 from .graph_finalization import open_graph
 
@@ -32,18 +32,22 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
 
     if isinstance(config, RecipeNode):
         with open_graph(config, root_only=True, solve_merge_space=False) as config_graph:
-            config = config_graph.finalize(check_mandatory_keys=False, check_extra_keys=False).root.model_config
+            tgt_candidates = list(config_graph.root_candidates().model_config)
+    else:
+        tgt_candidates = [resolve_model_config(config) if isinstance(config, str) else config]
 
-    tgt_config = config if isinstance(config, str) else config.identifier
     converter_paths = get_converter_paths()
 
     with open_graph(recipe, root_only=True, solve_merge_space=False) as recipe_graph:
-        src_candidates = recipe_graph.root_candidates(model_config_preference=(tgt_config,)).model_config
-        for src_config in src_candidates:
-            res = create_conversion_recipe(recipe, converter_paths, src_config.identifier, tgt_config)
-            if res is not None:
-                return res
-        raise TypeError(f"Could not convert recipe to config {tgt_config}.")
+        for tgt_config in tgt_candidates:
+            src_candidates = list(recipe_graph.root_candidates(model_config_preference=(tgt_config,)).model_config)
+            for src_config in src_candidates:
+                res = create_conversion_recipe(recipe, converter_paths, src_config.identifier, tgt_config.identifier)
+                if res is not None:
+                    return res
+
+        src_candidates_str = tuple(src_config.identifier for src_config in src_candidates)
+        raise TypeError(f"Could not convert recipe from config from candidate configs {src_candidates_str} to config {tgt_config.identifier}.")
 
 
 def create_conversion_recipe(recipe, paths, src_config, tgt_config):

@@ -22,7 +22,10 @@ class convert_sdxl_diffusers_unet_to_original:
     def map_keys(b):
         for sgm_key in sdxl_sgm_config.keys():
             if sgm_key.startswith("model.diffusion_model"):
-                b[sgm_key] = b.keys[convert_unet_key(sgm_key)]
+                try:
+                    b[sgm_key] = b.keys[convert_unet_key(sgm_key)]
+                except ValueError:
+                    pass
 
     def __call__(
         self,
@@ -31,6 +34,30 @@ class convert_sdxl_diffusers_unet_to_original:
     ) -> Return(Tensor, model_config=sdxl_sgm_config):
         diffusers_key = kwargs["key_relation"].input_keys["diffusers_sd"][0]
         return diffusers_sd[diffusers_key]
+
+
+@merge_method(
+    identifier=f"convert_'{sdxl_sgm_config.identifier}'_to_'{sdxl_diffusers_unet_config.identifier}'",
+    is_conversion=True,
+    reuse_outputs=False,
+)
+class convert_sdxl_original_to_diffusers_unet:
+    @staticmethod
+    def map_keys(b):
+        for sgm_key in sdxl_sgm_config.keys():
+            if sgm_key.startswith("model.diffusion_model"):
+                try:
+                    b[convert_unet_key(sgm_key)] = b.keys[sgm_key]
+                except ValueError:
+                    pass
+
+    def __call__(
+        self,
+        sgm_sd: Parameter(StateDict[Tensor], model_config=sdxl_sgm_config),
+        **kwargs,
+    ) -> Return(Tensor, model_config=sdxl_diffusers_unet_config):
+        sgm_key = kwargs["key_relation"].input_keys["sgm_sd"][0]
+        return sgm_sd[sgm_key]
 
 
 def convert_unet_key(

@@ -2,7 +2,6 @@ import contextlib
 import dataclasses
 import functools
 import logging
-import operator
 import os
 import pathlib
 import sys
@@ -10,22 +9,25 @@ import threading
 import typing
 import torch
 import sd_mecha
-from .extensions import model_dirs
+from .extensions import merge_spaces, model_dirs
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
 from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, KeyMetadata
 from .graph_finalization import open_graph
-from .keys_map import KeyRelation
-from .recipe_nodes import RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode, ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue
+from .keys_map import ActiveKeyMap, RealizedKeyRelation
+from .recipe_nodes import (
+    ClosedModelRecipeNode, RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode,
+    ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue, PythonLiteralValue,
+)
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
 from collections import defaultdict, OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed, Future
+from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
-from typing import Optional, Mapping, MutableMapping, List, Iterable, Tuple, Dict, TypeVar, Sequence, Any
+from typing import Optional, Mapping, MutableMapping, Iterable, Tuple, Dict, TypeVar, Sequence, Any
 from .typing_ import is_subclass
 
 
@@ -39,17 +41,15 @@ def merge(
     output_dtype: Optional[torch.dtype] = ...,
     threads: Optional[int] = ...,
     total_buffer_size: int = ...,
-    strict_weight_space: bool = ...,
-    check_finite: bool = ...,
-    check_finite_mandatory_inputs: bool = ...,
-    check_finite_optional_inputs: bool = ...,
-    omit_extra_keys: bool = ...,
-    omit_ema: bool = ...,
-    check_mandatory_keys: bool = ...,
-    tqdm: type = ...,
+    strict_merge_space: MergeSpace | str = ...,
+    strict_mandatory_keys: bool = ...,
+    check_extra_keys: bool = ...,
+    check_finite_output: bool = ...,
+    omit_non_finite_inputs: bool = ...,
+    memoize_intermediates: bool = ...,
     validate_mm_contract: bool = ...,
-    cache: Dict[RecipeNode, dict] = ...,
-    reuse_outputs: bool = ...,
+    cache: Mapping[RecipeNode, Any] = ...,
+    tqdm: type = ...,
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str = ...,
 ) -> Optional[MutableMapping[str, torch.Tensor]]:
     """
@@ -60,13 +60,13 @@ def merge(
 
     Args:
         recipe:
-            A `RecipeNode`, python literal, or dictionary describing how to merge or transform multiple models.
+            A RecipeNode, python literal, or dictionary describing how to merge or transform multiple models.
         fallback_model (optional):
             A secondary recipe or model to provide values for any keys missing from `recipe`.
         merge_device (optional):
-            Device to load intermediate tensors onto while merging (e.g., "cpu" or "cuda").
+            Torch device to load input tensors onto while merging (e.g., "cpu" or "cuda:0").
         merge_dtype (optional):
-            Torch dtype for intermediate merges (e.g., `torch.float32`, `torch.float64`).
+            Torch dtype for input merges (e.g., `torch.float32`, `torch.float64`).
         output_device (optional):
             Final output device (e.g., "cpu").
         output_dtype (optional):
@@ -75,43 +75,40 @@ def merge(
             Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
         total_buffer_size (optional):
             Total byte size of the buffers for all safetensors state dicts (input and output).
-        strict_weight_space (optional):
-            If True, verifies that merges occur in "weight" space. If False, merges can happen
-            in other merge spaces (like "delta" or "param"). Defaults to True.
-        check_finite (optional):
-            If True, warns if any non-finite values appear in the output model. Defaults to True.
-        check_finite_mandatory_inputs (optional):
-            If True, automatically discards (raises StateDictKeyError) directly from model nodes for mandatory key containing non-finite values. Defaults to False.
-        check_finite_optional_inputs (optional):
-            If True, automatically discards (raises StateDictKeyError) directly from model nodes for optional key containing non-finite values. Defaults to True.
-        omit_extra_keys (optional):
-            If True, warns about and removes unrecognized keys from the output model. Defaults to True.
-        omit_ema (optional):
-            If True, omits ema keys from the output model. Defaults to omit_extra_keys.
-        check_mandatory_keys (optional):
+        strict_merge_space (optional):
+            If specified, verifies that the output merge space corresponds to the given merge space.
+            If False, merges can happen in any merge space, preferring when many are possible in order:
+            "weight", "delta", "param", <user-defined>.
+            Defaults to None.
+        strict_mandatory_keys (optional):
             If True and an input model is missing non-optional keys, raises RuntimeError. Defaults to False.
+        check_extra_keys (optional):
+            If True, warns about unrecognized keys from the input models. Defaults to True.
+        check_finite_output (optional):
+            If True, warns if any non-finite values appear in the output model. Defaults to True.
+        omit_non_finite_inputs (optional):
+            If True, automatically discards input keys containing non-finite values. Defaults to True.
+        memoize_intermediates (optional):
+            If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations.
+            To minimize extra memory usage, each memoized output is freed as soon as all its consumers have consumed it.
+            Defaults to True.
+        validate_mm_contract (optional):
+            If True, validates that merge methods return the right amount of outputs indicated by `map_keys`
+            and do not read other inputs than those reported by `map_keys`. Defaults to True.
+        cache (optional):
+            Dictionary of caches for any recipe nodes in `recipe`.
+            Items should be created like this: `node: node.create_cache()`.
+            This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
         output (optional):
-            Where to store the merged state dict. Can be a filesystem path (string or
-            `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
-            If it is None or omitted, an empty dict is created and returned when the merge completes.
-        validate_mm_contract (optional):
-            If True, validates that merge methods return the right amount of outputs indicated by `map_keys`
-            and do not read other inputs than those reported by `map_keys`
-        cache (optional):
-            Dictionary of caches for each recipe node in `recipe`. Each dict should be empty on the first call.
-            If set, the dicts are filled by the respective merge methods on the first call to merge(), and then reused for subsequent calls to merge().
-            This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
-        reuse_outputs (optional):
-            If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations.
-            To minimize extra memory usage, each memoized output is freed as soon as all its consumers consumed it. Defaults to True.
+            Where to store the merged state dict.
+            Can be a filesystem path (string or `Path`) ending with `.safetensors`, an in-memory dict-like object, or None.
+            If it is None or omitted, a new dict is returned when the merge completes.
 
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
     """
-    if output is ...:
-        output = None
     if fallback_model is ...:
         fallback_model = None
     if merge_device is ...:
@@ -127,45 +124,44 @@ def merge(
         threads = None
     if total_buffer_size is ...:
         total_buffer_size = 2**28
-    if strict_weight_space is ...:
-        strict_weight_space = True
-    if check_finite is ...:
-        check_finite = True
-    if check_finite_mandatory_inputs is ...:
-        check_finite_mandatory_inputs = False
-    if check_finite_optional_inputs is ...:
-        check_finite_optional_inputs = True
-    check_finite_inputs = check_finite_mandatory_inputs or check_finite_optional_inputs
-    if omit_extra_keys is ...:
-        omit_extra_keys = True
-    if omit_ema is ...:
-        omit_ema = omit_extra_keys
-    if check_mandatory_keys is ...:
-        check_mandatory_keys = False
-    if tqdm is ...:
-        tqdm = tqdm_original
+    if strict_merge_space is ...:
+        strict_merge_space = None
+    if strict_mandatory_keys is ...:
+        strict_mandatory_keys = False
+    if check_extra_keys is ...:
+        check_extra_keys = True
+    if check_finite_output is ...:
+        check_finite_output = True
+    if omit_non_finite_inputs is ...:
+        omit_non_finite_inputs = True
+    if memoize_intermediates is ...:
+        memoize_intermediates = True
     if validate_mm_contract is ...:
         validate_mm_contract = True
     if cache is ...:
         cache = {}
-    if reuse_outputs is ...:
-        reuse_outputs = True
+    if tqdm is ...:
+        tqdm = tqdm_original
+    if output is ...:
+        output = None
 
     if threads is not None and (not isinstance(threads, int) or threads < 0):
         raise RuntimeError("threads should be a non-negative integer or None")
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
-    if cast_inputs or check_finite_inputs:
-        cast_visitor = CastInputDicts(merge_device, merge_dtype, check_finite_mandatory_inputs, check_finite_optional_inputs)
-        recipe = recipe.accept(cast_visitor)
-        cache = {cast_visitor.converted_nodes.get(node, node): cache_dict for node, cache_dict in cache.items()}
 
     if fallback_model is not None:
-        recipe = recipe | fallback_model
+        recipe |= fallback_model
 
     if output_device is not None or output_dtype is not None:
         recipe = recipe.to(device=output_device, dtype=output_dtype)
+
+    original_to_casted = None
+    if cast_inputs or omit_non_finite_inputs:
+        cast_visitor = CastInputDicts(merge_device, merge_dtype, omit_non_finite_inputs)
+        recipe = recipe.accept(cast_visitor)
+        original_to_casted = cast_visitor.converted_nodes
 
     total_files_open = (
         recipe.accept(recipe_nodes.ModelsCountVisitor()) +
@@ -186,30 +182,31 @@ def merge(
         recipe,
         buffer_size_per_file,
     ) as graph:
-        finalized_res = graph.finalize(
-            check_extra_keys=omit_extra_keys,
-            check_mandatory_keys=check_mandatory_keys,
+        finalized_res = graph.finalize_with_keys(
+            check_extra_keys=check_extra_keys,
+            check_mandatory_keys=strict_mandatory_keys,
             model_config_preference=("singleton-mecha",),
-            merge_space="weight" if strict_weight_space else None,
-            merge_space_preference=("weight",) if not strict_weight_space else None,
+            merge_space=strict_merge_space if strict_merge_space is not None else None,
+            merge_space_preference=merge_spaces.get_all() if strict_merge_space is None else None,
         )
-        recipe, node_to_keys = finalized_res.root, finalized_res.node_to_keys
-        minimal_keys = node_to_keys[recipe]
-        cache = {finalized_res.to_finalized_node[node]: cache_dict for node, cache_dict in cache.items()}
+        recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
+        realized_root_key_map = realized_key_maps[recipe]
+        if original_to_casted is not None:
+            original_to_finalized = {original: finalized_res.to_finalized_node[node] for original, node in original_to_casted.items()}
+        else:
+            original_to_finalized = finalized_res.to_finalized_node
 
-        model_config = recipe.model_config
-        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in minimal_keys}
-        if not omit_extra_keys:
-            recipe, graph_metadata = copy_extra_keys(recipe)
+        cache = {original_to_finalized[node]: cache_object for node, cache_object in cache.items()}
+        original_recipe = ReplaceSolvedComponents(original_to_finalized).process(original_recipe)
 
-        if omit_ema and "ema" in model_config.components():
-            for key in model_config.components()["ema"].keys():
-                if key in graph_metadata:
-                    # remove ema keys from merge plan
-                    del graph_metadata[key]
-
+        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in realized_root_key_map}
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
-        merge_methods_context = create_merge_method_context(recipe, node_to_keys, enable_outputs_reuse=reuse_outputs)
+        merge_methods_context = create_merge_method_context(
+            recipe,
+            realized_key_maps,
+            finalized_res.node_to_keys,
+            memoize_intermediates,
+        )
 
         with (
             executor,
@@ -221,23 +218,20 @@ def merge(
                 buffer_size_per_file_per_thread,
             ) as output_dict,
         ):
-            fix_torch_threading()
+            _fix_torch_threading()
             futures = []
             for key, key_metadata in graph_metadata.items():
                 fn = recipe.accept
-                fn = _track_output(fn, output_dict, key, key_metadata, check_finite, check_mandatory_keys)
+                fn = _track_output(fn, output_dict, key, key_metadata, check_finite_output, strict_mandatory_keys)
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
-                futures.append(executor.submit(fn, KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache)))
-
-            for future in as_completed(futures):
-                if future.exception() is not None:
-                    for future_to_cancel in futures:
-                        future_to_cancel.cancel()
-                future.result()
+                merge_visitor = KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache, realized_key_maps)
+                futures.append(executor.submit(fn, merge_visitor))
+            _resolve_futures(futures)
 
             for node, mm_context in merge_methods_context.items():
-                num_leaked = sum(not output_ref.was_freed() for output_ref in mm_context.output_refs.values())
+                unique_refs = {id(ref): ref for ref in mm_context.output_refs.values()}.values()
+                num_leaked = sum(not output_ref.was_freed() for output_ref in unique_refs)
                 if num_leaked:
                     logging.warning(f"memory leaked during the merge: {node}, number of entries: {num_leaked}")
 
@@ -245,7 +239,7 @@ def merge(
                 return output_dict
 
 
-def fix_torch_threading():
+def _fix_torch_threading():
     if torch.cuda.is_available():
         # this greedy loads the torch.linalg module
         # avoids a hard error caused by threads>1 with some torch ops
@@ -255,105 +249,6 @@ def fix_torch_threading():
     globals()['fix_torch_threading'] = lambda: None
 
 
-@dataclasses.dataclass
-class MinimalMetadataVisitor(RecipeVisitor):
-    def visit_literal(self, node: LiteralRecipeNode) -> Mapping[str, KeyMetadata]:
-        meta = node.model_config.keys()
-        res = {}
-
-        child_keys = defaultdict(set)
-        for k, child_node in node.value_dict.items():
-            if isinstance(child_node, RecipeNode):
-                child_keys[child_node].add(k)
-
-        for k, child_node in node.value_dict.items():
-            if isinstance(child_node, RecipeNode):
-                child_res = child_node.accept(dataclasses.replace(self))
-                for k_res in child_keys[child_node]:
-                    child_keys[k_res] = child_res[k_res]
-            else:
-                res[k] = meta[k]
-
-        return res
-
-    def visit_model(self, node: ModelRecipeNode) -> Mapping[str, KeyMetadata]:
-        return {k: v for k, v in node.state_dict.metadata()}
-
-    def visit_merge(self, node: MergeRecipeNode) -> Mapping[str, KeyMetadata]:
-        res = {}
-        meta = node.model_config.keys()
-        key_map = node.key_map()
-
-        for param, args in node.all_args().items():
-            for arg in (args if isinstance(args, tuple) else (args,)):
-                arg_res = arg.accept(self)
-                for input_key in arg_res:
-                    output_keys = key_map.in_to_out.get(input_key)
-                    output_keys = output_keys.get(param) if output_keys is not None else None
-                    if output_keys is None:
-                        continue
-
-                    for output_key in output_keys:
-                        res[output_key] = meta[output_key]
-
-        return res
-
-
-def copy_extra_keys(recipe: RecipeNode):
-    config = recipe.model_config
-    merge_space = recipe.merge_space
-    metadata = config.keys()
-    aliases = {k_alias: k for k, k_aliases in config.aliases().items() for k_alias in k_aliases}
-
-    forwardable_nodes_visitor = ForwardableNodesVisitor(config, merge_space)
-    recipe.accept(forwardable_nodes_visitor)
-    forwardable_nodes = forwardable_nodes_visitor.forwardable_nodes
-
-    new_recipe = functools.reduce(operator.or_, [n[0] for n in forwardable_nodes], recipe)
-    new_metadata = OrderedDict((aliases.get(k, k), v) for n in forwardable_nodes for k, v in n[1].items()) | metadata
-    return new_recipe, new_metadata
-
-
-@dataclasses.dataclass
-class ForwardableNodesVisitor(RecipeVisitor):
-    target_config: ModelConfig
-    target_merge_space: MergeSpace
-    forwardable_nodes: List[Tuple[RecipeNode, Mapping[str, KeyMetadata]]] = dataclasses.field(default_factory=list)
-
-    def visit_literal(self, node: LiteralRecipeNode):
-        if not node.value_dict:
-            return
-
-        can_forward = (
-            node.model_config == self.target_config and
-            node.merge_space == self.target_merge_space and
-            not any(node in n[0] for n in self.forwardable_nodes)
-        )
-        metadata = {}
-        for k, v in node.value_dict.items():
-            if isinstance(v, RecipeNode):
-                v.accept(self)
-            elif can_forward and isinstance(v, torch.Tensor):
-                metadata[k] = KeyMetadata(v.shape, v.dtype)
-
-        if can_forward and metadata:
-            self.forwardable_nodes.append((node, metadata))
-
-    def visit_model(self, node: ModelRecipeNode):
-        if node.model_config == self.target_config and not any(node in n[0] for n in self.forwardable_nodes):
-            self.forwardable_nodes.append((
-                node,
-                OrderedDict(
-                    (k, KeyMetadata(v.shape, v.dtype))
-                    for k, v in node.state_dict.metadata()
-                )
-            ))
-
-    def visit_merge(self, node: MergeRecipeNode):
-        for arg in node.all_args().values():
-            arg.accept(self)
-
-
 @contextlib.contextmanager
 def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
@@ -361,6 +256,12 @@ def _get_output_dict(
     recipe: RecipeNode,
     buffer_size_per_thread: int,
 ):
+    try:
+        serialized_recipe = serialization.serialize(recipe, finalize=False)  # already finalized
+    except TypeError:
+        logging.warning("The recipe graph could not be serialized. The output state dict will not contain the recipe.")
+        serialized_recipe = None
+
     if isinstance(output, (str, pathlib.Path)):
         if not isinstance(output, pathlib.Path):
             output = pathlib.Path(output)
@@ -370,11 +271,6 @@ def _get_output_dict(
                 break
         logging.info(f"Saving to {output}")
 
-        try:
-            serialized_recipe = serialization.serialize(recipe)
-        except TypeError:
-            logging.warning("The recipe graph could not be serialized. The output state dict will not contain the recipe.")
-            serialized_recipe = None
         streamed_output = OutSafetensorsDict(
             output,
             OrderedDict((k, TensorMetadata(v.shape, v.dtype)) for k, v in merged_header.items()),
@@ -388,10 +284,12 @@ def _get_output_dict(
     else:
         if output is None:
             output = {}
+        if serialized_recipe is not None:
+            output["__metadata__"] = {"mecha_recipe": serialized_recipe}
         yield output
 
 
-def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool, check_mandatory_keys: bool):
+def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool, strict_mandatory_keys: bool):
     @functools.wraps(fn)
     def track_output(*args, **kwargs):
         try:
@@ -403,14 +301,19 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
                     all_finite = res.to(dtype=torch.bfloat16).isfinite().all()
 
                 if not all_finite:
-                    logging.warning(f"there are non finite values in key '{key}': {key_metadata}")
+                    message = f"There are non finite values in key '{key}': {key_metadata}"
+                    if key_metadata.optional:
+                        logging.debug(message)
+                    else:
+                        logging.warning(message)
 
             output[key] = res
+            return res
         except StateDictKeyError as e:
-            if key_metadata.optional or not check_mandatory_keys:
-                logging.debug(f"skipping key {e}")
+            if key_metadata.optional or not strict_mandatory_keys:
+                logging.debug(f"Skipping key: {e}")
             else:
-                raise RuntimeError(f"could not merge mandatory key: {e}") from e
+                raise RuntimeError(f"Could not merge mandatory key: {e}") from e
     return track_output
 
 
@@ -448,12 +351,33 @@ class ThisThreadExecutor(nullcontext):
         return result
 
 
+def _resolve_futures(futures: Sequence[Future]):
+    from concurrent.futures import wait, FIRST_EXCEPTION
+    done, not_done = wait(futures, return_when=FIRST_EXCEPTION)
+
+    first_exc = None
+    for future in done:
+        exc = future.exception()
+        if exc is not None:
+            first_exc = exc
+            break
+
+    if first_exc is not None:
+        for future in not_done:
+            future.cancel()
+        raise first_exc
+
+    for future in not_done:
+        future.result()
+
+
 @dataclasses.dataclass
 class KeyMergeVisitor(RecipeVisitor):
     output_key: str
-    merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    merge_methods_context: Mapping[RecipeNode, MergeMethodContext]
     validate_mm_contract: bool
-    merge_methods_caches: Dict[RecipeNode, Any]
+    merge_methods_caches: Mapping[RecipeNode, Any]
+    realized_relations: Mapping[RecipeNode, ActiveKeyMap[RealizedKeyRelation]]
     parent_port: Optional[Tuple[RecipeNode, str, int | str]] = None
 
     def visit_literal(self, node: LiteralRecipeNode):
@@ -485,8 +409,9 @@ class KeyMergeVisitor(RecipeVisitor):
                 res = output_ref.use_once(self.parent_port)
             else:
                 try:
-                    key_map = node.key_map()
-                    assert self.output_key in key_map, f"Merge method {node.merge_method} does not produce key {self.output_key}."
+                    key_map = self.realized_relations[node]
+                    if self.output_key not in key_map:
+                        raise StateDictKeyError(self.output_key)
                     key_relation = key_map[self.output_key]
 
                     merged_args, merged_kwargs = self.__visit_deeper_first(node, key_relation)
@@ -501,7 +426,7 @@ class KeyMergeVisitor(RecipeVisitor):
                     )
                 finally:
                     if self.parent_port is None:
-                        release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.parent_port, needs_lock=False)
+                        release_visitor = KeyReleaseVisitor(self.output_key, self.merge_methods_context, self.realized_relations, self.parent_port, needs_lock=False)
                         node.accept(release_visitor)
                 if isinstance(res, dict):
                     if self.validate_mm_contract:
@@ -521,7 +446,7 @@ class KeyMergeVisitor(RecipeVisitor):
     def __visit_deeper_first(
         self,
         node: MergeRecipeNode,
-        key_relation: KeyRelation,
+        key_relation: RealizedKeyRelation,
     ) -> Tuple[
         Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
@@ -543,7 +468,7 @@ class KeyMergeVisitor(RecipeVisitor):
             input_visitor = dataclasses.replace(self, parent_port=parent_port)
             if is_subclass(input_types[index], StateDict):
                 if self.validate_mm_contract:
-                    input_keys_constraints = key_relation.inputs[input_name]
+                    input_keys_constraints = key_relation.inputs.get(input_name, ())
                 else:
                     input_keys_constraints = None
                 expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
@@ -560,7 +485,8 @@ class KeyMergeVisitor(RecipeVisitor):
 @dataclasses.dataclass
 class KeyReleaseVisitor(RecipeVisitor):
     output_key: str
-    merge_methods_context: Dict[RecipeNode, MergeMethodContext]
+    merge_methods_context: Mapping[RecipeNode, MergeMethodContext]
+    realized_relations: Mapping[RecipeNode, ActiveKeyMap[RealizedKeyRelation]]
     parent_port: Optional[Tuple[RecipeNode, str, int | str]]
     needs_lock: bool
 
@@ -596,7 +522,7 @@ class KeyReleaseVisitor(RecipeVisitor):
     ):
         error_holder = ErrorHolder()
 
-        key_map = node.key_map()
+        key_map = self.realized_relations[node]
         if self.output_key not in key_map:
             return
 
@@ -606,8 +532,8 @@ class KeyReleaseVisitor(RecipeVisitor):
             input_node = node.bound_args.args[input_idx] if isinstance(input_idx, int) else node.bound_args.kwargs[input_idx]
             parent_port = (node, self.output_key, input_idx)
             release_visitors = [
-                KeyReleaseVisitor(input_key, self.merge_methods_context, parent_port, needs_lock=True)
-                for input_key in key_relation.inputs[input_param]
+                KeyReleaseVisitor(input_key, self.merge_methods_context, self.realized_relations, parent_port, needs_lock=True)
+                for input_key in key_relation.inputs.get(input_param, ())
             ]
             for release_visitor in release_visitors:
                 error_holder.intercept(input_node.accept, release_visitor)
@@ -711,34 +637,33 @@ def cast_node_value(value, expected_type):
 class CastInputDicts(RecipeVisitor):
     device: str | torch.device
     dtype: torch.dtype
-    check_finite_mandatory: bool
-    check_finite_optional: bool
+    omit_non_finite: bool
     converted_nodes: Dict[RecipeNode, RecipeNode] = dataclasses.field(default_factory=dict)
-
-    def __post_init__(self):
-        self.check_finite = self.check_finite_mandatory or self.check_finite_optional
 
     def visit_literal(self, node: LiteralRecipeNode):
         if node in self.converted_nodes:
             return self.converted_nodes[node]
 
         converted_dict = {}
-        can_check_finite = False
+        can_omit = False
+        cast_recipe = False
         for k, v in node.value_dict.items():
             if isinstance(v, RecipeNode):
                 v = v.accept(self)
-            elif isinstance(v, (int, float, bool, str)):
+            elif isinstance(v, PythonLiteralValue):
                 v = v
             elif isinstance(v, torch.Tensor):
-                v = v.to(device=self.device, dtype=self.dtype)
-                can_check_finite = True
+                can_omit = True
+                cast_recipe = True
             else:
                 raise RuntimeError(f"Cannot cast type {type(v)} to device={self.device}, dtype={self.dtype}")
             converted_dict[k] = v
 
         res = LiteralRecipeNode(converted_dict, node.model_config, node.merge_space)
-        if can_check_finite and self.check_finite:
-            res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
+        if cast_recipe:
+            res = res.to(device=self.device, dtype=self.dtype)
+        if can_omit and self.omit_non_finite:
+            res = sd_mecha.omit_non_finite(res)
         self.converted_nodes[node] = res
         return res
 
@@ -747,8 +672,8 @@ class CastInputDicts(RecipeVisitor):
             return self.converted_nodes[node]
 
         res = node.to(device=self.device, dtype=self.dtype)
-        if self.check_finite:
-            res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
+        if self.omit_non_finite:
+            res = sd_mecha.omit_non_finite(res)
         self.converted_nodes[node] = res
         return res
 
@@ -765,7 +690,52 @@ class CastInputDicts(RecipeVisitor):
             node.model_config,
             node.merge_space,
         )
-        # if self.check_finite and node.merge_method == sd_mecha.extensions.merge_methods.resolve("convert_singleton"):
-        #     res = sd_mecha.omit_non_finite(res, self.check_finite_mandatory, self.check_finite_optional)
         self.converted_nodes[node] = res
         return res
+
+
+@dataclasses.dataclass
+class ReplaceSolvedComponents(RecipeVisitor):
+    to_finalized: Mapping[RecipeNode, RecipeNode]
+    node_map: Dict[RecipeNode, RecipeNode] = dataclasses.field(default_factory=defaultdict)
+
+    def process(self, node: RecipeNode) -> RecipeNode:
+        res = self.node_map.get(node)
+        if res is None:
+            if node.model_config is not None and node.merge_space is not None:
+                res = node
+            else:
+                res = node.accept(self)
+            self.node_map[node] = res
+        return res
+
+    def visit_literal(self, node: LiteralRecipeNode) -> RecipeNode:
+        finalized_node = self.to_finalized[node]
+        return LiteralRecipeNode(
+            {
+                k: v.accept(self) if isinstance(v, RecipeNode) else v
+                for k, v in node.value_dict.items()
+            },
+            finalized_node.model_config,
+            finalized_node.merge_space,
+        )
+
+    def visit_model(self, node: ModelRecipeNode) -> RecipeNode:
+        finalized_node = self.to_finalized[node]
+        return ClosedModelRecipeNode(
+            node.path,
+            finalized_node.model_config,
+            finalized_node.merge_space,
+        )
+
+    def visit_merge(self, node: MergeRecipeNode) -> RecipeNode:
+        finalized_node = self.to_finalized[node]
+        return MergeRecipeNode(
+            node.merge_method,
+            node.bound_args.signature.bind(
+                *(self.process(v) for v in node.bound_args.args),
+                **{k: self.process(v) for k, v in node.bound_args.kwargs.items()}
+            ),
+            finalized_node.model_config,
+            finalized_node.merge_space,
+        )

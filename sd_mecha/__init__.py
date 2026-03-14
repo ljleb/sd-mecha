@@ -42,7 +42,6 @@ from sd_mecha.extensions.builtin.merge_methods import (
     omit_non_finite,
     rebasin,
     randperm,
-    balance_attention,
     top_k_tensor_sum,
     truncate_rank,
     ties_sum_with_dropout,
@@ -63,3 +62,4 @@ from sd_mecha.extensions.builtin.merge_methods import (
 )
 from .helpers import model, literal, Defaults, set_log_level, skip_key
 from . import recipe_nodes, extensions, merge_context
+from .keys_map import KeyMapBuilder

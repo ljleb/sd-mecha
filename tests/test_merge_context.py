@@ -99,7 +99,7 @@ def patch_create_context():
 def call_merge(recipe):
     sd_mecha.merge(
         recipe,
-        strict_weight_space=False,
+        strict_merge_space=False,
         threads=0,
         merge_device=None,
         merge_dtype=None,

@@ -2523,3 +2523,16 @@ components:
     model.diffusion_model.time_embed.2.weight: {shape: [1280, 1280], dtype: float32}
     v_pred: {shape: [0], dtype: int64, optional: true}
     ztsnr: {shape: [0], dtype: int64, optional: true}
+  scheduler:
+    alphas_cumprod: {shape: [1000], dtype: float32, optional: true}
+    alphas_cumprod_prev: {shape: [1000], dtype: float32, optional: true}
+    betas: {shape: [1000], dtype: float32, optional: true}
+    log_one_minus_alphas_cumprod: {shape: [1000], dtype: float32, optional: true}
+    posterior_log_variance_clipped: {shape: [1000], dtype: float32, optional: true}
+    posterior_mean_coef1: {shape: [1000], dtype: float32, optional: true}
+    posterior_mean_coef2: {shape: [1000], dtype: float32, optional: true}
+    posterior_variance: {shape: [1000], dtype: float32, optional: true}
+    sqrt_alphas_cumprod: {shape: [1000], dtype: float32, optional: true}
+    sqrt_one_minus_alphas_cumprod: {shape: [1000], dtype: float32, optional: true}
+    sqrt_recip_alphas_cumprod: {shape: [1000], dtype: float32, optional: true}
+    sqrt_recipm1_alphas_cumprod: {shape: [1000], dtype: float32, optional: true}

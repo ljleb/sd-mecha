@@ -33,6 +33,10 @@ def reshape_weight_for_sd(w):
         return w
 
 
+def reshape_weight_for_hf(w):
+    return w.squeeze()
+
+
 vae_conversion_map = {
     # (original, huggingface)
     "nin_shortcut": "conv_shortcut",

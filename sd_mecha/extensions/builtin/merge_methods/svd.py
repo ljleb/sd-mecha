@@ -4,9 +4,10 @@ import torch
 from typing import Optional, Tuple
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, StateDict, Return
+from collections import defaultdict
 
 
-@merge_method
+@merge_method(cache_factory=lambda: defaultdict(dict))
 def rotate(
     a: Parameter(StateDict[Tensor]),
     b: Parameter(StateDict[Tensor]),
@@ -51,48 +52,44 @@ def rotate(
     else:
         shape_2d = a.shape[:1].numel(), a.shape[1:].numel()
 
-    cache = kwargs.get("cache")
-    if cache is not None:
-        key = kwargs["key"]
-        if key not in cache:
-            cache[key] = {}
-        cache = cache[key]
+    if (cache := kwargs.get("cache")) is not None:
+        cache = cache[kwargs["key"]]
 
-    if cache is not None:
         # if centralization is different from the cached value, invalidate cache
-        if not math.isclose(cache.get("centralization", centralization), centralization):
-            cache.clear()
+        if "centralization" in cache:
+            if not math.isclose(cache["centralization"], centralization):
+                cache.clear()
         else:
             cache["centralization"] = centralization
 
-    a_neurons = a.reshape(*shape_2d)
-    b_neurons = b.reshape(*shape_2d)
-    a_centroid = a_neurons.mean(0) * centralization
-    b_centroid = b_neurons.mean(0) * centralization
-    a_neurons -= a_centroid
-    b_neurons -= b_centroid
+    a_2d = a.reshape(*shape_2d)
+    b_2d = b.reshape(*shape_2d)
+    a_mean = a_2d.mean(0) * centralization
+    b_mean = b_2d.mean(0) * centralization
+    a_2d = a_2d - a_mean
+    b_2d = b_2d - b_mean
 
     alignment_is_float = not math.isclose(alignment, round(alignment))
 
     if cache is not None and "transform" in cache:
         transform = cache["transform"].to(device=a.device, dtype=a.dtype)
     else:
-        transform = orthogonal_procrustes(a_neurons, b_neurons, cancel_reflection=alignment_is_float)
+        transform = orthogonal_procrustes(a_2d, b_2d, cancel_reflection=alignment_is_float)
         if cache is not None:
             cache["transform"] = transform.to(device="cpu", dtype=torch.float16)
 
     if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
-        a_neurons = torch.lerp(a_neurons, transform(b_neurons, -1, cache, key), alpha)
+        a_2d = torch.lerp(a_2d, transform(b_2d, -1, cache, key), alpha)
 
-    a_neurons = transform(a_neurons, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
-    a_neurons += torch.lerp(a_centroid, b_centroid, alignment)
-    return a_neurons.reshape_as(a)
+    a_2d = transform(a_2d, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
+    a_2d = a_2d + torch.lerp(a_mean, b_mean, alignment)
+    return a_2d.reshape_as(a)
 
 
-@merge_method
+@merge_method(cache_factory=dict)
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
-    rank_ratio: Parameter(float) = 0.5,
+    rank: Parameter(int) = 8,
     use_approximate_basis: Parameter(bool) = True,
     approximate_basis_iters: Parameter(int) = 2,
     approximate_basis_seed: Parameter(int) = None,
@@ -110,7 +107,7 @@ def truncate_rank(
 
     a_2d = a.flatten(start_dim=1)
     max_rank = min(a_2d.shape)
-    target_rank = min(max(round(max_rank * rank_ratio), 0), max_rank)
+    target_rank = min(max(round(rank), 0), max_rank)
     if target_rank == max_rank:
         return a
     if target_rank == 0:
@@ -146,15 +143,26 @@ def truncate_rank(
     return (u[..., :target_rank] * s[..., :target_rank].unsqueeze(-2) @ vh[..., :target_rank, :]).reshape(original_shape)
 
 
+@merge_method(reuse_outputs=False)
+def get_rank_from_ratio(
+    a: Parameter(Tensor, {"weight", "delta"}),
+    ratio: Parameter(float, "param") = 0.5,
+) -> Return(int, "param"):
+    shape_2d = torch.Size((a.shape[:1].numel(), a.shape[1:].numel()))
+    max_rank = min(shape_2d)
+    target_rank = min(max(round(max_rank * ratio), 0), max_rank)
+    return target_rank
+
+
 def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
     n, p = a.shape[-2:]
+    svd_driver = "gesvd" if a.is_cuda else None
     if n < p:
-        svd_driver = "gesvd" if a.is_cuda else None
-        u, _, vh = svd_lowrank(a.mH @ b, rank=a.shape[0], driver=svd_driver)
-        return LowRankOrthogonalMatmul(u, vh)
+        b_q, b_r = torch.linalg.qr(b.mH)
+        u, _, vh = torch.linalg.svd(a.mH @ b_r.mH, driver=svd_driver, full_matrices=False)
+        return LowRankOrthogonalMatmul(u, vh @ b_q.mH)
     else:
-        svd_driver = "gesvd" if a.is_cuda else None
-        u, _, vh = torch.linalg.svd(a.mH @ b, driver=svd_driver)
+        u, _, vh = torch.linalg.svd(a.mH @ b, driver=svd_driver, full_matrices=False)
         if cancel_reflection:
             u[..., -1] /= torch.slogdet(u @ vh)[0]
 
@@ -164,28 +172,23 @@ def orthogonal_procrustes(a, b, cancel_reflection: bool = False):
 class LowRankOrthogonalMatmul:
     def __init__(self, u, vh):
         self.u = u
-        self.vh = vh
+        self.v = vh.mH
 
     def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None, stiefel_eps=1e-8, stiefel_max_iters=100, **_kwargs):
-        def x_proj(): return x - x @ self.vh.mH @ self.vh
-
         if math.isclose(t, 0.0):
             return x
         elif math.isclose(t, 1.0):
-            return x_proj() + x @ self.u @ self.vh
+            return x - x @ self.v @ self.v.mH + x @ self.u @ self.v.mH
         elif math.isclose(t, -1.0):
-            return x_proj() + x @ self.vh.mH @ self.u.mH
-        elif math.isclose(t, round(t)):
-            if t > 0:
-                return x_proj() + x @ self.u @ torch.linalg.matrix_power(self.vh @ self.u, round(t) - 1) @ self.vh
-            else:
-                return x_proj() + x @ self.vh.mH @ torch.linalg.matrix_power(self.u.mH @ self.vh.mH, abs(round(t)) - 1) @ self.u.mH
+            return x - x @ self.u @ self.u.mH + x @ self.v @ self.u.mH
         else:
-            u = stiefel_interpolate(self.vh.mH, self.u, t, stiefel_eps, stiefel_max_iters, cache, key)
-            return x_proj() + x @ u @ self.vh
+            uv_log = log_stiefel(self.v, self.u, cache=cache, key=key)
+            l = exp_stiefel(self.v, uv_log * (t+1)/2)
+            r = exp_stiefel(self.v, uv_log * (1-t)/2)
+            return x - x @ r @ r.mH + x @ l @ r.mH
 
     def to(self, *args, **kwargs):
-        return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.vh.to(*args, **kwargs))
+        return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.v.mH.to(*args, **kwargs))
 
 
 class FullRankOrthogonalMatmul:

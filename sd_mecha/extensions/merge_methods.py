@@ -16,7 +16,7 @@ from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
 from types import SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Sequence
-from ..keys_map import KeyMapBuilder, KeyMap, KeyRelation
+from ..keys_map import Clause, KeyMapBuilder, KeyMap, KeyRelation, RealizedKeyRelation
 from ..typing_ import is_subclass, is_instance
 
 
@@ -180,7 +180,15 @@ FunctionArgs.EMPTY_VARARGS = SimpleNamespace()
 
 
 class MergeMethod:
-    def __init__(self, fn_or_cls: Callable | type, identifier: str, default_merge_space: MergeSpaceSymbol, interface: Optional["MergeMethodInterface"], reuse_outputs: bool):
+    def __init__(
+        self,
+        fn_or_cls: Callable | type,
+        identifier: str,
+        default_merge_space: MergeSpaceSymbol,
+        interface: Optional["MergeMethodInterface"],
+        reuse_outputs: bool,
+        cache_factory: Callable[[], Any],
+    ):
         self.__wrapped__ = fn_or_cls
         self.wrapped_is_class = inspect.isclass(fn_or_cls)
         if self.wrapped_is_class:
@@ -211,6 +219,7 @@ class MergeMethod:
         self.identifier = identifier
         self.has_varkwargs = any(p.kind == p.VAR_KEYWORD for p in self.__f_signature.parameters.values())
         self.reuse_outputs = reuse_outputs
+        self.cache_factory = cache_factory
 
         self.__validate()
 
@@ -237,7 +246,7 @@ class MergeMethod:
 
         if isinstance(return_data.merge_space, MergeSpaceSymbol):
             if not any(p.merge_space == return_data.merge_space for p in params.as_dict().values()):
-                raise RuntimeError("When using a merge space symbol as output, it must also be used by at least one input parameter.")
+                raise TypeError("When using a merge space symbol as output, it must also be used by at least one input parameter.")
 
         configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
@@ -245,17 +254,24 @@ class MergeMethod:
         is_map_keys_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "map_keys", None), (staticmethod, classmethod))
         if self.interface is None:
             if (is_conversion_implicitly or is_return_dict) and not is_map_keys_defined:
-                raise RuntimeError("A merge method that converts configs must be a class merge method and define a static member 'map_keys(builder)'")
+                raise TypeError("A merge method that converts configs must be a class merge method and define a static member 'map_keys(builder)'")
         else:
             if is_map_keys_defined:
-                raise RuntimeError("A merge method interface cannot define 'map_keys'.")
+                raise TypeError("A merge method interface cannot define 'map_keys'.")
+
+        for reserved_name in ("key", "key_relation", "cache", "output_reused"):
+            if reserved_name in names.values():
+                raise TypeError(f"A merge method cannot define a parameter named {reserved_name}.")
 
     def instantiate(self):
         if self.wrapped_is_class:
             return self.__wrapped__()
         return None
 
-    def key_map(self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig) -> KeyMap:
+    def create_cache(self):
+        return self.cache_factory()
+
+    def build_key_map(self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig) -> KeyMap[KeyRelation]:
         input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
         input_configs = {
             p.name: input_configs.get(p.name) if input_configs.get(p.name) is not None else p.annotation.data.model_config if p.annotation.data.model_config is not None else return_config
@@ -270,7 +286,7 @@ class MergeMethod:
             res = KeyMap({
                 (key,): KeyRelation(
                     (key,),
-                    {input_name: (key,) for input_name in input_configs},
+                    (Clause({input_name: (key,) for input_name in input_configs}),),
                 )
                 for key in return_config.keys()
             })
@@ -290,7 +306,7 @@ class MergeMethod:
         input_args: Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         input_kwargs: Mapping[str, NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         key: str,
-        key_relation: KeyRelation,
+        key_relation: RealizedKeyRelation,
         cache: Optional[dict],
         context: Optional[Any],
         output_reused: bool,
@@ -307,7 +323,7 @@ class MergeMethod:
         input_args: Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]],
         input_kwargs: Mapping[str, float],
         key: str,
-        key_relation: KeyRelation,
+        key_relation: RealizedKeyRelation,
         cache: Optional[dict],
         output_reused: bool,
     ) -> Tuple[Sequence[NonDictLiteralValue | StateDict[NonDictLiteralValue]], Mapping]:
@@ -654,6 +670,7 @@ def merge_method(
     implements: Optional[str | MergeMethod] = None,
     is_interface: bool = False,
     reuse_outputs: bool = True,
+    cache_factory: Callable[[], Any] = type(None),
 ) -> MergeMethod | Callable[[F], MergeMethod]:
     """
     Decorator to define a custom merge method.
@@ -679,6 +696,8 @@ def merge_method(
             The appropriate candidate implementation will be resolved during recipe node creation.
         reuse_outputs (bool):
             If True, marks this merge method as computationally heavy.
+        cache_factory (Callable[[], Any])
+            Constructor of cache objects this merge method uses. Defaults to `lambda: None`.
 
     Returns:
         A `MergeMethod` object or a decorator returning such an object.
@@ -688,8 +707,8 @@ def merge_method(
         ValueError: register is False, but is_conversion is True or dispatcher is not None.
     """
     if fn is None:
-        return lambda fn: _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs)
-    return _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs)
+        return lambda fn: _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs, cache_factory=cache_factory)
+    return _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs, cache_factory=cache_factory)
 
 
 def _merge_method_impl(
@@ -700,6 +719,7 @@ def _merge_method_impl(
     implements: Optional[str | MergeMethod],
     is_interface: bool,
     reuse_outputs: bool,
+    cache_factory: Callable[[], Any],
 ) -> MergeMethod:
     global _module_state
 
@@ -738,7 +758,7 @@ def _merge_method_impl(
         if is_interface:
             _register_interface(fn, identifier, default_merge_space, module_state_copy)
 
-        fn_object = MergeMethod(fn, identifier, default_merge_space, module_state_copy.interfaces_registry.get(identifier), reuse_outputs)
+        fn_object = MergeMethod(fn, identifier, default_merge_space, module_state_copy.interfaces_registry.get(identifier), reuse_outputs, cache_factory)
         module_state_copy.merge_methods_registry[identifier] = fn_object
 
         if is_conversion:
