@@ -56,15 +56,18 @@ def rotate(
         cache = cache[kwargs["key"]]
 
         # if centralization is different from the cached value, invalidate cache
-        if not math.isclose(cache.setdefault("centralization", centralization), centralization):
-            cache.clear()
+        if "centralization" in cache:
+            if not math.isclose(cache["centralization"], centralization):
+                cache.clear()
+        else:
+            cache["centralization"] = centralization
 
     a_2d = a.reshape(*shape_2d)
     b_2d = b.reshape(*shape_2d)
     a_mean = a_2d.mean(0) * centralization
     b_mean = b_2d.mean(0) * centralization
-    a_2d -= a_mean
-    b_2d -= b_mean
+    a_2d = a_2d - a_mean
+    b_2d = b_2d - b_mean
 
     alignment_is_float = not math.isclose(alignment, round(alignment))
 
@@ -79,7 +82,7 @@ def rotate(
         a_2d = torch.lerp(a_2d, transform(b_2d, -1, cache, key), alpha)
 
     a_2d = transform(a_2d, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
-    a_2d += torch.lerp(a_mean, b_mean, alignment)
+    a_2d = a_2d + torch.lerp(a_mean, b_mean, alignment)
     return a_2d.reshape_as(a)
 
 
