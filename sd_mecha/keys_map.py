@@ -359,8 +359,6 @@ class KeyMapBuilder:
     """
 
     def __init__(self, input_configs: Mapping[str, Optional[Any]], output_config: Any):
-        if not input_configs:
-            raise ValueError("At least one input parameter config is required.")
         self.input_configs: Dict[str, Any] = OrderedDict(input_configs)
         self.output_config: Any = output_config
         self.params: Tuple[str, ...] = tuple(self.input_configs.keys())
@@ -372,7 +370,7 @@ class KeyMapBuilder:
         self.keys = AllKeysAccessor(self)
 
         self._shared_input_keyset: Set[str] = set()
-        if self._all_inputs_share_config:
+        if self.params and self._all_inputs_share_config:
             first_cfg = self.input_configs[self.params[0]]
             self._shared_input_keyset = set(first_cfg.keys().keys())
 
@@ -393,6 +391,8 @@ class KeyMapBuilder:
         )
 
     def _compute_all_inputs_share_config(self) -> bool:
+        if not self.params:
+            return True
         cfgs = [self.input_configs[p] for p in self.params]
         first = cfgs[0]
         return all(cfg == first for cfg in cfgs[1:])
@@ -411,10 +411,14 @@ class KeyMapBuilder:
         yield from self._input_keydict_for(param).items()
 
     def _shared_input_keys(self) -> Iterator[str]:
+        if not self.params:
+            yield from ()
         first_cfg = self.input_configs[self.params[0]]
         yield from first_cfg.keys().keys()
 
     def _shared_input_items(self) -> Iterator[Tuple[str, Any]]:
+        if not self.params:
+            yield from ()
         first_cfg = self.input_configs[self.params[0]]
         yield from first_cfg.keys().items()
 
