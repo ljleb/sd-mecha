@@ -85,13 +85,13 @@ def _open_graph_impl(
 
 @dataclasses.dataclass
 class RecipeGraph:
-    root: RecipeNode
+    root_non_finalized: RecipeNode
     node_to_index_by_type: Dict[type["ComponentType"], Dict[RecipeNode, "ComponentIndex"]]
     node_map: Dict[RecipeNode, RecipeNode]
     candidates: Dict[type["ComponentType"], Dict["ComponentIndex", "ComponentCandidates"]]
     is_root_only: bool
 
-    def finalize(
+    def finalize_root(
         self,
         model_config: Optional[str | ModelConfig] = None,
         merge_space: Optional[str | MergeSpace] = None,
@@ -99,7 +99,56 @@ class RecipeGraph:
         merge_space_preference: Optional[Iterable[str | MergeSpace]] = None,
         check_extra_keys: bool = True,
         check_mandatory_keys: bool = True,
-    ) -> "FinalizeReturn":
+    ) -> RecipeNode:
+        finalized_root, _, _, _, _ = self._prepare_finalize(
+            model_config=model_config,
+            merge_space=merge_space,
+            model_config_preference=model_config_preference,
+            merge_space_preference=merge_space_preference,
+            check_extra_keys=check_extra_keys,
+            check_mandatory_keys=check_mandatory_keys,
+        )
+        return finalized_root
+
+    def finalize_with_keys(
+        self,
+        model_config: Optional[str | ModelConfig] = None,
+        merge_space: Optional[str | MergeSpace] = None,
+        model_config_preference: Optional[Iterable[str | ModelConfig]] = None,
+        merge_space_preference: Optional[Iterable[str | MergeSpace]] = None,
+        check_extra_keys: bool = True,
+        check_mandatory_keys: bool = True,
+    ) -> "FinalizeWithKeysReturn":
+        finalized_root, to_finalized_node, candidates, solutions, finalizer = self._prepare_finalize(
+            model_config=model_config,
+            merge_space=merge_space,
+            model_config_preference=model_config_preference,
+            merge_space_preference=merge_space_preference,
+            check_extra_keys=check_extra_keys,
+            check_mandatory_keys=check_mandatory_keys,
+        )
+        node_to_keys, realized_key_maps = self._compute_key_mappings(
+            finalized_root=finalized_root,
+            candidates=candidates,
+            solutions=solutions,
+            finalizer=finalizer,
+        )
+        return FinalizeWithKeysReturn(
+            root=finalized_root,
+            node_to_keys=node_to_keys,
+            realized_key_maps=realized_key_maps,
+            to_finalized_node=to_finalized_node,
+        )
+
+    def _prepare_finalize(
+        self,
+        model_config: Optional[str | ModelConfig] = None,
+        merge_space: Optional[str | MergeSpace] = None,
+        model_config_preference: Optional[Iterable[str | ModelConfig]] = None,
+        merge_space_preference: Optional[Iterable[str | MergeSpace]] = None,
+        check_extra_keys: bool = True,
+        check_mandatory_keys: bool = True,
+    ):
         model_config = model_configs.resolve(model_config) if isinstance(model_config, str) else model_config
         merge_space = merge_spaces.resolve(merge_space) if isinstance(merge_space, str) else merge_space
         if model_config_preference is not None:
@@ -121,7 +170,7 @@ class RecipeGraph:
             component_types[MergeSpaceComponentType] = (merge_space, merge_space_preference)
 
         for t, (return_hint, return_preference) in component_types.items():
-            root_idx = self.node_to_index_by_type[t][self.root]
+            root_idx = self.node_to_index_by_type[t][self.root_non_finalized]
             root_t_candidates = candidates[t][root_idx]
             if return_hint is not None:
                 root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
@@ -137,74 +186,61 @@ class RecipeGraph:
             check_extra_keys=check_extra_keys,
             check_mandatory_keys=check_mandatory_keys,
         )
-        finalized_root = self.root.accept(finalizer)
-
+        finalized_root = self.root_non_finalized.accept(finalizer)
         to_finalized_node = {original: finalizer.node_map[opened] for original, opened in self.node_map.items()}
 
-        node_to_keys: Dict[RecipeNode, Set[str]] = {}
-        realized_key_maps: Dict[MergeRecipeNode, ActiveKeyMap[RealizedKeyRelation]] = {}
+        return finalized_root, to_finalized_node, candidates, solutions, finalizer
 
-        if ModelConfigComponentType in candidates and not self.is_root_only:
-            t = ModelConfigComponentType
+    def _compute_key_mappings(
+        self,
+        finalized_root,
+        candidates,
+        solutions,
+        finalizer,
+    ):
+        finalized_node_to_indices: Dict[RecipeNode, Set[ComponentIndex]] = defaultdict(set)
+        for old_node, index in self.node_to_index_by_type[ModelConfigComponentType].items():
+            finalized_node = finalizer.node_map[old_node]
+            finalized_node_to_indices[finalized_node].add(index)
 
-            finalized_node_to_indices: Dict[RecipeNode, Set[ComponentIndex]] = defaultdict(set)
-            for old_node, index in self.node_to_index_by_type[t].items():
-                finalized_node = finalizer.node_map[old_node]
-                finalized_node_to_indices[finalized_node].add(index)
+        component_keys: Dict[ComponentIndex, Set[str]] = {}
+        component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
 
-            component_keys: Dict[ComponentIndex, Set[str]] = {}
-            component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
+        for idxs in finalized_node_to_indices.values():
+            for idx in idxs:
+                solved = solutions[ModelConfigComponentType][idx]
+                cand = candidates[ModelConfigComponentType][idx]
 
-            for idxs in finalized_node_to_indices.values():
-                for idx in idxs:
-                    solved = solutions[t][idx]
-                    cand = candidates[t][idx]
-
-                    if solved.identifier == "structural":
-                        component_metadata[idx] = cand.possible_keys
-                        component_keys[idx] = set(cand.possible_keys.keys())
+                if solved.identifier == "structural":
+                    component_metadata[idx] = cand.possible_keys
+                    component_keys[idx] = set(cand.possible_keys.keys())
+                else:
+                    component_metadata[idx] = solved.keys()
+                    stats = cand.stats or {}
+                    match = stats.get(solved.identifier)
+                    if match is not None:
+                        component_keys[idx] = set(match.intersection) | set(cand.possible_keys)
                     else:
-                        component_metadata[idx] = solved.keys()
-                        stats = cand.stats or {}
-                        match = stats.get(solved.identifier)
-                        if match is not None:
-                            component_keys[idx] = set(match.intersection) | set(cand.possible_keys)
-                        else:
-                            component_keys[idx] = set(cand.possible_keys) or set(solved.keys().keys())
+                        component_keys[idx] = set(cand.possible_keys) or set(solved.keys().keys())
 
-            node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
-            node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]] = {}
+        node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
+        node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]] = {}
 
-            for node, idxs in finalized_node_to_indices.items():
-                idxs = set(idxs)
-                node_to_key_domain[node] = _union_key_sets(component_keys[idx] for idx in idxs)
-                node_to_metadata_domain[node] = _merge_component_metadata(component_metadata[idx] for idx in idxs)
+        for node, idxs in finalized_node_to_indices.items():
+            idxs = set(idxs)
+            node_to_key_domain[node] = _union_key_sets(component_keys[idx] for idx in idxs)
+            node_to_metadata_domain[node] = _merge_component_metadata(component_metadata[idx] for idx in idxs)
 
-            keys_visitor = PropagatableKeyVisitor(node_to_key_domain, node_to_metadata_domain)
-            keys_visitor.visit_all_keys(finalized_root)
+        keys_visitor = PropagatableKeyVisitor(node_to_key_domain, node_to_metadata_domain)
+        keys_visitor.visit_all_keys(finalized_root)
 
-            node_to_keys = {
-                node: set(keys)
-                for node, keys in keys_visitor.filtered_node_keys.items()
-            }
-            realized_key_maps = dict(keys_visitor.realized_key_maps)
+        node_to_keys = {
+            node: set(keys)
+            for node, keys in keys_visitor.filtered_node_keys.items()
+        }
+        realized_key_maps = dict(keys_visitor.realized_key_maps)
 
-        return FinalizeReturn(finalized_root, node_to_keys, realized_key_maps, to_finalized_node)
-
-    @staticmethod
-    def _dedupe_relations(relations: Iterable[RealizedKeyRelation]) -> List[RealizedKeyRelation]:
-        seen = set()
-        out = []
-        for rel in relations:
-            key = (
-                rel.outputs,
-                tuple((p, tuple(ks)) for p, ks in rel.inputs.items()),
-                id(rel.meta) if callable(rel.meta) else repr(rel.meta),
-            )
-            if key not in seen:
-                seen.add(key)
-                out.append(rel)
-        return out
+        return node_to_keys, realized_key_maps
 
     def root_candidates(
         self,
@@ -237,7 +273,7 @@ class RecipeGraph:
             raise RuntimeError("The recipe graph was opened without model config analysis.")
 
         for t, (return_hint, return_preference) in component_types.items():
-            root_idx = self.node_to_index_by_type[t][self.root]
+            root_idx = self.node_to_index_by_type[t][self.root_non_finalized]
             root_t_candidates = candidates[t][root_idx]
             if return_hint is not None:
                 root_t_candidates.apply_return_hint(return_hint, reason=f"return hint {return_hint}")
@@ -245,10 +281,8 @@ class RecipeGraph:
                 root_t_candidates.apply_preference(return_preference)
 
         return CandidatesReturn(**{
-            t.name: candidates[t][self.node_to_index_by_type[t][self.root]] if t in candidates else None for t in (
-                ModelConfigComponentType,
-                MergeSpaceComponentType,
-            )
+            t.name: candidates[t][self.node_to_index_by_type[t][self.root_non_finalized]] if t in candidates else None
+            for t in (ModelConfigComponentType, MergeSpaceComponentType)
         })
 
     def _clone_candidates(self) -> Dict[type["ComponentType"], Dict["ComponentIndex", "ComponentCandidates"]]:
@@ -261,7 +295,7 @@ class RecipeGraph:
 
 
 @dataclasses.dataclass
-class FinalizeReturn:
+class FinalizeWithKeysReturn:
     root: RecipeNode
     node_to_keys: Mapping[RecipeNode, Set[str]]
     realized_key_maps: Mapping[RecipeNode, ActiveKeyMap[RealizedKeyRelation]]

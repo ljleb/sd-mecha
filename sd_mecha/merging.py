@@ -34,6 +34,7 @@ from .typing_ import is_subclass
 def merge(
     recipe: RecipeNodeOrValue,
     *,
+    fallback_model: Optional[RecipeNodeOrValue] = ...,
     merge_device: Optional[str | torch.device] = ...,
     merge_dtype: Optional[torch.dtype] = ...,
     output_device: Optional[str | torch.device] = ...,
@@ -60,6 +61,8 @@ def merge(
     Args:
         recipe:
             A RecipeNode, python literal, or dictionary describing how to merge or transform multiple models.
+        fallback_model (optional):
+            A secondary recipe or model to provide values for any keys missing from `recipe`.
         merge_device (optional):
             Torch device to load input tensors onto while merging (e.g., "cpu" or "cuda:0").
         merge_dtype (optional):
@@ -106,6 +109,8 @@ def merge(
     Returns:
         The in-memory dictionary if `output` is either a MutableMapping or None, and nothing if `output` is a file path.
     """
+    if fallback_model is ...:
+        fallback_model = None
     if merge_device is ...:
         merge_device = "cpu"
     if merge_dtype is ...:
@@ -150,6 +155,9 @@ def merge(
         recipe = recipe.accept(cast_visitor)
         cache = {cast_visitor.converted_nodes.get(node, node): cache_dict for node, cache_dict in cache.items()}
 
+    if fallback_model is not None:
+        recipe |= fallback_model
+
     if output_device is not None or output_dtype is not None:
         recipe = recipe.to(device=output_device, dtype=output_dtype)
 
@@ -172,7 +180,7 @@ def merge(
         recipe,
         buffer_size_per_file,
     ) as graph:
-        finalized_res = graph.finalize(
+        finalized_res = graph.finalize_with_keys(
             check_extra_keys=check_extra_keys,
             check_mandatory_keys=strict_mandatory_keys,
             model_config_preference=("singleton-mecha",),

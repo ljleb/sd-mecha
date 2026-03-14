@@ -161,11 +161,9 @@ def serialize(recipe: RecipeNode, *, finalize: bool = True, output: Optional[pat
     serializer = SerializerVisitor()
     if finalize:
         with open_graph(recipe) as graph:
-            root = graph.finalize(model_config_preference=("singleton-mecha",)).root
-    else:
-        root = recipe
+            recipe = graph.finalize_root(model_config_preference=("singleton-mecha",))
 
-    root.accept(serializer)
+    recipe.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
     serialized = "\n".join([version_header] + serializer.instructions)
 
