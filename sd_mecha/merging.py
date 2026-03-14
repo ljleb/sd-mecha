@@ -18,12 +18,12 @@ from .graph_finalization import open_graph
 from .keys_map import ActiveKeyMap, RealizedKeyRelation
 from .recipe_nodes import (
     ClosedModelRecipeNode, RecipeVisitor, LiteralRecipeNode, RecipeNode, MergeRecipeNode,
-    ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue,
+    ModelRecipeNode, RecipeNodeOrValue, NonDictLiteralValue, PythonLiteralValue,
 )
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
 from collections import defaultdict, OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed, Future
+from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
 from types import SimpleNamespace
@@ -151,17 +151,17 @@ def merge(
     recipe = value_to_node(recipe)
     original_recipe = recipe
 
-    original_to_casted = None
-    if cast_inputs or omit_non_finite_inputs:
-        cast_visitor = CastInputDicts(merge_device, merge_dtype, omit_non_finite_inputs)
-        recipe = recipe.accept(cast_visitor)
-        original_to_casted = cast_visitor.converted_nodes
-
     if fallback_model is not None:
         recipe |= fallback_model
 
     if output_device is not None or output_dtype is not None:
         recipe = recipe.to(device=output_device, dtype=output_dtype)
+
+    original_to_casted = None
+    if cast_inputs or omit_non_finite_inputs:
+        cast_visitor = CastInputDicts(merge_device, merge_dtype, omit_non_finite_inputs)
+        recipe = recipe.accept(cast_visitor)
+        original_to_casted = cast_visitor.converted_nodes
 
     total_files_open = (
         recipe.accept(recipe_nodes.ModelsCountVisitor()) +
@@ -300,15 +300,19 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
                     all_finite = res.to(dtype=torch.bfloat16).isfinite().all()
 
                 if not all_finite:
-                    logging.warning(f"there are non finite values in key '{key}': {key_metadata}")
+                    message = f"There are non finite values in key '{key}': {key_metadata}"
+                    if key_metadata.optional:
+                        logging.debug(message)
+                    else:
+                        logging.warning(message)
 
             output[key] = res
             return res
         except StateDictKeyError as e:
             if key_metadata.optional or not strict_mandatory_keys:
-                logging.debug(f"skipping key {e}")
+                logging.debug(f"Skipping key: {e}")
             else:
-                raise RuntimeError(f"could not merge mandatory key: {e}") from e
+                raise RuntimeError(f"Could not merge mandatory key: {e}") from e
     return track_output
 
 
@@ -644,7 +648,7 @@ class CastInputDicts(RecipeVisitor):
         for k, v in node.value_dict.items():
             if isinstance(v, RecipeNode):
                 v = v.accept(self)
-            elif isinstance(v, (int, float, bool, str)):
+            elif isinstance(v, PythonLiteralValue):
                 v = v
             elif isinstance(v, torch.Tensor):
                 v = v.to(device=self.device, dtype=self.dtype)

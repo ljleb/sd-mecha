@@ -131,13 +131,12 @@ def stack(
 
 @merge_method(reuse_outputs=False)
 def omit_non_finite(
-    a: Parameter(StateDict[Tensor]),
+    a: Parameter(Tensor),
     **kwargs,
 ) -> Return(Tensor):
     key = kwargs["key"]
-    v = a[key]
 
-    if not v.isfinite().all():
+    if not a.isfinite().all():
         raise NonFiniteStateDictKeyError(key)
     else:
-        return v
+        return a
