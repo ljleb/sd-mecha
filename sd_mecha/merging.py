@@ -150,10 +150,12 @@ def merge(
 
     recipe = value_to_node(recipe)
     original_recipe = recipe
+
+    original_to_casted = None
     if cast_inputs or omit_non_finite_inputs:
         cast_visitor = CastInputDicts(merge_device, merge_dtype, omit_non_finite_inputs)
         recipe = recipe.accept(cast_visitor)
-        cache = {cast_visitor.converted_nodes.get(node, node): cache_dict for node, cache_dict in cache.items()}
+        original_to_casted = cast_visitor.converted_nodes
 
     if fallback_model is not None:
         recipe |= fallback_model
@@ -189,11 +191,15 @@ def merge(
         )
         recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
         realized_root_key_map = realized_key_maps[recipe]
-        cache = {finalized_res.to_finalized_node[node]: cache_object for node, cache_object in cache.items()}
-        original_recipe = ReplaceSolvedComponents(finalized_res.to_finalized_node).process(original_recipe)
+        if original_to_casted is not None:
+            original_to_finalized = {original: finalized_res.to_finalized_node[node] for original, node in original_to_casted.items()}
+        else:
+            original_to_finalized = finalized_res.to_finalized_node
+
+        cache = {original_to_finalized[node]: cache_object for node, cache_object in cache.items()}
+        original_recipe = ReplaceSolvedComponents(original_to_finalized).process(original_recipe)
 
         graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in realized_root_key_map}
-
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
         merge_methods_context = create_merge_method_context(
             recipe,
@@ -212,7 +218,7 @@ def merge(
                 buffer_size_per_file_per_thread,
             ) as output_dict,
         ):
-            fix_torch_threading()
+            _fix_torch_threading()
             futures = []
             for key, key_metadata in graph_metadata.items():
                 fn = recipe.accept
@@ -221,12 +227,7 @@ def merge(
                 fn = _wrap_thread_context(fn, thread_local_data)
                 merge_visitor = KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache, realized_key_maps)
                 futures.append(executor.submit(fn, merge_visitor))
-
-            for future in as_completed(futures):
-                if future.exception() is not None:
-                    for future_to_cancel in futures:
-                        future_to_cancel.cancel()
-                future.result()
+            _resolve_futures(futures)
 
             for node, mm_context in merge_methods_context.items():
                 unique_refs = {id(ref): ref for ref in mm_context.output_refs.values()}.values()
@@ -238,7 +239,7 @@ def merge(
                 return output_dict
 
 
-def fix_torch_threading():
+def _fix_torch_threading():
     if torch.cuda.is_available():
         # this greedy loads the torch.linalg module
         # avoids a hard error caused by threads>1 with some torch ops
@@ -343,6 +344,26 @@ class ThisThreadExecutor(nullcontext):
         except BaseException as e:
             result.set_exception(e)
         return result
+
+
+def _resolve_futures(futures: Sequence[Future]):
+    from concurrent.futures import wait, FIRST_EXCEPTION
+    done, not_done = wait(futures, return_when=FIRST_EXCEPTION)
+
+    first_exc = None
+    for future in done:
+        exc = future.exception()
+        if exc is not None:
+            first_exc = exc
+            break
+
+    if first_exc is not None:
+        for future in not_done:
+            future.cancel()
+        raise first_exc
+
+    for future in not_done:
+        future.result()
 
 
 @dataclasses.dataclass
