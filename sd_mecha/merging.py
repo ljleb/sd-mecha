@@ -645,19 +645,22 @@ class CastInputDicts(RecipeVisitor):
 
         converted_dict = {}
         can_omit = False
+        cast_recipe = False
         for k, v in node.value_dict.items():
             if isinstance(v, RecipeNode):
                 v = v.accept(self)
             elif isinstance(v, PythonLiteralValue):
                 v = v
             elif isinstance(v, torch.Tensor):
-                v = v.to(device=self.device, dtype=self.dtype)
                 can_omit = True
+                cast_recipe = True
             else:
                 raise RuntimeError(f"Cannot cast type {type(v)} to device={self.device}, dtype={self.dtype}")
             converted_dict[k] = v
 
         res = LiteralRecipeNode(converted_dict, node.model_config, node.merge_space)
+        if cast_recipe:
+            res = res.to(device=self.device, dtype=self.dtype)
         if can_omit and self.omit_non_finite:
             res = sd_mecha.omit_non_finite(res)
         self.converted_nodes[node] = res

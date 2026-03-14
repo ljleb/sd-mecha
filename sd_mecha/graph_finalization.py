@@ -718,6 +718,9 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
                 break
 
     def constrain(self, constraint: Set[MergeSpace], *, reason: str = "") -> None:
+        before = None if self.allowed is None else set(self.allowed)
+        incoming = set(constraint)
+
         if self.allowed is None:
             self.allowed = set(constraint)
         else:
@@ -725,7 +728,14 @@ class MergeSpaceCandidates(ComponentCandidates[MergeSpace]):
 
         if self.allowed is not None and len(self.allowed) == 0:
             prefix = f"{reason}\n" if reason else ""
-            raise TypeError(prefix + "Merge-space constraints are unsatisfiable (empty intersection).")
+            raise TypeError(
+                prefix
+                + "Merge-space constraints are unsatisfiable (empty intersection).\n"
+                + f"  Existing candidates: {before}\n"
+                + f"  Incoming constraint: {incoming}\n"
+                + "Fix: ensure the merge method's input/return merge-space annotations are compatible, "
+                  "or add/adjust explicit merge_space hints."
+            )
 
     def visit_literal(self, node: LiteralRecipeNode, **_kwargs):
         if node.merge_space is not None:

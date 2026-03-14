@@ -144,10 +144,10 @@ def truncate_rank(
 
 
 @merge_method(reuse_outputs=False)
-def rank_ratio(
-    a: Parameter(Tensor),
-    ratio: Parameter(float) = 0.5,
-) -> Return(int):
+def get_rank_from_ratio(
+    a: Parameter(Tensor, {"weight", "delta"}),
+    ratio: Parameter(float, "param") = 0.5,
+) -> Return(int, "param"):
     shape_2d = torch.Size((a.shape[:1].numel(), a.shape[1:].numel()))
     max_rank = min(shape_2d)
     target_rank = min(max(round(max_rank * ratio), 0), max_rank)
