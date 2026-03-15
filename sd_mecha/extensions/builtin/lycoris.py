@@ -1,8 +1,7 @@
 import abc
 import dataclasses
-from collections import defaultdict
-
 import torch
+from collections import defaultdict
 from typing import ClassVar, Iterable, Mapping, Dict, Tuple
 from sd_mecha.extensions import model_configs
 from .merge_methods.kronecker import kron_dims_from_ratio
@@ -137,9 +136,7 @@ def _to_lycoris_keys(
 
     for key, meta in base_keys.items():
         for algo in algorithms:
-            if key.endswith("bias") or not getattr(meta.dtype, "is_floating_point", True) or (
-                meta.shape is not None and len(meta.shape) < 2
-            ):
+            if not algo.accepts_key(key, meta) or not getattr(meta.dtype, "is_floating_point", True):
                 continue
 
             parts = key.split(".")
@@ -178,6 +175,12 @@ class LycorisAlgorithm(abc.ABC):
     @classmethod
     def all(cls) -> tuple["LycorisAlgorithm", ...]:
         return tuple(algo_cls() for algo_cls in cls._registry)
+
+    @staticmethod
+    def accepts_key(key: str, meta: KeyMetadata):
+        bias = key.endswith("bias")
+        shape_at_least_2d = meta.shape is None or len(meta.shape) >= 2
+        return not bias and not shape_at_least_2d
 
     @abc.abstractmethod
     def relation_inputs(self, b, lyco_config, base_key):
@@ -527,15 +530,24 @@ class NormAlgorithm(LycorisAlgorithm):
         "b_norm",
     )
 
+    @staticmethod
+    def accepts_key(key: str, meta: KeyMetadata):
+        bias = key.endswith("bias")
+        shape_at_least_2d = meta.shape is None or len(meta.shape) >= 2
+        return not bias and not shape_at_least_2d
+
     def relation_inputs(self, b: KeyMapBuilder, lyco_config: LycorisModelConfig, base_key: str):
         lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(self,))
         if not lyco_keys:
             return None
 
+        w_norm, b_norm = lyco_keys
+
         inputs = None
-        for lyco_key in lyco_keys:
-            if lyco_key is not None:
-                inputs |= b.keys[lyco_key]
+        if base_key.endswith("bias"):
+            inputs |= b.keys[b_norm]
+        else:
+            inputs |= b.keys[w_norm]
 
         return inputs
 
