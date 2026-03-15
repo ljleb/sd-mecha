@@ -81,7 +81,7 @@ def rotate(
     if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
         a_2d = torch.lerp(a_2d, transform(b_2d, -1, cache, key), alpha)
 
-    a_2d = transform(a_2d, alignment, cache, key, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
+    a_2d = transform(a_2d, alignment, cache=cache, stiefel_eps=stiefel_eps, stiefel_max_iters=stiefel_max_iters)
     a_2d = a_2d + torch.lerp(a_mean, b_mean, alignment)
     return a_2d.reshape_as(a)
 
@@ -174,18 +174,27 @@ class LowRankOrthogonalMatmul:
         self.u = u
         self.v = vh.mH
 
-    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None, stiefel_eps=1e-8, stiefel_max_iters=100, **_kwargs):
-        if math.isclose(t, 0.0):
+    def __call__(
+        self,
+        x: Tensor,
+        t: float | int = 1.0,
+        cache: Optional[dict] = None,
+        stiefel_eps: float = 1e-8,
+        stiefel_max_iters: int = 100,
+        **_kwargs,
+    ):
+        if math.isclose(t, 0):
             return x
-        elif math.isclose(t, 1.0):
-            return x - x @ self.v @ self.v.mH + x @ self.u @ self.v.mH
-        elif math.isclose(t, -1.0):
-            return x - x @ self.u @ self.u.mH + x @ self.v @ self.u.mH
-        else:
-            uv_log = log_stiefel(self.v, self.u, cache=cache, key=key)
-            l = exp_stiefel(self.v, uv_log * (t+1)/2)
-            r = exp_stiefel(self.v, uv_log * (1-t)/2)
-            return x - x @ r @ r.mH + x @ l @ r.mH
+        if math.isclose(t, 1) and torch.allclose((partial_res := x @ self.u) @ self.u.mH, x):
+            return partial_res @ self.v.mH
+        if math.isclose(t, -1) and torch.allclose((partial_res := x @ self.v) @ self.v.mH, x):
+            return partial_res @ self.u.mH
+
+        delta, basis = log_matmul_ambient(self.u, self.v, stiefel_eps, stiefel_max_iters, cache)
+        m = torch.linalg.matrix_exp(t*delta)
+        m.diagonal()[:] -= 1
+
+        return x + x @ basis @ m @ basis.mH
 
     def to(self, *args, **kwargs):
         return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.v.mH.to(*args, **kwargs))
@@ -195,7 +204,14 @@ class FullRankOrthogonalMatmul:
     def __init__(self, rotation):
         self.rotation = rotation
 
-    def __call__(self, x: Tensor, t: float | int = 1.0, cache: Optional[dict] = None, key: Optional[str] = None, **_kwargs):
+    def __call__(
+        self,
+        x: Tensor,
+        t: float | int = 1.0,
+        cache: Optional[dict] = None,
+        key: Optional[str] = None,
+        **_kwargs,
+    ):
         if math.isclose(t, 0.0):
             return x
 
@@ -271,39 +287,33 @@ def get_approximate_basis(a: Tensor, rank: int, iters: int = 0, seed: int = None
     return q
 
 
-def orthogonal_complete(a: Tensor) -> Tensor:
-    m, n = a.shape[-2:]
-    if m <= n:
-        return a
+def log_matmul_ambient(u, v, log_stiefel_eps, log_stiefel_iterations, cache):
+    if cache is not None and "log_matmul_ambient" in cache:
+        w, b = cache["log_matmul_ambient"]
+        return w.to(u), b.to(u)
+    delta = log_stiefel(u, v, log_stiefel_eps, log_stiefel_iterations)
 
-    proj = torch.eye(m, device=a.device, dtype=a.dtype)[:, n:] - a @ a.mH[..., n:]
-    a_extension = torch.linalg.householder_product(*torch.geqrf(proj))
-    return torch.cat((a, a_extension), dim=-1)
-
-
-def stiefel_interpolate(a, b, t, eps=1e-8, max_iters=100, cache=None, key=None):
-    delta = log_stiefel(a, b, eps, max_iters, cache, key)
-    res = exp_stiefel(a, t * delta)
-    return res
-
-
-def exp_stiefel(u, delta):
     n, p = u.shape[-2:]
-
-    assert n > p, "u should be tall, not square nor wide"
     k = min(n-p, p)
 
     a = u.mH @ delta
     q, r = qr_pos(delta - u @ a)
     q = q[..., :k]
     r = r[..., :k, :]
+
+    b = torch.cat((u, q), dim=-1)
     w = torch.cat((
         torch.cat((a, -r.mH), -1),
         torch.cat((r, torch.zeros_like(a[..., :k, :k])), -1)
     ), -2)
-    m = torch.linalg.matrix_exp(w)
-    res = u @ m[..., :p, :p] + q @ m[..., p:, :p]
-    return res
+
+    if cache is not None:
+        cache["log_matmul_ambient"] = (
+            w.to(device="cpu", dtype=torch.float16),
+            b.to(device="cpu", dtype=torch.float16),
+        )
+
+    return w, b
 
 
 def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
@@ -349,7 +359,7 @@ def log_stiefel(a, b, eps=1e-8, max_iters=100, cache=None, key=None):
     l = None
     converged = False
     for i in range(max_iters):
-        l = logm(v, key)
+        l = canonical_ort_log(v, eps)
         c = l[..., p:, p:]
         c_norm_idx = torch.linalg.matrix_norm(c).argmax()
         c_norm = torch.linalg.matrix_norm(c[c_norm_idx])
@@ -394,15 +404,49 @@ def solve_symmetric_sylvester(s, c):
     return g
 
 
-def logm(m, key):
-    v, vs = torch.linalg.eig(m)
-    v_log = v.unsqueeze(-2).log()
-    res = torch.linalg.solve(vs, vs*v_log, left=False)
+def canonical_ort_log(Q: torch.Tensor, tol=1e-8):
+    """
+    Real, skew-symmetric logarithm for Q in SO(n).
+    Handles even multiplicity of -1 by explicitly building π-planes.
+    Returns a real tensor (no complex dtype).
+    """
+    assert Q.dim() >= 2
+    n = Q.shape[-1]
+    device, dtype = Q.device, Q.dtype
+    I = torch.eye(n, device=device, dtype=dtype)
+    batch = Q.reshape(-1, n, n)
+    B = batch.shape[0]
+    A = torch.zeros_like(batch)
 
-    max_v, _ = res.imag.abs().flatten(start_dim=-2).max(dim=-1)
-    if max_v[max_v.argmax()] > 1e-4:
-        logging.warning(f"imaginary residual at batch index {max_v.argmax()}: {max_v[max_v.argmax()].item()}, key: {key}")
-    return res.to(m.dtype)
+    # Build basis for (-1)-eigenspace via SVD of Q+I
+    U, S, Vh = torch.linalg.svd(batch + I)
+    # multiplicity per batch item
+    k = (S < tol).sum(dim=1)  # (B,)
+
+    for b in range(B):
+        kb = int(k[b].item())
+        if kb:
+            # Use last kb right-singular vectors as nullspace basis
+            E = Vh[b, -kb:].T  # (n, kb)
+            # Orthonormalize columns (QR)
+            Qe, _ = torch.linalg.qr(E)  # (n, kb)
+            # Pair columns into 2D planes
+            assert kb % 2 == 0, "For SO(n) the -1 multiplicity should be even."
+            for i in range(0, kb, 2):
+                u = Qe[:, i]
+                v = Qe[:, i + 1]
+                A[b] += math.pi * (u[:, None] @ v[None, :] - v[:, None] @ u[None, :])
+
+    # Complement: principal skew log (no -1 eigenvalues on that subspace).
+    # Use complex eig, then project to skew-Hermitian and take real part.
+    W, V = torch.linalg.eig(batch)  # (B,n), (B,n,n)
+    theta = torch.angle(W)  # principal angles in (-pi, pi]
+    Scomp = torch.linalg.solve(V, V * (1j * theta).unsqueeze(-2), left=False)
+    Scomp = 0.5 * (Scomp - Scomp.mH)
+    A = A + Scomp.real.to(dtype)
+
+    A = 0.5 * (A - A.mH)
+    return A.reshape(Q.shape)
 
 
 def qr_pos(x):
@@ -410,3 +454,13 @@ def qr_pos(x):
     s = torch.sign(r.diagonal(offset=0, dim1=-2, dim2=-1))
     s[s == 0] = 1
     return q * s.unsqueeze(-2), r / s.unsqueeze(-1)
+
+
+def orthogonal_complete(a: Tensor) -> Tensor:
+    m, n = a.shape[-2:]
+    if m <= n:
+        return a
+
+    proj = torch.eye(m, device=a.device, dtype=a.dtype)[:, n:] - a @ a.mH[..., n:]
+    a_extension = torch.linalg.householder_product(*torch.geqrf(proj))
+    return torch.cat((a, a_extension), dim=-1)

@@ -275,12 +275,11 @@ class LoraAlgorithm(LycorisAlgorithm):
         return extract_lora
 
     def implement_extract_method(self, lyco_interface, lyco_config, base_config):
-        algo = self
         lyco_config_id = lyco_config.identifier
         base_config_id = base_config.identifier
 
         @merge_method(
-            identifier=f"extract_{algo.name}_'{lyco_config_id}'",
+            identifier=f"extract_{self.name}_'{lyco_config_id}'",
             implements=lyco_interface,
             cache_factory=lambda: defaultdict(dict),
         )
@@ -293,7 +292,7 @@ class LoraAlgorithm(LycorisAlgorithm):
 
             @staticmethod
             def get_output_keys(base_key: str):
-                keys = lyco_config.to_lycoris_keys(base_key, (algo,))
+                keys = lyco_config.to_lycoris_keys(base_key, (self,))
                 if not keys:
                     return ()
                 up, _, down, alpha = keys
@@ -457,7 +456,7 @@ class LokrAlgorithm(LycorisAlgorithm):
             return 1
 
     def define_extract_method(self, lyco_id: str):
-        @merge_method(identifier=f"extract_{lyco_id}_lokr", is_interface=True)
+        @merge_method(identifier=f"extract_{lyco_id}_{self.name}", is_interface=True)
         def extract_lokr(
             base: Parameter(torch.Tensor, "delta"),
             kronecker_ratio: Parameter(float) = 0.5,
@@ -466,12 +465,11 @@ class LokrAlgorithm(LycorisAlgorithm):
         return extract_lokr
 
     def implement_extract_method(self, lyco_interface, lyco_config, base_config):
-        algo_name = self.name
         lyco_config_id = lyco_config.identifier
         base_config_id = base_config.identifier
 
         @merge_method(
-            identifier=f"extract_{algo_name}_'{lyco_config_id}'",
+            identifier=f"extract_{self.name}_'{lyco_config_id}'",
             implements=lyco_interface,
         )
         class BaseToLokr:
@@ -483,7 +481,7 @@ class LokrAlgorithm(LycorisAlgorithm):
 
             @staticmethod
             def get_output_keys(base_key: str):
-                keys = lyco_config.to_lycoris_keys(base_key, ("lokr",))
+                keys = lyco_config.to_lycoris_keys(base_key, (self,))
                 if not keys:
                     return ()
                 w1, _, _, w2, _, _, _, _ = keys
@@ -520,6 +518,65 @@ class LokrAlgorithm(LycorisAlgorithm):
                     w1_key: u.reshape(shape_w1),
                     w2_key: vh.reshape(shape_w2),
                 }
+
+
+class NormAlgorithm(LycorisAlgorithm):
+    name = "norm"
+    suffixes = (
+        "w_norm",
+        "b_norm",
+    )
+
+    def relation_inputs(self, b: KeyMapBuilder, lyco_config: LycorisModelConfig, base_key: str):
+        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(self,))
+        if not lyco_keys:
+            return None
+
+        inputs = None
+        for lyco_key in lyco_keys:
+            if lyco_key is not None:
+                inputs |= b.keys[lyco_key]
+
+        return inputs
+
+    def define_extract_method(self, lyco_id: str):
+        @merge_method(identifier=f"extract_{lyco_id}_{self.name}", is_interface=True)
+        def extract_norm(
+            base: Parameter(torch.Tensor, "delta"),
+        ) -> Return(torch.Tensor, "weight"):
+            ...
+        return extract_norm
+
+    def implement_extract_method(self, lyco_interface, lyco_config, base_config):
+        lyco_config_id = lyco_config.identifier
+        base_config_id = base_config.identifier
+
+        @merge_method(
+            identifier=f"extract_{self.name}_'{lyco_config_id}'",
+            implements=lyco_interface,
+        )
+        class BaseToNorm:
+            @classmethod
+            def map_keys(cls, b):
+                for base_key in base_config.keys():
+                    if output_keys := cls.get_output_keys(base_key):
+                        b[output_keys] = b.keys[base_key]
+
+            @staticmethod
+            def get_output_keys(base_key: str):
+                keys = lyco_config.to_lycoris_keys(base_key, (self,))
+                if not keys:
+                    return ()
+                w_norm, b_norm = keys
+                return w_norm, b_norm
+
+            def __call__(
+                self,
+                base: Parameter(torch.Tensor, "delta", base_config_id),
+                **kwargs,
+            ) -> Return(torch.Tensor, "weight", lyco_config_id):
+                key = kwargs["key_relation"].inputs["base"]
+                return base[key]
 
 
 _register_all_lycoris_configs()
