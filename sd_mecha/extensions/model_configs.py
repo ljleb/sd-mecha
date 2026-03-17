@@ -8,7 +8,9 @@ import torch
 import yaml
 from collections import OrderedDict
 from sd_mecha.streaming import TensorMetadata
-from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable, Optional
+from types import MappingProxyType
+from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable, Optional, Sequence
+
 try:
     from yaml import CLoader as YamlLoader
 except ImportError:
@@ -20,16 +22,18 @@ StateDictKey = str
 
 @dataclasses.dataclass
 class KeyMetadata:
-    shape: Optional[List[int]] | torch.Size = None
+    shape: Optional[Sequence[int]] | torch.Size = None
     dtype: Optional[str] | torch.dtype = None
     aliases: Iterable[str] = dataclasses.field(default_factory=tuple, metadata={"exclude": lambda p: bool(p)})
     optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
 
     def __post_init__(self):
-        if isinstance(self.shape, list):
+        if isinstance(self.shape, Sequence):
             self.shape = torch.Size(self.shape)
         if isinstance(self.dtype, str):
             self.dtype = getattr(torch, self.dtype)
+        if self.shape is None or not isinstance(self.aliases, tuple):
+            self.aliases = tuple(self.aliases)
 
     def metadata(self) -> TensorMetadata:
         return TensorMetadata(self.shape, self.dtype)
@@ -117,10 +121,10 @@ class ModelConfigImpl(ModelConfig):
     _identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
     _components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
 
-    _keys_cache: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
-    _metadata_cache: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
-    _aliases_cache: Mapping[StateDictKey, Iterable[StateDictKey]] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
-    _resolve_alias_cache: Mapping[StateDictKey, StateDictKey] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _keys_cache: MappingProxyType[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _metadata_cache: MappingProxyType[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _aliases_cache: MappingProxyType[StateDictKey, Iterable[StateDictKey]] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
+    _resolve_alias_cache: MappingProxyType[StateDictKey, StateDictKey] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
 
     def __post_init__(self):
         if not re.fullmatch("[a-z0-9._+]+-[a-z0-9._+]+", self.identifier):
@@ -137,7 +141,7 @@ class ModelConfigImpl(ModelConfig):
                 components[k] = ModelComponent(v)
             else:
                 components[k] = v
-        self._components = components
+        self._components = MappingProxyType(components)
 
     def __eq__(self, other):
         return isinstance(other, ModelConfig) and self.identifier == other.identifier
@@ -160,38 +164,38 @@ class ModelConfigImpl(ModelConfig):
 
     def keys(self) -> Mapping[StateDictKey, KeyMetadata]:
         if self._keys_cache is None:
-            self._keys_cache = OrderedDict(
+            self._keys_cache = MappingProxyType(OrderedDict(
                 (k, v)
                 for component in self.components().values()
                 for k, v in component.keys().items()
-            )
+            ))
         return self._keys_cache
 
     def metadata(self) -> Mapping[StateDictKey, TensorMetadata]:
         if self._metadata_cache is None:
-            self._metadata_cache = OrderedDict(
+            self._metadata_cache = MappingProxyType(OrderedDict(
                 (k, v)
                 for component in self.components().values()
                 for k, v in component.metadata().items()
-            )
+            ))
         return self._metadata_cache
 
     def aliases(self) -> Mapping[StateDictKey, Iterable[StateDictKey]]:
         if self._aliases_cache is None:
-            self._aliases_cache = OrderedDict(
+            self._aliases_cache = MappingProxyType(OrderedDict(
                 (key, aliases)
                 for component in self.components().values()
                 for key, aliases in component.aliases().items()
-            )
+            ))
         return self._aliases_cache
 
     def resolve_alias(self, key: StateDictKey) -> StateDictKey:
         if self._resolve_alias_cache is None:
-            self._resolve_alias_cache = {
-                alias: key
+            self._resolve_alias_cache = MappingProxyType(OrderedDict(
+                (alias, key)
                 for key, aliases in self.aliases().items()
                 for alias in aliases
-            }
+            ))
         return self._resolve_alias_cache.get(key, key)
 
 
@@ -322,6 +326,7 @@ class InferModelConfig(ModelConfig):
 
 
 INFER = InferModelConfig()
+EMPTY = ModelConfigImpl("empty-mecha", {})
 
 
 class YamlModelConfig(LazyModelConfigBase):
@@ -399,17 +404,28 @@ def from_yaml(yaml_config: str) -> ModelConfig:
 
 
 def register(config: ModelConfig):
-    if config.identifier in _model_configs_registry_base or config.identifier in _model_configs_registry_aux:
+    if exists(config):
         raise ValueError(f"Model {config.identifier} already exists")
 
     _model_configs_registry_base[config.identifier] = config
 
 
 def register_aux(config: ModelConfig):
-    if config.identifier in _model_configs_registry_base or config.identifier in _model_configs_registry_aux:
+    if exists(config):
         raise ValueError(f"Model {config.identifier} already exists")
 
     _model_configs_registry_aux[config.identifier] = config
+
+
+def exists(config: ModelConfig):
+    return any(
+        config.identifier in repo
+        for repo in (
+            _model_configs_registry_base,
+            _model_configs_registry_aux,
+            (INFER.identifier, EMPTY.identifier),
+        )
+    )
 
 
 def resolve(identifier: str) -> ModelConfig:

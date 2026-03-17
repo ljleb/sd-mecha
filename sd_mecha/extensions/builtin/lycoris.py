@@ -1,30 +1,28 @@
+from __future__ import annotations
 import abc
 import dataclasses
+import warnings
 import torch
 from collections import defaultdict
-from typing import ClassVar, Iterable, Mapping, Dict, Tuple
+from typing import Callable, ClassVar, Iterable, Mapping, Dict, Optional, Tuple
 from sd_mecha.extensions import model_configs
-from .merge_methods.kronecker import kron_dims_from_ratio
+from .merge_methods.kronecker import extract_lokr
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
 from sd_mecha.extensions.model_configs import (
     ModelComponent, StateDictKey, ModelConfig, ModelConfigImpl,
     LazyModelConfigBase, KeyMetadata,
 )
-from sd_mecha.streaming import StateDictKeyError
-from sd_mecha.keys_map import KeyMapBuilder, ComposeObject
+from sd_mecha.keys_map import KeyMapBuilder, ComposeObject, KeysAccessor, ReqExpr
 from .merge_methods.svd import svd_lowrank
+from sd_mecha.typing_ import ClassObject, subclasses
 
 
 def _register_all_lycoris_configs():
-    algorithms = LycorisAlgorithm.all()
-    for lyco_id, lyco_prefix in (
+    algorithms = subclasses(LycorisAlgorithm)
+    for lyco_config_id, lyco_prefix in (
         ("lycoris", "lycoris"),
         ("kohya", "lora"),
     ):
-        algo_interfaces = {}
-        for algo in algorithms:
-            algo_interfaces[algo.name] = algo.define_extract_method(lyco_id)
-
         for base_config_id in (
             "sdxl-kohya",
             "sdxl-kohya_but_diffusers",
@@ -33,83 +31,121 @@ def _register_all_lycoris_configs():
             base_config = model_configs.resolve(base_config_id)
             lyco_config = LycorisModelConfig(
                 base_config,
-                lyco_id,
+                lyco_config_id,
                 lyco_prefix,
                 algorithms,
             )
             model_configs.register_aux(lyco_config)
-            define_conversions(lyco_config, algorithms)
+
+            define_application(lyco_config, algorithms)
             for algo in algorithms:
-                algo.implement_extract_method(algo_interfaces[algo.name], lyco_config, base_config)
+                algo.implement_extract_method(lyco_config, base_config)
+
+            define_conversions(lyco_config, algorithms)
 
 
-def define_conversions(lyco_config, algorithms: Iterable["LycorisAlgorithm"]):
+@merge_method(is_interface=True)
+def apply_lycoris(
+    base: Parameter(torch.Tensor, "weight"),
+    lyco: Parameter(torch.Tensor, "weight"),
+) -> Return(torch.Tensor, "weight"):
+    ...
+
+
+def define_application(lyco_config: LycorisModelConfig, algorithms: Iterable[type[LycorisAlgorithm]]):
+    lyco_config_id = lyco_config.identifier
+    base_config = lyco_config.base_config
+
+    @merge_method(
+        identifier=f"apply_lycoris_{lyco_config_id}",
+        implements=apply_lycoris,
+        globals=globals(),
+        locals=locals(),
+    )
+    class ApplyLycorisToBase:
+        @staticmethod
+        def map_keys(b: KeyMapBuilder):
+            for base_key in base_config.keys():
+                lyco_inputs = None
+
+                for algo in algorithms:
+                    algo_inputs = algo.build_input_keys(b.lyco.keys, lyco_config, base_key)
+                    if algo_inputs is None:
+                        continue
+
+                    lyco_inputs |= algo_inputs
+
+                b[base_key] = (lyco_inputs | b.base.keys[()]) & b.base.keys[base_key]
+
+        def __call__(
+            self,
+            base: Parameter(StateDict[torch.Tensor], "weight", base_config),
+            lyco: Parameter(StateDict[torch.Tensor], "weight", lyco_config),
+            **kwargs,
+        ) -> Return(torch.Tensor, "weight", base_config):
+            base_key = kwargs["key"]
+            apply_fn = kwargs["key_relation"].meta
+            if apply_fn is None:
+                return base[base_key]
+
+            key_prefix = next(iter(lyco.keys())).split(".")[0]
+            sd_helper = StateDictKeyHelper(base, lyco, base_key, key_prefix)
+            target_shape = base_config.keys()[base_key].shape
+            return apply_fn(sd_helper, target_shape)
+
+
+def define_conversions(lyco_config: LycorisModelConfig, algorithms: Iterable[type[LycorisAlgorithm]]):
     lyco_config_id = lyco_config.identifier
     base_config = lyco_config.base_config
     base_config_id = base_config.identifier
 
-    @merge_method(identifier=f"convert_'{lyco_config_id}'_to_base", is_conversion=True)
+    @merge_method(
+        identifier=f"convert_'{lyco_config_id}'_to_base",
+        is_conversion=True,
+        globals=globals(),
+        locals=locals(),
+    )
     class LycorisToBase:
         @staticmethod
         def map_keys(b: KeyMapBuilder):
+            warnings.warn("converting lycoris to base is deprecated, consider using sd_mecha.apply_lycoris instead.")
             for base_key in base_config.keys():
-                inputs = None
+                lyco_inputs = None
 
                 for algo in algorithms:
-                    algo_inputs = algo.relation_inputs(b, lyco_config, base_key)
+                    if not algo.supports_delta_conversion:
+                        continue
+
+                    algo_inputs = algo.build_input_keys(b.keys, lyco_config, base_key)
                     if algo_inputs is None:
                         continue
 
-                    inputs |= algo_inputs
+                    lyco_inputs |= algo_inputs
 
-                if inputs is not None:
-                    b[base_key] = inputs
+                b[base_key] = (lyco_inputs | b.base.keys[()]) & b.base.keys[base_key]
 
         def __call__(
             self,
-            lora: Parameter(StateDict[torch.Tensor], "weight", lyco_config_id),
+            lyco: Parameter(StateDict[torch.Tensor], "weight", lyco_config_id),
             **kwargs,
         ) -> Return(torch.Tensor, "delta", base_config_id):
-            (base_key,), input_keys = key_relation = kwargs["key_relation"]
+            base_key = kwargs["key"]
+            apply_fn = kwargs["key_relation"].meta
+
+            base = {base_key: 0}
+            key_prefix = next(iter(lyco.keys())).split(".")[0]
+            sd_helper = StateDictKeyHelper(base, lyco, base_key, key_prefix)
             target_shape = base_config.keys()[base_key].shape
-            compose_fn = key_relation.meta
-
-            key_prefix = input_keys["lora"][0].split(".")[0]
-            sd_helper = StateDictKeyHelper(lora, key_prefix)
-            try:
-                return compose_fn(sd_helper, target_shape)
-            except StateDictKeyError:
-                pass
-
-            raise StateDictKeyError(base_key)
-
-
-class StateDictKeyHelper:
-    def __init__(self, state_dict: Mapping[str, torch.Tensor], key_prefix):
-        self.state_dict = state_dict
-        self.key_prefix = key_prefix
-
-    def get_tensor(self, lyco_suffix):
-        return self.state_dict[f"{self.key_prefix}.{lyco_suffix}"]
-
-
-def rebuild_tucker(t, wa, wb):
-    rebuild2 = torch.einsum("i j ..., i p, j r -> p r ...", t, wa, wb)
-    return rebuild2
+            return apply_fn(sd_helper, target_shape)
 
 
 class LycorisModelConfig(LazyModelConfigBase):
-    def __init__(self, base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable["LycorisAlgorithm"]):
+    def __init__(self, base_config: ModelConfig, lycoris_identifier: str, prefix: str, algorithms: Iterable[type[LycorisAlgorithm]]):
         super().__init__()
         self.base_config = base_config
         self.lycoris_identifier = lycoris_identifier
         self.prefix = prefix
         self.algorithms = algorithms
-        self.lycoris_to_base_keys = {
-            lycoris_key: key
-            for key, meta in base_config.keys().items()
-            for lycoris_key in _to_lycoris_keys({key: dataclasses.replace(meta, shape=None)}, algorithms, self.prefix)
-        }
 
     @property
     def identifier(self) -> str:
@@ -123,83 +159,85 @@ class LycorisModelConfig(LazyModelConfigBase):
         }
         return ModelConfigImpl(identifier, components)
 
-    def to_lycoris_keys(self, key: StateDictKey, algos: Iterable["LycorisAlgorithm"] = None) -> Mapping[StateDictKey, KeyMetadata]:
+    def to_lycoris_keys(self, key: StateDictKey, algos: Iterable[type[LycorisAlgorithm]] = None) -> Dict[StateDictKey, KeyMetadata]:
         return _to_lycoris_keys({key: self.base_config.keys()[key]}, algos if algos is not None else self.algorithms, self.prefix)
 
 
 def _to_lycoris_keys(
     base_keys: Mapping[StateDictKey, KeyMetadata],
-    algorithms: Iterable["LycorisAlgorithm"],
+    algorithms: Iterable[type[LycorisAlgorithm]],
     prefix: str,
 ) -> Dict[StateDictKey, KeyMetadata]:
-    lycoris_keys = {}
+    lyco_keys = {}
 
-    for key, meta in base_keys.items():
+    for base_key, meta in base_keys.items():
         for algo in algorithms:
-            if not algo.accepts_key(key, meta) or not getattr(meta.dtype, "is_floating_point", True):
+            if not algo.targets_key(base_key, meta) or not getattr(meta.dtype, "is_floating_point", True):
                 continue
 
-            parts = key.split(".")
-            if parts[-1] == "weight":
-                parts = parts[:-1]
-            stem = "_".join(parts)
+            algo_keys = algo.convert_key(base_key, meta)
+            for algo_key, algo_val in algo_keys.items():
+                lyco_keys[f"{prefix}_{algo_key}"] = algo_val
 
-            for suffix in algo.suffixes:
-                lycoris_key = f"{prefix}_{stem}.{suffix}"
-                lycoris_keys[lycoris_key] = dataclasses.replace(
-                    meta,
-                    shape=[] if suffix == "alpha" else None,
-                    optional=True,
-                )
+    return lyco_keys
 
-    return lycoris_keys
+
+def extraction_interface_name(algo_name: str):
+    return f"extract_{algo_name}"
+
+
+def extraction_implementation_name(algo_name: str, lyco_config: LycorisModelConfig):
+    return f"{extraction_interface_name(algo_name)}_{lyco_config.identifier}"
 
 
 @dataclasses.dataclass(frozen=True)
-class LycorisAlgorithm(abc.ABC):
+class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
     name: ClassVar[str]
     suffixes: ClassVar[Tuple[str, ...]]
-
-    _registry: ClassVar[list[type["LycorisAlgorithm"]]] = []
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls is LycorisAlgorithm:
-            return
-        if not getattr(cls, "name", None):
-            raise TypeError(f"{cls.__name__} must define classvar 'name'")
-        if not getattr(cls, "suffixes", None):
-            raise TypeError(f"{cls.__name__} must define classvar 'suffixes'")
-        LycorisAlgorithm._registry.append(cls)
-
-    @classmethod
-    def all(cls) -> tuple["LycorisAlgorithm", ...]:
-        return tuple(algo_cls() for algo_cls in cls._registry)
+    extraction_interface: Callable
+    supports_delta_conversion: ClassVar[bool] = False
 
     @staticmethod
-    def accepts_key(key: str, meta: KeyMetadata):
+    def targets_key(key: str, meta: KeyMetadata):
         bias = key.endswith("bias")
-        shape_at_least_2d = meta.shape is None or len(meta.shape) >= 2
-        return not bias and not shape_at_least_2d
+        shape_at_least_2d = meta.shape is not None and len(meta.shape) >= 2
+        return not bias and shape_at_least_2d
 
+    @classmethod
+    def convert_key(cls, base_key: str, meta: KeyMetadata) -> Dict[str, KeyMetadata]:
+        res = {}
+
+        stem = cls.stem(base_key)
+        stem_aliases = tuple(cls.stem(alias) for alias in meta.aliases)
+        for suffix in cls.suffixes:
+            lyco_key = f"{stem}.{suffix}"
+            lyco_aliases = tuple(f"{stem_alias}.{suffix}" for stem_alias in stem_aliases)
+            res[lyco_key] = dataclasses.replace(
+                meta,
+                shape=[] if suffix == "alpha" else None,
+                aliases=lyco_aliases,
+                optional=True,
+            )
+
+        return res
+
+    @classmethod
+    def stem(cls, key: str) -> str:
+        parts = key.split(".")
+        if parts[-1] in ("weight", "bias"):
+            parts = parts[:-1]
+        stem = "_".join(parts)
+        return stem
+
+    @classmethod
     @abc.abstractmethod
-    def relation_inputs(self, b, lyco_config, base_key):
+    def build_input_keys(cls, builder: KeysAccessor, lyco_config: LycorisModelConfig, base_key: str) -> Optional[ReqExpr]:
         ...
 
+    @classmethod
     @abc.abstractmethod
-    def define_extract_method(self, lyco_id: str):
+    def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         ...
-
-    @abc.abstractmethod
-    def implement_extract_method(self, lyco_interface, lyco_config, base_config):
-        ...
-
-    def key_by_suffix(self, lyco_keys: Mapping[str, object]) -> Tuple[str, ...]:
-        out = {}
-        for full_key in lyco_keys:
-            _, suffix = full_key.split(".", 1)
-            out[suffix] = full_key
-        return tuple(out.get(suffix) for suffix in self.suffixes)
 
 
 class LoraAlgorithm(LycorisAlgorithm):
@@ -210,23 +248,22 @@ class LoraAlgorithm(LycorisAlgorithm):
         "lora_down.weight",
         "alpha",
     )
+    supports_delta_conversion = True
 
-    def relation_inputs(self, b: KeyMapBuilder, lyco_config: LycorisModelConfig, base_key: str):
-        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(self,))
+    @classmethod
+    def build_input_keys(cls, keys: KeysAccessor, lyco_config: LycorisModelConfig, base_key: str) -> Optional[ReqExpr]:
+        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(cls,))
         if not lyco_keys:
             return None
 
         up, mid, down, alpha = lyco_keys
-        if not (up and down):
-            return None
-
         return (
-            b.keys[(up, down)] @ self.compose &
-            (b.keys[mid] @ self.compose_mid | b.keys[()] if mid else b.keys[()]) &
-            (b.keys[alpha] @ self.compose_alpha | b.keys[()] if alpha else b.keys[()])
+            keys[up, down] @ cls.apply &
+            (keys[mid] @ cls.apply_mid | keys[()]) &
+            (keys[alpha] @ cls.apply_alpha | keys[()])
         )
 
-    class compose(ComposeObject):
+    class apply(ComposeObject):
         @classmethod
         def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
             scale, down_weight = cls.get_scale_down(state_dict)
@@ -234,68 +271,63 @@ class LoraAlgorithm(LycorisAlgorithm):
 
             delta = delta * scale
             delta = delta.reshape(target_shape)
-            return delta
+
+            base = state_dict.get_base_tensor()
+            return base + delta
 
         @staticmethod
         def get_scale_down(sd: StateDictKeyHelper) -> Tuple[torch.Tensor | float, torch.Tensor]:
-            down = sd.get_tensor(LoraAlgorithm.suffixes[2])
+            down = sd.get_lyco_tensor(LoraAlgorithm.suffixes[2])
             alpha = 1
             return alpha, down
 
         @staticmethod
         def build(sd: StateDictKeyHelper, down: torch.Tensor) -> torch.Tensor:
-            up = sd.get_tensor(LoraAlgorithm.suffixes[0])
+            up = sd.get_lyco_tensor(LoraAlgorithm.suffixes[0])
             delta = up.view(up.size(0), -1) @ down.view(down.size(0), -1)
             return delta
 
-    class compose_mid(compose):
+    class apply_mid(apply):
         @staticmethod
         def build(sd: StateDictKeyHelper, down: torch.Tensor) -> torch.Tensor:
-            mid = sd.get_tensor(LoraAlgorithm.suffixes[1])
-            up = sd.get_tensor(LoraAlgorithm.suffixes[0])
+            mid = sd.get_lyco_tensor(LoraAlgorithm.suffixes[1])
+            up = sd.get_lyco_tensor(LoraAlgorithm.suffixes[0])
             wa = up.view(up.size(0), -1).transpose(0, 1)
             wb = down.view(down.size(0), -1)
             delta = rebuild_tucker(mid, wa, wb)
             return delta
 
-    class compose_alpha(compose):
+    class apply_alpha(apply):
         @staticmethod
         def get_scale_down(sd: StateDictKeyHelper) -> Tuple[torch.Tensor | float, torch.Tensor]:
-            alpha = sd.get_tensor(LoraAlgorithm.suffixes[3])
-            down = sd.get_tensor(LoraAlgorithm.suffixes[2])
+            alpha = sd.get_lyco_tensor(LoraAlgorithm.suffixes[3])
+            down = sd.get_lyco_tensor(LoraAlgorithm.suffixes[2])
             return alpha / down.size(0), down
 
-    def define_extract_method(self, lyco_id: str):
-        @merge_method(identifier=f"extract_{lyco_id}_lora", is_interface=True)
-        def extract_lora(
-            base: Parameter(torch.Tensor, "delta"),
-            rank: Parameter(int) = 8,
-            use_approximate_basis: Parameter(bool) = True,
-            approximate_basis_iters: Parameter(int) = 2,
-            approximate_basis_seed: Parameter(int) = None,
-        ) -> Return(StateDict[torch.Tensor], "weight"):
-            ...
-        return extract_lora
+    @staticmethod
+    @merge_method(identifier=extraction_interface_name(name), is_interface=True)
+    def extraction_interface(
+        base: Parameter(torch.Tensor, "delta"),
+        rank: Parameter(int) = 8,
+        use_approximate_basis: Parameter(bool) = True,
+        approximate_basis_iters: Parameter(int) = 2,
+        approximate_basis_seed: Parameter(int) = None,
+    ) -> Return(torch.Tensor, "weight"):
+        ...
 
-    def implement_extract_method(self, lyco_interface, lyco_config, base_config):
-        lyco_config_id = lyco_config.identifier
-        base_config_id = base_config.identifier
-
+    @classmethod
+    def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         @merge_method(
-            identifier=f"extract_{self.name}_'{lyco_config_id}'",
-            implements=lyco_interface,
+            identifier=extraction_implementation_name(cls.name, lyco_config),
+            implements=cls.extraction_interface,
             cache_factory=lambda: defaultdict(dict),
+            globals=globals(),
+            locals=locals(),
         )
-        class BaseToLora:
-            @classmethod
-            def map_keys(cls, b):
-                for base_key in base_config.keys():
-                    if output_keys := cls.get_output_keys(base_key):
-                        b[output_keys] = b.keys[base_key]
-
+        class BaseToLora(BaseToLycoris):
             @staticmethod
             def get_output_keys(base_key: str):
-                keys = lyco_config.to_lycoris_keys(base_key, (self,))
+                keys = lyco_config.to_lycoris_keys(base_key, (cls,))
                 if not keys:
                     return ()
                 up, _, down, alpha = keys
@@ -303,13 +335,13 @@ class LoraAlgorithm(LycorisAlgorithm):
 
             def __call__(
                 self,
-                base: Parameter(torch.Tensor, "delta", base_config_id),
-                rank: Parameter(int, "param", base_config_id),
-                use_approximate_basis: Parameter(bool, "param", base_config_id),
-                approximate_basis_iters: Parameter(int, "param", base_config_id),
-                approximate_basis_seed: Parameter(int, "param", base_config_id),
+                base: Parameter(torch.Tensor, "delta", base_config),
+                rank: Parameter(int, "param", base_config),
+                use_approximate_basis: Parameter(bool, "param", base_config),
+                approximate_basis_iters: Parameter(int, "param", base_config),
+                approximate_basis_seed: Parameter(int, "param", base_config),
                 **kwargs,
-            ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
+            ) -> Return(StateDict[torch.Tensor], "weight", lyco_config):
                 (up_key, down_key, alpha_key) = kwargs["key_relation"].outputs
 
                 original_shape = base.shape
@@ -368,39 +400,23 @@ class LokrAlgorithm(LycorisAlgorithm):
         "lokr_t2",
         "alpha",
     )
+    supports_delta_conversion = True
 
-    def relation_inputs(self, b: KeyMapBuilder, lyco_config: LycorisModelConfig, base_key: str):
-        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(self,))
+    @classmethod
+    def build_input_keys(cls, keys: KeysAccessor, lyco_config: LycorisModelConfig, base_key: str) -> Optional[ReqExpr]:
+        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(cls,))
         if not lyco_keys:
             return None
 
         w1, w1_a, w1_b, w2, w2_a, w2_b, t2, alpha = lyco_keys
 
-        w1_inputs = None
-        if w1:
-            w1_inputs = b.keys[w1] @ self.compose
-        if w1_a and w1_b:
-            alt = b.keys[(w1_a, w1_b)] @ self.compose_w1_factorized
-            w1_inputs |= alt
-        if w1_inputs is None:
-            return None
-
-        w2_inputs = None
-        if w2:
-            w2_inputs = b.keys[w2] @ self.compose
-        if w2_a and w2_b:
-            alt = b.keys[(w2_a, w2_b)] @ self.compose_w2_factorized
-            w2_inputs |= alt
-            if t2:
-                w2_inputs = (b.keys[(w2_a, w2_b, t2)] @ self.compose_w2_tucker) | w2_inputs
-        if w2_inputs is None:
-            return None
-
-        alpha_input = (b.keys[alpha] @ self.compose_alpha) | b.keys[()] if alpha else b.keys[()]
+        w1_inputs = keys[w1] @ cls.apply | keys[w1_a, w1_b] @ cls.apply_w1_factorized
+        w2_inputs = keys[w2_a, w2_b, t2] @ cls.apply_w2_tucker | keys[w2] @ cls.apply | keys[w2_a, w2_b] @ cls.apply_w2_factorized
+        alpha_input = keys[alpha] @ cls.compose_alpha | keys[()]
 
         return w1_inputs & w2_inputs & alpha_input
 
-    class compose(ComposeObject):
+    class apply(ComposeObject):
         @classmethod
         def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
             w1, lora_dim_1 = cls.get_w1(state_dict)
@@ -411,80 +427,77 @@ class LokrAlgorithm(LycorisAlgorithm):
                 w1 = w1.unsqueeze(-1)
 
             delta = torch.kron(w1, w2) * scale
-            return delta.reshape(target_shape)
+            delta = delta.reshape(target_shape)
+
+            base = state_dict.get_base_tensor()
+            return base + delta
 
         @staticmethod
         def get_w1(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w1 = sd.get_tensor(LokrAlgorithm.suffixes[0])
+            w1 = sd.get_lyco_tensor(LokrAlgorithm.suffixes[0])
             return w1, None
 
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2 = sd.get_tensor(LokrAlgorithm.suffixes[3])
+            w2 = sd.get_lyco_tensor(LokrAlgorithm.suffixes[3])
             return w2, None
 
         @staticmethod
         def get_scale(sd: StateDictKeyHelper, lora_dim: int | None) -> torch.Tensor | float:
             return 1
 
-    class compose_w1_factorized(compose):
+    class apply_w1_factorized(apply):
         @staticmethod
         def get_w1(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w1b = sd.get_tensor(LokrAlgorithm.suffixes[2])
-            w1a = sd.get_tensor(LokrAlgorithm.suffixes[1])
+            w1b = sd.get_lyco_tensor(LokrAlgorithm.suffixes[2])
+            w1a = sd.get_lyco_tensor(LokrAlgorithm.suffixes[1])
             return w1a @ w1b, w1b.shape[0]
 
-    class compose_w2_factorized(compose):
+    class apply_w2_factorized(apply):
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2b = sd.get_tensor(LokrAlgorithm.suffixes[5])
-            w2a = sd.get_tensor(LokrAlgorithm.suffixes[4])
+            w2b = sd.get_lyco_tensor(LokrAlgorithm.suffixes[5])
+            w2a = sd.get_lyco_tensor(LokrAlgorithm.suffixes[4])
             w2_b_flat = w2b.flatten(1) if w2b.dim() > 1 else w2b
             return w2a @ w2_b_flat, w2b.shape[0]
 
-    class compose_w2_tucker(compose):
+    class apply_w2_tucker(apply):
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            t2 = sd.get_tensor(LokrAlgorithm.suffixes[6])
-            w2b = sd.get_tensor(LokrAlgorithm.suffixes[5])
-            w2a = sd.get_tensor(LokrAlgorithm.suffixes[4])
+            t2 = sd.get_lyco_tensor(LokrAlgorithm.suffixes[6])
+            w2b = sd.get_lyco_tensor(LokrAlgorithm.suffixes[5])
+            w2a = sd.get_lyco_tensor(LokrAlgorithm.suffixes[4])
             return rebuild_tucker(t2, w2a, w2b), w2b.shape[0]
 
-    class compose_alpha(compose):
+    class compose_alpha(apply):
         @staticmethod
         def get_scale(sd: StateDictKeyHelper, lora_dim: int | None) -> torch.Tensor | float:
-            alpha = sd.get_tensor(LokrAlgorithm.suffixes[7])
+            alpha = sd.get_lyco_tensor(LokrAlgorithm.suffixes[7])
             if lora_dim is not None and alpha.isfinite():
                 return alpha / lora_dim
             return 1
 
-    def define_extract_method(self, lyco_id: str):
-        @merge_method(identifier=f"extract_{lyco_id}_{self.name}", is_interface=True)
-        def extract_lokr(
-            base: Parameter(torch.Tensor, "delta"),
-            kronecker_ratio: Parameter(float) = 0.5,
-        ) -> Return(StateDict[torch.Tensor], "weight"):
-            ...
-        return extract_lokr
+    @staticmethod
+    @merge_method(identifier=extraction_interface_name(name), is_interface=True)
+    def extraction_interface(
+        base: Parameter(torch.Tensor, "delta"),
+        dims: Parameter(torch.Tensor, "param") = ((1, 1), (1, 1)),
+    ) -> Return(torch.Tensor, "weight"):
+        ...
 
-    def implement_extract_method(self, lyco_interface, lyco_config, base_config):
-        lyco_config_id = lyco_config.identifier
-        base_config_id = base_config.identifier
-
+    @classmethod
+    def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         @merge_method(
-            identifier=f"extract_{self.name}_'{lyco_config_id}'",
-            implements=lyco_interface,
+            identifier=extraction_implementation_name(cls.name, lyco_config),
+            implements=cls.extraction_interface,
+            cache_factory=lambda: defaultdict(dict),
+            globals=globals(),
+            locals=locals(),
         )
-        class BaseToLokr:
-            @classmethod
-            def map_keys(cls, b):
-                for base_key in base_config.keys():
-                    if output_keys := cls.get_output_keys(base_key):
-                        b[output_keys] = b.keys[base_key]
-
+        class BaseToLokr(BaseToLycoris):
             @staticmethod
             def get_output_keys(base_key: str):
-                keys = lyco_config.to_lycoris_keys(base_key, (self,))
+                keys = lyco_config.to_lycoris_keys(base_key, (cls,))
                 if not keys:
                     return ()
                 w1, _, _, w2, _, _, _, _ = keys
@@ -492,34 +505,25 @@ class LokrAlgorithm(LycorisAlgorithm):
 
             def __call__(
                 self,
-                base: Parameter(torch.Tensor, "delta", base_config_id),
-                kronecker_ratio: Parameter(float, model_config=base_config_id),
+                base: Parameter(torch.Tensor, "delta", base_config),
+                dims: Parameter(torch.Tensor, "param", base_config),
                 **kwargs,
-            ) -> Return(StateDict[torch.Tensor], "weight", lyco_config_id):
+            ) -> Return(StateDict[torch.Tensor], "weight", lyco_config):
                 w1_key, w2_key = kwargs["key_relation"].outputs
 
-                shape_original = base.shape
-                m1, m2, n1, n2 = kron_dims_from_ratio(shape_original, kronecker_ratio)
-                shape_w1 = torch.Size((m1, n1))
-                shape_w2 = torch.Size((m2, n2, *shape_original[2:]))
-                p2 = shape_original[2:].numel()
+                cache = kwargs.get("cache")
+                if cache is not None:
+                    cache = cache[kwargs["key"]]
 
-                value_2d = (
-                    base
-                    .reshape(m1, m2, n1, n2 * p2)
-                    .permute(0, 2, 1, 3)
-                    .reshape(shape_w1.numel(), shape_w2.numel())
+                w1, w2 = extract_lokr(
+                    base,
+                    dims,
+                    cache=cache,
                 )
 
-                svd_driver = "gesvda" if base.is_cuda else None
-                u, s, vh = torch.linalg.svd(value_2d, full_matrices=False, driver=svd_driver)
-                s = s[..., 0].sqrt()
-                u = u[..., 0] * s
-                vh = s * vh[..., 0, :]
-
                 return {
-                    w1_key: u.reshape(shape_w1),
-                    w2_key: vh.reshape(shape_w2),
+                    w1_key: w1,
+                    w2_key: w2,
                 }
 
 
@@ -529,66 +533,140 @@ class NormAlgorithm(LycorisAlgorithm):
         "w_norm",
         "b_norm",
     )
+    supports_delta_conversion = True
 
     @staticmethod
-    def accepts_key(key: str, meta: KeyMetadata):
+    def targets_key(key: str, meta: KeyMetadata):
         bias = key.endswith("bias")
-        shape_at_least_2d = meta.shape is None or len(meta.shape) >= 2
-        return not bias and not shape_at_least_2d
+        shape_is_1d = meta.shape is not None and len(meta.shape) == 1
+        return bias or shape_is_1d
 
-    def relation_inputs(self, b: KeyMapBuilder, lyco_config: LycorisModelConfig, base_key: str):
-        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(self,))
+    @classmethod
+    def convert_key(cls, base_key: str, meta: KeyMetadata) -> Dict[str, KeyMetadata]:
+        stem = cls.stem(base_key)
+        stem_aliases = tuple(cls.stem(alias) for alias in meta.aliases)
+        if base_key.endswith("bias"):
+            suffix = cls.suffixes[1]
+        else:
+            suffix = cls.suffixes[0]
+
+        lyco_key = f"{stem}.{suffix}"
+        lyco_aliases = tuple(f"{stem_alias}.{suffix}" for stem_alias in stem_aliases)
+        res = {
+            lyco_key: dataclasses.replace(
+                meta,
+                shape=None,
+                aliases=lyco_aliases,
+                optional=True,
+            )
+        }
+        return res
+
+    @classmethod
+    def build_input_keys(cls, keys: KeysAccessor, lyco_config: LycorisModelConfig, base_key: str) -> Optional[ReqExpr]:
+        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(cls,))
         if not lyco_keys:
             return None
 
-        w_norm, b_norm = lyco_keys
-
-        inputs = None
+        norm, = lyco_keys
+        inputs = keys[norm]
         if base_key.endswith("bias"):
-            inputs |= b.keys[b_norm]
+            inputs @= cls.apply_bias
         else:
-            inputs |= b.keys[w_norm]
+            inputs @= cls.apply_weight
 
         return inputs
 
-    def define_extract_method(self, lyco_id: str):
-        @merge_method(identifier=f"extract_{lyco_id}_{self.name}", is_interface=True)
-        def extract_norm(
-            base: Parameter(torch.Tensor, "delta"),
-        ) -> Return(torch.Tensor, "weight"):
-            ...
-        return extract_norm
+    @staticmethod
+    def apply(state_dict: StateDictKeyHelper, target_shape: torch.Size, suffix: str):
+        delta = state_dict.get_lyco_tensor(suffix)
+        delta = delta.reshape(target_shape)
+        base = state_dict.get_base_tensor()
+        return base + delta
 
-    def implement_extract_method(self, lyco_interface, lyco_config, base_config):
-        lyco_config_id = lyco_config.identifier
-        base_config_id = base_config.identifier
+    class apply_weight(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            return NormAlgorithm.apply(state_dict, target_shape, NormAlgorithm.suffixes[0])
 
+    class apply_bias(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            return NormAlgorithm.apply(state_dict, target_shape, NormAlgorithm.suffixes[1])
+
+        @classmethod
+        def get_suffix(cls) -> str:
+            return NormAlgorithm.suffixes[1]
+
+    @staticmethod
+    @merge_method(identifier=extraction_interface_name(name), is_interface=True)
+    def extraction_interface(
+        base: Parameter(torch.Tensor, "delta"),
+    ) -> Return(torch.Tensor, "weight"):
+        ...
+
+    @classmethod
+    def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         @merge_method(
-            identifier=f"extract_{self.name}_'{lyco_config_id}'",
-            implements=lyco_interface,
+            identifier=extraction_implementation_name(cls.name, lyco_config),
+            implements=cls.extraction_interface,
+            globals=globals(),
+            locals=locals(),
         )
-        class BaseToNorm:
-            @classmethod
-            def map_keys(cls, b):
-                for base_key in base_config.keys():
-                    if output_keys := cls.get_output_keys(base_key):
-                        b[output_keys] = b.keys[base_key]
-
+        class BaseToNorm(BaseToLycoris):
             @staticmethod
             def get_output_keys(base_key: str):
-                keys = lyco_config.to_lycoris_keys(base_key, (self,))
-                if not keys:
+                lyco_keys = lyco_config.to_lycoris_keys(base_key, (cls,))
+                if not lyco_keys:
                     return ()
-                w_norm, b_norm = keys
-                return w_norm, b_norm
+                norm, = lyco_keys
+                return norm,
 
             def __call__(
                 self,
-                base: Parameter(torch.Tensor, "delta", base_config_id),
+                base: Parameter(torch.Tensor, "delta", base_config),
                 **kwargs,
-            ) -> Return(torch.Tensor, "weight", lyco_config_id):
-                key = kwargs["key_relation"].inputs["base"]
-                return base[key]
+            ) -> Return(torch.Tensor, "weight", lyco_config):
+                return base
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class BaseToLycoris(abc.ABC):
+    @classmethod
+    def map_keys(cls, b: KeyMapBuilder):
+        for base_key in b.base.keys():
+            if output_keys := cls.get_output_keys(base_key):
+                b[output_keys] = b.keys[base_key]
+
+    @staticmethod
+    @abc.abstractmethod
+    def get_output_keys(base_key: str) -> Iterable[str]:
+        ...
+
+
+class StateDictKeyHelper:
+    def __init__(
+        self,
+        base_sd: Mapping[str, torch.Tensor | int],
+        lyco_sd: Mapping[str, torch.Tensor],
+        base_key: str,
+        lyco_key_prefix: str,
+    ):
+        self.base_sd = base_sd
+        self.lyco_sd = lyco_sd
+        self.base_key = base_key
+        self.lyco_key_prefix = lyco_key_prefix
+
+    def get_lyco_tensor(self, lyco_suffix: str):
+        return self.lyco_sd[f"{self.lyco_key_prefix}.{lyco_suffix}"]
+
+    def get_base_tensor(self) -> torch.Tensor | int:
+        return self.base_sd[self.base_key]
+
+
+def rebuild_tucker(t, wa, wb):
+    rebuild2 = torch.einsum("i j ..., i p, j r -> p r ...", t, wa, wb)
+    return rebuild2
 
 
 _register_all_lycoris_configs()
