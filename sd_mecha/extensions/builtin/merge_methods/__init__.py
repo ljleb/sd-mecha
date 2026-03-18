@@ -27,7 +27,7 @@ from .logistics import (
     omit_non_finite,
 )
 from .slicing import top_k_tensor_sum
-from .svd import truncate_rank
+from .svd import truncate_rank, get_rank_from_ratio
 from .ties import (
     ties_sum_with_dropout,
     ties_sum,

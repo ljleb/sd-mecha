@@ -43,7 +43,7 @@ def assert_equal_in_merge_method(expected: A, actual_literal: B, t: type[A] | Ty
 
     sd_mecha.merge(
         compare_value(actual_literal),
-        strict_merge_space=False,
+        strict_merge_space=None,
         threads=0,
         merge_device=None,
         merge_dtype=None,
