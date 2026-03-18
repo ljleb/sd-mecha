@@ -39,6 +39,7 @@ from sd_mecha.extensions.builtin.merge_methods import (
     randperm,
     top_k_tensor_sum,
     truncate_rank,
+    get_rank_from_ratio,
     ties_sum_with_dropout,
     ties_sum,
     ties_sum_extended,

@@ -99,7 +99,7 @@ def patch_create_context():
 def call_merge(recipe):
     sd_mecha.merge(
         recipe,
-        strict_merge_space=False,
+        strict_merge_space=None,
         threads=0,
         merge_device=None,
         merge_dtype=None,
@@ -139,9 +139,9 @@ def test_binary_tree():
 
 def test_simple_dag():
     a = make_value(5, "delta")
-    b = sd_mecha.truncate_rank(a, rank_ratio=0.5)
-    c = sd_mecha.truncate_rank(b, rank_ratio=0.25)
-    d = sd_mecha.truncate_rank(b, rank_ratio=0.3)
+    b = sd_mecha.truncate_rank(a, sd_mecha.get_rank_from_ratio(a, 0.5))
+    c = sd_mecha.truncate_rank(b, sd_mecha.get_rank_from_ratio(a, 0.25))
+    d = sd_mecha.truncate_rank(b, sd_mecha.get_rank_from_ratio(a, 0.3))
     recipe = sd_mecha.weighted_sum(c, d)
 
     act_assert_no_leak(recipe)

@@ -126,7 +126,7 @@ def merge(
     if total_buffer_size is ...:
         total_buffer_size = 2**28
     if strict_merge_space is ...:
-        strict_merge_space = None
+        strict_merge_space = "weight"
     if strict_mandatory_keys is ...:
         strict_mandatory_keys = False
     if check_extra_keys is ...:
@@ -187,7 +187,7 @@ def merge(
             check_extra_keys=check_extra_keys,
             check_mandatory_keys=strict_mandatory_keys,
             model_config_preference=("singleton-mecha",),
-            merge_space=strict_merge_space if strict_merge_space is not None else None,
+            merge_space=strict_merge_space,
             merge_space_preference=merge_spaces.get_all() if strict_merge_space is None else None,
         )
         recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
@@ -618,19 +618,22 @@ def cast_node_value(value, expected_type):
     except TypeError:
         pass
 
-    if isinstance(expected_type, TypeVar) or isinstance(value, expected_type):
+    try:
+        if isinstance(expected_type, TypeVar) or isinstance(value, expected_type):
+            return value
+        if isinstance(expected_type, str):
+            raise RuntimeError(f"cannot implicitly convert {type(value)} to {expected_type}")
+        if issubclass(expected_type, int):
+            return int(value)
+        if issubclass(expected_type, float):
+            return float(value)
+        if issubclass(expected_type, bool):
+            return bool(value)
+        if issubclass(expected_type, torch.Tensor):
+            return torch.tensor(value, dtype=torch.float32)
         return value
-    if isinstance(expected_type, str):
-        raise RuntimeError(f"cannot implicitly convert {type(value)} to {expected_type}")
-    if issubclass(expected_type, int):
-        return int(value)
-    if issubclass(expected_type, float):
-        return float(value)
-    if issubclass(expected_type, bool):
-        return bool(value)
-    if issubclass(expected_type, torch.Tensor):
-        return torch.tensor(value, dtype=torch.float32)
-    return value
+    except TypeError as e:
+        raise TypeError(f"cannot cast to {expected_type}: {value}") from e
 
 
 @dataclasses.dataclass
