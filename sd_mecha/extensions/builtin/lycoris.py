@@ -2,12 +2,13 @@ from __future__ import annotations
 import abc
 import dataclasses
 import warnings
+import fuzzywuzzy.process
 import torch
 from collections import defaultdict
 from typing import Callable, ClassVar, Iterable, Mapping, Dict, Optional, Tuple
-from sd_mecha.extensions import model_configs
+from sd_mecha.extensions import merge_methods, model_configs
 from .merge_methods.kronecker import extract_lokr
-from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from sd_mecha.extensions.merge_methods import merge_method, MergeMethod, StateDict, Parameter, Return
 from sd_mecha.extensions.model_configs import (
     ModelComponent, StateDictKey, ModelConfig, ModelConfigImpl,
     LazyModelConfigBase, KeyMetadata,
@@ -15,6 +16,14 @@ from sd_mecha.extensions.model_configs import (
 from sd_mecha.keys_map import KeyMapBuilder, ComposeObject, KeysAccessor, ReqExpr
 from .merge_methods.svd import svd_lowrank
 from sd_mecha.typing_ import ClassObject, subclasses
+
+
+__all__ = [
+    "lora",
+    "lokr",
+    "norm",
+    "apply",
+]
 
 
 def _register_all_lycoris_configs():
@@ -44,8 +53,8 @@ def _register_all_lycoris_configs():
             define_conversions(lyco_config, algorithms)
 
 
-@merge_method(is_interface=True)
-def apply_lycoris(
+@merge_method(identifier="apply_lycoris", is_interface=True)
+def apply(
     base: Parameter(torch.Tensor, "weight"),
     lyco: Parameter(torch.Tensor, "weight"),
 ) -> Return(torch.Tensor, "weight"):
@@ -58,7 +67,7 @@ def define_application(lyco_config: LycorisModelConfig, algorithms: Iterable[typ
 
     @merge_method(
         identifier=f"apply_lycoris_{lyco_config_id}",
-        implements=apply_lycoris,
+        implements=apply,
         globals=globals(),
         locals=locals(),
     )
@@ -182,20 +191,21 @@ def _to_lycoris_keys(
     return lyco_keys
 
 
-def extraction_interface_name(algo_name: str):
-    return f"extract_{algo_name}"
-
-
-def extraction_implementation_name(algo_name: str, lyco_config: LycorisModelConfig):
-    return f"{extraction_interface_name(algo_name)}_{lyco_config.identifier}"
+_algos_by_name: Dict[str, type[LycorisAlgorithm]] = {}
 
 
 @dataclasses.dataclass(frozen=True)
 class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
-    name: ClassVar[str]
     suffixes: ClassVar[Tuple[str, ...]]
-    extraction_interface: Callable
+    extract: ClassVar[Callable]
+    extract_method: ClassVar[MergeMethod]
     supports_delta_conversion: ClassVar[bool] = False
+
+    @classmethod
+    def __init_subclass__(cls, **kwargs):
+        global _algos_by_name
+        cls.extract_method = merge_method(cls.extract, identifier=extraction_interface_name(cls.__name__), is_interface=True)
+        _algos_by_name[cls.__name__] = cls
 
     @staticmethod
     def targets_key(key: str, meta: KeyMetadata):
@@ -240,8 +250,26 @@ class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
         ...
 
 
-class LoraAlgorithm(LycorisAlgorithm):
-    name = "lora"
+def extraction_interface_name(algo_name: str):
+    return f"extract_{algo_name}"
+
+
+def extraction_implementation_name(algo_name: str, lyco_config: LycorisModelConfig):
+    return f"{extraction_interface_name(algo_name)}_{lyco_config.identifier}"
+
+
+def resolve(identifier: str) -> MergeMethod:
+    if identifier in _algos_by_name:
+        return merge_methods.resolve(extraction_interface_name(identifier))
+
+    suggestions = fuzzywuzzy.process.extractOne(identifier, _algos_by_name.keys())
+    postfix = ""
+    if suggestions is not None:
+        postfix = f". Nearest match is '{suggestions[0]}'"
+    raise KeyError(f"unknown lycoris algorithm: {identifier}{postfix}")
+
+
+class lora(LycorisAlgorithm):
     suffixes = (
         "lora_up.weight",
         "lora_mid.weight",
@@ -277,21 +305,21 @@ class LoraAlgorithm(LycorisAlgorithm):
 
         @staticmethod
         def get_scale_down(sd: StateDictKeyHelper) -> Tuple[torch.Tensor | float, torch.Tensor]:
-            down = sd.get_lyco_tensor(LoraAlgorithm.suffixes[2])
+            down = sd.get_lyco_tensor(lora.suffixes[2])
             alpha = 1
             return alpha, down
 
         @staticmethod
         def build(sd: StateDictKeyHelper, down: torch.Tensor) -> torch.Tensor:
-            up = sd.get_lyco_tensor(LoraAlgorithm.suffixes[0])
+            up = sd.get_lyco_tensor(lora.suffixes[0])
             delta = up.view(up.size(0), -1) @ down.view(down.size(0), -1)
             return delta
 
     class apply_mid(apply):
         @staticmethod
         def build(sd: StateDictKeyHelper, down: torch.Tensor) -> torch.Tensor:
-            mid = sd.get_lyco_tensor(LoraAlgorithm.suffixes[1])
-            up = sd.get_lyco_tensor(LoraAlgorithm.suffixes[0])
+            mid = sd.get_lyco_tensor(lora.suffixes[1])
+            up = sd.get_lyco_tensor(lora.suffixes[0])
             wa = up.view(up.size(0), -1).transpose(0, 1)
             wb = down.view(down.size(0), -1)
             delta = rebuild_tucker(mid, wa, wb)
@@ -300,13 +328,12 @@ class LoraAlgorithm(LycorisAlgorithm):
     class apply_alpha(apply):
         @staticmethod
         def get_scale_down(sd: StateDictKeyHelper) -> Tuple[torch.Tensor | float, torch.Tensor]:
-            alpha = sd.get_lyco_tensor(LoraAlgorithm.suffixes[3])
-            down = sd.get_lyco_tensor(LoraAlgorithm.suffixes[2])
+            alpha = sd.get_lyco_tensor(lora.suffixes[3])
+            down = sd.get_lyco_tensor(lora.suffixes[2])
             return alpha / down.size(0), down
 
     @staticmethod
-    @merge_method(identifier=extraction_interface_name(name), is_interface=True)
-    def extraction_interface(
+    def extract(
         base: Parameter(torch.Tensor, "delta"),
         rank: Parameter(int) = 8,
         use_approximate_basis: Parameter(bool) = True,
@@ -318,8 +345,8 @@ class LoraAlgorithm(LycorisAlgorithm):
     @classmethod
     def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         @merge_method(
-            identifier=extraction_implementation_name(cls.name, lyco_config),
-            implements=cls.extraction_interface,
+            identifier=extraction_implementation_name(cls.__name__, lyco_config),
+            implements=cls.extract_method,
             cache_factory=lambda: defaultdict(dict),
             globals=globals(),
             locals=locals(),
@@ -388,8 +415,7 @@ class LoraAlgorithm(LycorisAlgorithm):
                 }
 
 
-class LokrAlgorithm(LycorisAlgorithm):
-    name = "lokr"
+class lokr(LycorisAlgorithm):
     suffixes = (
         "lokr_w1",
         "lokr_w1_a",
@@ -434,12 +460,12 @@ class LokrAlgorithm(LycorisAlgorithm):
 
         @staticmethod
         def get_w1(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w1 = sd.get_lyco_tensor(LokrAlgorithm.suffixes[0])
+            w1 = sd.get_lyco_tensor(lokr.suffixes[0])
             return w1, None
 
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2 = sd.get_lyco_tensor(LokrAlgorithm.suffixes[3])
+            w2 = sd.get_lyco_tensor(lokr.suffixes[3])
             return w2, None
 
         @staticmethod
@@ -449,37 +475,36 @@ class LokrAlgorithm(LycorisAlgorithm):
     class apply_w1_factorized(apply):
         @staticmethod
         def get_w1(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w1b = sd.get_lyco_tensor(LokrAlgorithm.suffixes[2])
-            w1a = sd.get_lyco_tensor(LokrAlgorithm.suffixes[1])
+            w1b = sd.get_lyco_tensor(lokr.suffixes[2])
+            w1a = sd.get_lyco_tensor(lokr.suffixes[1])
             return w1a @ w1b, w1b.shape[0]
 
     class apply_w2_factorized(apply):
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            w2b = sd.get_lyco_tensor(LokrAlgorithm.suffixes[5])
-            w2a = sd.get_lyco_tensor(LokrAlgorithm.suffixes[4])
+            w2b = sd.get_lyco_tensor(lokr.suffixes[5])
+            w2a = sd.get_lyco_tensor(lokr.suffixes[4])
             w2_b_flat = w2b.flatten(1) if w2b.dim() > 1 else w2b
             return w2a @ w2_b_flat, w2b.shape[0]
 
     class apply_w2_tucker(apply):
         @staticmethod
         def get_w2(sd: StateDictKeyHelper) -> Tuple[torch.Tensor, int | None]:
-            t2 = sd.get_lyco_tensor(LokrAlgorithm.suffixes[6])
-            w2b = sd.get_lyco_tensor(LokrAlgorithm.suffixes[5])
-            w2a = sd.get_lyco_tensor(LokrAlgorithm.suffixes[4])
+            t2 = sd.get_lyco_tensor(lokr.suffixes[6])
+            w2b = sd.get_lyco_tensor(lokr.suffixes[5])
+            w2a = sd.get_lyco_tensor(lokr.suffixes[4])
             return rebuild_tucker(t2, w2a, w2b), w2b.shape[0]
 
     class compose_alpha(apply):
         @staticmethod
         def get_scale(sd: StateDictKeyHelper, lora_dim: int | None) -> torch.Tensor | float:
-            alpha = sd.get_lyco_tensor(LokrAlgorithm.suffixes[7])
+            alpha = sd.get_lyco_tensor(lokr.suffixes[7])
             if lora_dim is not None and alpha.isfinite():
                 return alpha / lora_dim
             return 1
 
     @staticmethod
-    @merge_method(identifier=extraction_interface_name(name), is_interface=True)
-    def extraction_interface(
+    def extract(
         base: Parameter(torch.Tensor, "delta"),
         dims: Parameter(torch.Tensor, "param") = ((1, 1), (1, 1)),
     ) -> Return(torch.Tensor, "weight"):
@@ -488,8 +513,8 @@ class LokrAlgorithm(LycorisAlgorithm):
     @classmethod
     def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         @merge_method(
-            identifier=extraction_implementation_name(cls.name, lyco_config),
-            implements=cls.extraction_interface,
+            identifier=extraction_implementation_name(cls.__name__, lyco_config),
+            implements=cls.extract_method,
             cache_factory=lambda: defaultdict(dict),
             globals=globals(),
             locals=locals(),
@@ -527,8 +552,7 @@ class LokrAlgorithm(LycorisAlgorithm):
                 }
 
 
-class NormAlgorithm(LycorisAlgorithm):
-    name = "norm"
+class norm(LycorisAlgorithm):
     suffixes = (
         "w_norm",
         "b_norm",
@@ -577,6 +601,20 @@ class NormAlgorithm(LycorisAlgorithm):
 
         return inputs
 
+    class apply_weight(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            return norm.apply(state_dict, target_shape, norm.suffixes[0])
+
+    class apply_bias(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            return norm.apply(state_dict, target_shape, norm.suffixes[1])
+
+        @classmethod
+        def get_suffix(cls) -> str:
+            return norm.suffixes[1]
+
     @staticmethod
     def apply(state_dict: StateDictKeyHelper, target_shape: torch.Size, suffix: str):
         delta = state_dict.get_lyco_tensor(suffix)
@@ -584,32 +622,17 @@ class NormAlgorithm(LycorisAlgorithm):
         base = state_dict.get_base_tensor()
         return base + delta
 
-    class apply_weight(ComposeObject):
-        @classmethod
-        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
-            return NormAlgorithm.apply(state_dict, target_shape, NormAlgorithm.suffixes[0])
-
-    class apply_bias(ComposeObject):
-        @classmethod
-        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
-            return NormAlgorithm.apply(state_dict, target_shape, NormAlgorithm.suffixes[1])
-
-        @classmethod
-        def get_suffix(cls) -> str:
-            return NormAlgorithm.suffixes[1]
-
     @staticmethod
-    @merge_method(identifier=extraction_interface_name(name), is_interface=True)
-    def extraction_interface(
-        base: Parameter(torch.Tensor, "delta"),
+    def extract(
+        diff: Parameter(torch.Tensor, "delta"),
     ) -> Return(torch.Tensor, "weight"):
         ...
 
     @classmethod
     def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
         @merge_method(
-            identifier=extraction_implementation_name(cls.name, lyco_config),
-            implements=cls.extraction_interface,
+            identifier=extraction_implementation_name(cls.__name__, lyco_config),
+            implements=cls.extract_method,
             globals=globals(),
             locals=locals(),
         )
@@ -624,10 +647,10 @@ class NormAlgorithm(LycorisAlgorithm):
 
             def __call__(
                 self,
-                base: Parameter(torch.Tensor, "delta", base_config),
+                diff: Parameter(torch.Tensor, "delta", base_config),
                 **kwargs,
             ) -> Return(torch.Tensor, "weight", lyco_config):
-                return base
+                return diff
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

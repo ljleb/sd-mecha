@@ -1,11 +1,6 @@
-def _load_builtin_extensions():
-    import sd_mecha.extensions.builtin.model_configs
-    import sd_mecha.extensions.builtin.lycoris
-
-
-_load_builtin_extensions()
-
-
+import sd_mecha.extensions.builtin.model_configs
+from sd_mecha.extensions.builtin import lycoris
+from sd_mecha.extensions.builtin.lycoris import apply as apply_lycoris
 from .recipe_nodes import RecipeNodeOrValue, RecipeNode
 from .merging import merge
 from .graph_finalization import open_graph
