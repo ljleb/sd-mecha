@@ -14,7 +14,7 @@ from sd_mecha.recipe_nodes import ClosedModelRecipeNode, RecipeNode, MergeRecipe
 from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Sequence
 from ..keys_map import Clause, KeyMapBuilder, KeyMap, KeyRelation, RealizedKeyRelation
 from ..typing_ import is_subclass, is_instance
@@ -51,7 +51,7 @@ class ParameterType:
 
 
 def Parameter(
-    interface: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
+    annotation: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
@@ -63,7 +63,7 @@ def Parameter(
     in weight space."
 
     Args:
-        interface (type):
+        annotation (type):
             The Python or Torch type of this parameter.
         merge_space (str or Iterable[str], optional):
             Which merge space(s) are valid for this parameter (e.g., "weight", "delta").
@@ -73,13 +73,13 @@ def Parameter(
     Returns:
         A special type annotation object used by `@merge_method` to interpret function arguments.
     """
-    if type(None) in (typing.get_args(interface) or ()):
-        interface = typing.get_args(interface)[0]
+    if type(None) in (typing.get_args(annotation) or ()):
+        annotation = typing.get_args(annotation)[0]
 
-    if not isinstance(interface, TypeVar):
+    if not isinstance(annotation, TypeVar):
         supported_types = [StateDict] + list(T.__constraints__)
-        if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
-            raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
+        if not any(issubclass(typing.get_origin(annotation) or annotation, supported_type) for supported_type in supported_types):
+            raise TypeError(f"type {annotation} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, (str, MergeSpace)):
         merge_space = (merge_space,)
@@ -97,7 +97,7 @@ def Parameter(
         raise ValueError("merge methods cannot convert 'structural' model configs")
 
     return type(Parameter.__name__, (ParameterType,), {
-        "data": ParameterData(interface, merge_space, model_config)
+        "data": ParameterData(annotation, merge_space, model_config)
     })
 
 
@@ -107,7 +107,7 @@ class ReturnType:
 
 
 def Return(
-    interface: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
+    annotation: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | str] = None,
 ) -> type[Any]:
@@ -115,7 +115,7 @@ def Return(
     Describe the return type of a merge method, optionally including its merge space and model config.
 
     Args:
-        interface (type):
+        annotation (type):
             The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
         merge_space (MergeSpace, str or MergeSpaceSymbol, optional):
             The single merge space valid for the return, or a symbol that depends on the input spaces.
@@ -125,10 +125,10 @@ def Return(
     Returns:
         A type annotation object used by `@merge_method` for the return signature.
     """
-    if not isinstance(interface, TypeVar):
+    if not isinstance(annotation, TypeVar):
         supported_types = [StateDict] + list(T.__constraints__)
-        if not any(issubclass(typing.get_origin(interface) or interface, supported_type) for supported_type in supported_types):
-            raise TypeError(f"type {interface} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
+        if not any(issubclass(typing.get_origin(annotation) or annotation, supported_type) for supported_type in supported_types):
+            raise TypeError(f"type {annotation} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, str):
         merge_space = merge_spaces.resolve(merge_space)
@@ -140,7 +140,7 @@ def Return(
         raise ValueError("merge methods cannot convert 'structural' model configs")
 
     return type(Return.__name__, (ReturnType,), {
-        "data": ParameterData(interface, merge_space, model_config)
+        "data": ParameterData(annotation, merge_space, model_config)
     })
 
 
@@ -188,6 +188,8 @@ class MergeMethod:
         interface: Optional["MergeMethodInterface"],
         reuse_outputs: bool,
         cache_factory: Callable[[], Any],
+        globals_: Optional[Dict[str, Any]],
+        locals_: Optional[Dict[str, Any]],
     ):
         self.__wrapped__ = fn_or_cls
         self.wrapped_is_class = inspect.isclass(fn_or_cls)
@@ -201,7 +203,7 @@ class MergeMethod:
         self.default_merge_space = default_merge_space
         self.interface = interface
 
-        signature = inspect.signature(fn)
+        signature = inspect.signature(fn, globals=globals_, locals=locals_, eval_str=True)
         return_annotation = _ensure_return(signature.return_annotation, self.default_merge_space)
         self.__f_signature = signature.replace(
             parameters=[
@@ -279,17 +281,17 @@ class MergeMethod:
             if p.kind != p.VAR_KEYWORD
         }
         if self.wrapped_is_class and hasattr(self.__wrapped__, "map_keys"):
-            builder = KeyMapBuilder(input_configs, return_config)
+            builder = KeyMapBuilder(MappingProxyType(input_configs), return_config)
             self.__wrapped__.map_keys(builder)
             res = builder.build()
         else:
-            res = KeyMap({
+            res = KeyMap(MappingProxyType({
                 (key,): KeyRelation(
                     (key,),
                     (Clause({input_name: (key,) for input_name in input_configs}),),
                 )
                 for key in return_config.keys()
-            })
+            }))
         return res
 
     def __eq__(self, other):
@@ -446,13 +448,20 @@ class MergeMethod:
 
 
 class MergeMethodInterface:
-    def __init__(self, identifier: str, fn: Callable, default_merge_space: MergeSpaceSymbol):
+    def __init__(
+        self,
+        identifier: str,
+        fn: Callable,
+        default_merge_space: MergeSpaceSymbol,
+        globals_: Optional[Dict[str, Any]],
+        locals_: Optional[Dict[str, Any]],
+    ):
         self.identifier = identifier
         self.candidates = []
 
         self.default_merge_space = default_merge_space
 
-        signature = inspect.signature(fn)
+        signature = inspect.signature(fn, globals=globals_, locals=locals_, eval_str=True)
         for param in signature.parameters.values():
             if param.kind == inspect.Parameter.KEYWORD_ONLY:
                 raise RuntimeError(f"Keyword-only parameter '{param.name}' is not allowed in a merge strategy.")
@@ -482,7 +491,7 @@ class MergeMethodInterface:
 
             candidate_data = candidate_param.annotation.data
             contract_data = contract_param.annotation.data
-            if candidate_data.interface != contract_data.interface:
+            if not _same_state_dict_interface(candidate_data.interface, contract_data.interface):
                 raise TypeError(f"Expected parameter '{candidate_name}' to have type {contract_data.interface} but got {candidate_data.interface}.")
             if contract_data.merge_space is not None and candidate_data.merge_space != contract_data.merge_space:
                 raise TypeError(f"Expected parameter '{candidate_name}' to use merge space(s) {contract_data.merge_space} but got {candidate_data.merge_space}.")
@@ -671,6 +680,8 @@ def merge_method(
     is_interface: bool = False,
     reuse_outputs: bool = True,
     cache_factory: Callable[[], Any] = type(None),
+    globals: Optional[dict[str, Any]] = None,
+    locals: Optional[dict[str, Any]] = None,
 ) -> MergeMethod | Callable[[F], MergeMethod]:
     """
     Decorator to define a custom merge method.
@@ -707,8 +718,30 @@ def merge_method(
         ValueError: register is False, but is_conversion is True or dispatcher is not None.
     """
     if fn is None:
-        return lambda fn: _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs, cache_factory=cache_factory)
-    return _merge_method_impl(fn, identifier=identifier, register=register, is_conversion=is_conversion, implements=implements, is_interface=is_interface, reuse_outputs=reuse_outputs, cache_factory=cache_factory)
+        return lambda fn: _merge_method_impl(
+            fn,
+            identifier=identifier,
+            register=register,
+            is_conversion=is_conversion,
+            implements=implements,
+            is_interface=is_interface,
+            reuse_outputs=reuse_outputs,
+            cache_factory=cache_factory,
+            globals_=globals,
+            locals_=locals,
+        )
+    return _merge_method_impl(
+        fn,
+        identifier=identifier,
+        register=register,
+        is_conversion=is_conversion,
+        implements=implements,
+        is_interface=is_interface,
+        reuse_outputs=reuse_outputs,
+        cache_factory=cache_factory,
+        globals_=globals,
+        locals_=locals,
+    )
 
 
 def _merge_method_impl(
@@ -720,6 +753,8 @@ def _merge_method_impl(
     is_interface: bool,
     reuse_outputs: bool,
     cache_factory: Callable[[], Any],
+    globals_: Optional[dict[str, Any]],
+    locals_: Optional[dict[str, Any]],
 ) -> MergeMethod:
     global _module_state
 
@@ -756,9 +791,25 @@ def _merge_method_impl(
             default_merge_space = MergeSpaceSymbol(*merge_spaces.get_all())
 
         if is_interface:
-            _register_interface(fn, identifier, default_merge_space, module_state_copy)
+            _register_interface(
+                fn,
+                identifier,
+                default_merge_space,
+                module_state_copy,
+                globals_,
+                locals_,
+            )
 
-        fn_object = MergeMethod(fn, identifier, default_merge_space, module_state_copy.interfaces_registry.get(identifier), reuse_outputs, cache_factory)
+        fn_object = MergeMethod(
+            fn,
+            identifier,
+            default_merge_space,
+            module_state_copy.interfaces_registry.get(identifier),
+            reuse_outputs,
+            cache_factory,
+            globals_,
+            locals_,
+        )
         module_state_copy.merge_methods_registry[identifier] = fn_object
 
         if is_conversion:
@@ -828,10 +879,12 @@ def _register_interface(
     identifier: Optional[str],
     default_merge_space: MergeSpaceSymbol,
     module_state: ModuleState,
+    globals_: Optional[Dict[str, Any]],
+    locals_: Optional[Dict[str, Any]],
 ) -> MergeMethodInterface:
     if identifier is None:
         identifier = fn.__name__
-    fn_object = MergeMethodInterface(identifier, fn, default_merge_space)
+    fn_object = MergeMethodInterface(identifier, fn, default_merge_space, globals_, locals_)
 
     if identifier in module_state.interfaces_registry:
         raise KeyError(f"Another merge method interface named {identifier} is already registered.")
