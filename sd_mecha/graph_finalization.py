@@ -1361,10 +1361,10 @@ class PropagatableKeyVisitor(RecipeVisitor):
                 return False
 
             for child_key in required_child_keys:
-                found = False
+                found = True
                 for child in children:
-                    if child.accept(self, child_key):
-                        found = True
+                    if not child.accept(self, child_key):
+                        found = False
                         break
                 if not found:
                     return False

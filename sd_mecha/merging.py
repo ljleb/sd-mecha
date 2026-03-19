@@ -152,7 +152,7 @@ def merge(
     original_recipe = recipe
 
     if fallback_model is not None:
-        recipe |= fallback_model
+        recipe |= value_to_node(fallback_model)
 
     if output_device is not None or output_dtype is not None:
         recipe = recipe.to(device=output_device, dtype=output_dtype)

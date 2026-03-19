@@ -641,7 +641,7 @@ def _ensure_parameter(hint: type, param_name: str, default: Any, default_merge_s
         if default is inspect.Parameter.empty and is_subclass(interface, return_interface):
             hint.data.merge_space = default_merge_space
         else:
-            hint.data.merge_space = {"param"}
+            hint.data.merge_space = {merge_spaces.resolve("param")}
 
     return hint
 
