@@ -313,8 +313,8 @@ def is_finalized(recipe: RecipeNode, check_merge_nodes: bool = True) -> bool:
     if check_merge_nodes:
         types_to_check += MergeRecipeNode,
 
-    return any(
-        n.merge_space is None or n.model_config is None
+    return all(
+        n.merge_space is not None or n.model_config is not None
         for n in recipe
         if isinstance(n, types_to_check)
     )
