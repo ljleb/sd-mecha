@@ -207,6 +207,11 @@ def merge(
             finalized_res.node_to_keys,
             memoize_intermediates,
         )
+        missing_key_resolver = functools.partial(
+            recipe.model_config.create_missing_key,
+            device=output_device,
+            dtype=output_dtype,
+        )
 
         with (
             executor,
@@ -222,7 +227,7 @@ def merge(
             futures = []
             for key, key_metadata in graph_metadata.items():
                 fn = recipe.accept
-                fn = _track_output(fn, output_dict, key, key_metadata, check_finite_output, strict_mandatory_keys)
+                fn = _track_output(fn, output_dict, key, key_metadata, check_finite_output, strict_mandatory_keys, missing_key_resolver)
                 fn = _track_progress(fn, key, graph_metadata[key].shape, progress)
                 fn = _wrap_thread_context(fn, thread_local_data)
                 merge_visitor = KeyMergeVisitor(key, merge_methods_context, validate_mm_contract, cache, realized_key_maps)
@@ -289,7 +294,7 @@ def _get_output_dict(
         yield output
 
 
-def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool, strict_mandatory_keys: bool):
+def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite: bool, strict_mandatory_keys: bool, missing_key_resolver):
     @functools.wraps(fn)
     def track_output(*args, **kwargs):
         try:
@@ -310,6 +315,11 @@ def _track_output(fn, output, key: str, key_metadata: KeyMetadata, check_finite:
             output[key] = res
             return res
         except StateDictKeyError as e:
+            if missing_key_resolver is not None:
+                res = missing_key_resolver(key)
+                if res is not None:
+                    output[key] = res
+                    return res
             if key_metadata.optional or not strict_mandatory_keys:
                 logging.debug(f"Skipping key: {e}")
             else:

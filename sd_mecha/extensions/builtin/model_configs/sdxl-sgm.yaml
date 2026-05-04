@@ -1,4 +1,5 @@
 identifier: sdxl-sgm
+missing_key_handler: sd_mecha.extensions.builtin.model_configs.sdxl_sgm_missing_keys.sdxl_sgm_missing_key_handler
 components:
   clip_l:
     conditioner.embedders.0.transformer.text_model.embeddings.position_embedding.weight: {shape: [77, 768], dtype: float32}

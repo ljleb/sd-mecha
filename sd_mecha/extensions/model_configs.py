@@ -1,5 +1,6 @@
 import abc
 import dataclasses
+import importlib
 import inspect
 import pathlib
 import re
@@ -111,11 +112,21 @@ class ModelConfig(Protocol):
     def resolve_alias(self, key: StateDictKey) -> StateDictKey:
         ...
 
+    @abc.abstractmethod
+    def create_missing_key(
+        self,
+        key: StateDictKey,
+        device: Optional[str | torch.device],
+        dtype: Optional[torch.dtype],
+    ) -> Optional[torch.Tensor]:
+        ...
+
 
 @dataclasses.dataclass
 class ModelConfigImpl(ModelConfig):
     _identifier: str = dataclasses.field(metadata={"serial_name": "identifier"})
     _components: Mapping[str, ModelComponent] = dataclasses.field(metadata={"serial_name": "components"})
+    _missing_key_handler: Optional[str] = dataclasses.field(default=None, metadata={"serial_name": "missing_key_handler", "exclude": lambda p: p is None})
 
     _keys_cache: Mapping[StateDictKey, KeyMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
     _metadata_cache: Mapping[StateDictKey, TensorMetadata] = dataclasses.field(default=None, init=False, hash=False, compare=False, metadata={"exclude": True})
@@ -193,6 +204,36 @@ class ModelConfigImpl(ModelConfig):
                 for alias in aliases
             }
         return self._resolve_alias_cache.get(key, key)
+
+    def create_missing_key(
+        self,
+        key: StateDictKey,
+        device: Optional[str | torch.device],
+        dtype: Optional[torch.dtype],
+    ) -> Optional[torch.Tensor]:
+        if self._missing_key_handler is None:
+            return None
+
+        path_parts = self._missing_key_handler.split(".")
+        handler = importlib.import_module(path_parts[0])
+        for path_part in path_parts[1:]:
+            try:
+                handler = getattr(handler, path_part)
+            except AttributeError as e:
+                if inspect.ismodule(handler):
+                    module_name = f"{handler.__name__}.{path_part}"
+                    try:
+                        handler = importlib.import_module(module_name)
+                        continue
+                    except ModuleNotFoundError as import_error:
+                        if import_error.name != module_name:
+                            raise
+                raise e
+
+        if not callable(handler):
+            raise TypeError(f"missing key handler '{self._missing_key_handler}' is not callable")
+
+        return handler(self, key, device, dtype)
 
 
 def ModelConfigImpl__init__patch(self, *args, **kwargs):
@@ -287,6 +328,14 @@ class StructuralModelConfig(ModelConfig):
             }
         return self._resolve_alias_cache.get(key, key)
 
+    def create_missing_key(
+        self,
+        key: StateDictKey,
+        device: Optional[str | torch.device],
+        dtype: Optional[torch.dtype],
+    ) -> Optional[torch.Tensor]:
+        return None
+
 
 class InferModelConfig(ModelConfig):
     def __eq__(self, other):
@@ -318,6 +367,14 @@ class InferModelConfig(ModelConfig):
         raise RuntimeError("the config has not yet been inferred")
 
     def resolve_alias(self, key: StateDictKey) -> StateDictKey:
+        raise RuntimeError("the config has not yet been inferred")
+
+    def create_missing_key(
+        self,
+        key: StateDictKey,
+        device: Optional[str | torch.device],
+        dtype: Optional[torch.dtype],
+    ) -> Optional[torch.Tensor]:
         raise RuntimeError("the config has not yet been inferred")
 
 
