@@ -99,6 +99,7 @@ class Defaults:
     check_extra_keys: bool = ...,
     check_finite_output: bool = ...,
     omit_non_finite_inputs: bool = ...,
+    allow_empty_merge: bool = ...,
     memoize_intermediates: bool = ...,
     validate_mm_contract: bool = ...,
     cache: Mapping[RecipeNode, Any] = ...,
@@ -132,6 +133,7 @@ class Defaults:
         check_extra_keys: bool = ...,
         check_finite_output: bool = ...,
         omit_non_finite_inputs: bool = ...,
+        allow_empty_merge: bool = ...,
         memoize_intermediates: bool = ...,
         validate_mm_contract: bool = ...,
         cache: Mapping[RecipeNode, Any] = ...,
@@ -165,6 +167,8 @@ class Defaults:
             check_finite_output = self.check_finite_output
         if omit_non_finite_inputs is ...:
             omit_non_finite_inputs = self.omit_non_finite_inputs
+        if allow_empty_merge is ...:
+            allow_empty_merge = self.allow_empty_merge
         if memoize_intermediates is ...:
             memoize_intermediates = self.memoize_intermediates
         if validate_mm_contract is ...:
@@ -189,6 +193,7 @@ class Defaults:
             check_extra_keys=check_extra_keys,
             check_finite_output=check_finite_output,
             omit_non_finite_inputs=omit_non_finite_inputs,
+            allow_empty_merge=allow_empty_merge,
             memoize_intermediates=memoize_intermediates,
             validate_mm_contract=validate_mm_contract,
             cache=cache,

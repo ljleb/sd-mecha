@@ -46,6 +46,7 @@ def merge(
     check_extra_keys: bool = ...,
     check_finite_output: bool = ...,
     omit_non_finite_inputs: bool = ...,
+    allow_empty_merge: bool = ...,
     memoize_intermediates: bool = ...,
     validate_mm_contract: bool = ...,
     cache: Mapping[RecipeNode, Any] = ...,
@@ -88,6 +89,8 @@ def merge(
             If True, warns if any non-finite values appear in the output model. Defaults to True.
         omit_non_finite_inputs (optional):
             If True, automatically discards input keys containing non-finite values. Defaults to True.
+        allow_empty_merge (optional):
+            If True, permits a finalized recipe that produces no output keys. Defaults to False.
         memoize_intermediates (optional):
             If True, temporarily memoizes the output of merge nodes that are used by multiple parents to avoid recomputations.
             To minimize extra memory usage, each memoized output is freed as soon as all its consumers have consumed it.
@@ -134,6 +137,8 @@ def merge(
         check_finite_output = True
     if omit_non_finite_inputs is ...:
         omit_non_finite_inputs = True
+    if allow_empty_merge is ...:
+        allow_empty_merge = False
     if memoize_intermediates is ...:
         memoize_intermediates = True
     if validate_mm_contract is ...:
@@ -190,7 +195,12 @@ def merge(
             merge_space_preference=merge_spaces.get_all() if strict_merge_space is None else None,
         )
         recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
-        realized_root_key_map = realized_key_maps[recipe]
+        produced_root_keys = finalized_res.node_to_keys.get(recipe, set())
+        if not produced_root_keys and not allow_empty_merge:
+            raise RuntimeError(
+                "The finalized recipe produces no output keys. "
+                "Pass allow_empty_merge=True to allow an empty result."
+            )
         if original_to_casted is not None:
             original_to_finalized = {original: finalized_res.to_finalized_node[node] for original, node in original_to_casted.items()}
         else:
@@ -199,7 +209,7 @@ def merge(
         cache = {original_to_finalized[node]: cache_object for node, cache_object in cache.items()}
         original_recipe = ReplaceSolvedComponents(original_to_finalized).process(original_recipe)
 
-        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in realized_root_key_map}
+        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in produced_root_keys}
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
         merge_methods_context = create_merge_method_context(
             recipe,

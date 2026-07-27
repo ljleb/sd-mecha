@@ -1,4 +1,5 @@
 import torch
+import pytest
 import sd_mecha
 from sd_mecha.extensions import model_configs
 
@@ -67,3 +68,37 @@ def test_merge_uses_missing_key_handler_for_non_finite_key():
     )
 
     assert torch.equal(output["key"], torch.full((2, 2), 42, dtype=torch.float64))
+
+
+def test_merge_accepts_a_literal_root():
+    recipe = sd_mecha.literal(
+        {"key": torch.full((2, 2), 7, dtype=torch.float32)},
+        config=config_without_handler,
+    )
+
+    output = sd_mecha.merge(
+        recipe,
+        threads=0,
+        merge_device=None,
+        merge_dtype=None,
+        output_device="cpu",
+        output_dtype=torch.float32,
+    )
+
+    assert torch.equal(output["key"], torch.full((2, 2), 7, dtype=torch.float32))
+
+
+def test_merge_rejects_empty_result_unless_allowed():
+    recipe = sd_mecha.literal({}, config=config_without_handler)
+
+    with pytest.raises(RuntimeError, match="produces no output keys"):
+        sd_mecha.merge(recipe, threads=0, merge_device=None, merge_dtype=None)
+
+    output = sd_mecha.merge(
+        recipe,
+        threads=0,
+        merge_device=None,
+        merge_dtype=None,
+        allow_empty_merge=True,
+    )
+    assert set(output) == {"__metadata__"}

@@ -1,5 +1,7 @@
 /.idea
 /.vscode
+/.direnv
+/.nix-venv
 __pycache__
 /sd_mecha.egg-info
 /build
