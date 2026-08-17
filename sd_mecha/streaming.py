@@ -405,12 +405,12 @@ DTYPE_MAPPING = {
 }
 
 
-for dtype_key, sft_key in (
-    ("F8_E4M3FN", "float8_e4m3fn"),
+for sft_key, dtype_key in (
+    ("F8_E4M3", "float8_e4m3fn"),
     ("F8_E4M3FNUZ", "float8_e4m3fnuz"),
     ("F8_E5M2", "float8_e5m2"),
     ("F8_E5M2FNUZ", "float8_e5m2fnuz"),
-    ("F8_E8M0FNU", "float8_e8m0fnu"),
+    ("F8_E8M0", "float8_e8m0fnu"),
 ):
     if hasattr(torch, dtype_key):
         DTYPE_MAPPING[sft_key] = (getattr(torch, dtype_key), 1)
