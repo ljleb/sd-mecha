@@ -7,11 +7,20 @@ from copy import copy
 from .extensions import merge_methods
 
 
+_ANIMA_KOHYA_CONFIG_ID = "anima-diffusion_pipe_kohya_lora"
+_DEPRECATED_MODEL_CONFIG_IDS = {
+    "anima-diffuser": "anima-diffusion_pipe",
+    "anima-diffuser_kohya_lora": _ANIMA_KOHYA_CONFIG_ID,
+    "anima-diffuser_kohya_lokr": _ANIMA_KOHYA_CONFIG_ID,
+    "anima-diffuser_kohya_loha": _ANIMA_KOHYA_CONFIG_ID,
+}
+
+
 def deprecated_model_config_alias(identifier: str) -> str | None:
-    if identifier != "anima-diffuser":
+    replacement = _DEPRECATED_MODEL_CONFIG_IDS.get(identifier)
+    if replacement is None:
         return None
 
-    replacement = "anima-diffusion_pipe"
     warnings.warn(
         f"Model config alias {identifier!r} is deprecated and will be removed in sd-mecha 1.3.0. "
         f"Use {replacement!r} instead.",
@@ -25,7 +34,7 @@ def deserialize_merge_call(identifier, args, kwargs):
     try:
         method = merge_methods.resolve(identifier)
     except KeyError:
-        recipe = _deserialize_legacy_extraction(identifier, args, kwargs)
+        recipe = _deserialize_legacy_merge_call(identifier, args, kwargs)
         if recipe is None:
             raise
         replacement = recipe.merge_method.get_identifier()
@@ -39,7 +48,18 @@ def deserialize_merge_call(identifier, args, kwargs):
     return method(*args, **kwargs)
 
 
-def _deserialize_legacy_extraction(identifier, args, kwargs):
+def _deserialize_legacy_merge_call(identifier, args, kwargs):
+    if match := re.fullmatch(r"convert_'([^']+)'_to_base", identifier):
+        config = _DEPRECATED_MODEL_CONFIG_IDS.get(match[1])
+        if config != _ANIMA_KOHYA_CONFIG_ID:
+            return None
+
+        method = merge_methods.resolve(f"convert_'{config}'_to_base")
+        if "lora" in kwargs and "lyco" not in kwargs:
+            kwargs = dict(kwargs)
+            kwargs["lyco"] = kwargs.pop("lora")
+        return method(*args, **kwargs)
+
     if match := re.fullmatch(r"extract_(lora|lokr)_'([^']+)'", identifier):
         algorithm, config = match.groups()
         method = merge_methods.resolve(f"extract_{algorithm}_{config}")

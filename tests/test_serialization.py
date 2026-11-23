@@ -14,16 +14,45 @@ def test_model_path_round_trips_through_recipe_file(tmp_path, filename):
     assert sd_mecha.deserialize_path(recipe_file).path == checkpoint
 
 
-def test_deprecated_anima_config_alias_round_trips_as_canonical(tmp_path):
+@pytest.mark.parametrize(
+    "old_config, new_config",
+    [
+        ("anima-diffuser", "anima-diffusion_pipe"),
+        ("anima-diffuser_kohya_lora", "anima-diffusion_pipe_kohya_lora"),
+        ("anima-diffuser_kohya_lokr", "anima-diffusion_pipe_kohya_lora"),
+        ("anima-diffuser_kohya_loha", "anima-diffusion_pipe_kohya_lora"),
+    ],
+)
+def test_deprecated_anima_config_alias_round_trips_as_canonical(tmp_path, old_config, new_config):
     checkpoint = tmp_path / "anima.safetensors"
-    canonical = sd_mecha.serialize(sd_mecha.model(checkpoint, "anima-diffusion_pipe"))
-    legacy = canonical.replace('model_config="anima-diffusion_pipe"', 'model_config="anima-diffuser"')
+    canonical = sd_mecha.serialize(sd_mecha.model(checkpoint, new_config))
+    legacy = canonical.replace(f'model_config="{new_config}"', f'model_config="{old_config}"')
 
-    with pytest.warns(FutureWarning, match=r"'anima-diffuser'.*removed in sd-mecha 1\.3\.0"):
+    with pytest.warns(FutureWarning, match=rf"'{old_config}'.*removed in sd-mecha 1\.3\.0"):
         restored = sd_mecha.deserialize(legacy)
 
-    assert restored.model_config.identifier == "anima-diffusion_pipe"
+    assert restored.model_config.identifier == new_config
     assert sd_mecha.serialize(restored) == canonical
+
+
+@pytest.mark.parametrize("algorithm", ["lora", "lokr", "loha"])
+@pytest.mark.parametrize("argument", ["&0", "lora=&0"])
+def test_deprecated_anima_adapter_conversion_round_trips_as_canonical(tmp_path, algorithm, argument):
+    checkpoint = tmp_path / "anima-adapter.safetensors"
+    old_config = f"anima-diffuser_kohya_{algorithm}"
+    new_config = "anima-diffusion_pipe_kohya_lora"
+    old_method = f"convert_'{old_config}'_to_base"
+    new_method = f"convert_'{new_config}'_to_base"
+    canonical_model = sd_mecha.serialize(sd_mecha.model(checkpoint, new_config))
+    legacy_model = canonical_model.replace(f'model_config="{new_config}"', f'model_config="{old_config}"')
+
+    with pytest.warns(FutureWarning, match=r"removed in sd-mecha 1\.3\.0") as caught:
+        restored = sd_mecha.deserialize(f'{legacy_model}\nmerge "{old_method}" {argument}')
+
+    assert len(caught) == 2
+    assert old_method in str(caught[1].message)
+    assert new_method in str(caught[1].message)
+    assert sd_mecha.serialize(restored, finalize=False) == f'{canonical_model}\nmerge "{new_method}" &0'
 
 
 def test_deserialize_accepts_blank_lines_between_instructions():
