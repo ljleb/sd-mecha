@@ -50,7 +50,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
 
     def parse(line):
         line = line.strip()
-        if line.startswith("#"):
+        if not line or line.startswith("#"):
             return
 
         command, *args = tokenize(line)
@@ -72,7 +72,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
         positional_args = []
         named_args = {}
         for arg_index, arg in enumerate(args):
-            if '=' in arg:
+            if not arg.startswith('"') and '=' in arg:
                 key, value = arg.split('=', maxsplit=1)
                 named_args[key] = get_arg_value(value, arg_index)
             else:
@@ -90,7 +90,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
                 return results[ref_index]
             elif arg.startswith('"') and arg.endswith('"'):
                 return arg[1:-1]
-            elif '.' in arg or 'e' in arg.lower():
+            elif arg in ("inf", "-inf", "nan") or '.' in arg or 'e' in arg.lower():
                 return float(arg)
             else:
                 return int(arg)
