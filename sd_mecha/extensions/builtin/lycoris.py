@@ -635,7 +635,11 @@ class norm(LycorisAlgorithm):
 class BaseToLycoris(abc.ABC):
     @classmethod
     def map_keys(cls, b: KeyMapBuilder):
-        for base_key in b.keys():
+        cls._map_first_input_keys(b, b.keys())
+
+    @classmethod
+    def _map_first_input_keys(cls, b: KeyMapBuilder, base_keys: Iterable[str]):
+        for base_key in base_keys:
             if output_keys := cls.get_output_keys(base_key):
                 b[output_keys] = b.keys[base_key]
 

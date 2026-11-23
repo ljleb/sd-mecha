@@ -1,7 +1,9 @@
 import pytest
 import torch
+from safetensors.torch import save_file
 
 import sd_mecha
+from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfigImpl
 
 
 @pytest.mark.parametrize("child_has_weight", [True, False])
@@ -61,3 +63,20 @@ def test_planner_can_reopen_a_finalized_structural_recipe():
         plan = graph.finalize_with_keys()
         assert plan.root.model_config is finalized.model_config
         assert plan.node_to_keys[plan.root] == {"custom.weight"}
+
+
+def test_default_key_planning_keeps_checkpoint_aliases(tmp_path):
+    config = ModelConfigImpl(
+        "aliased-planner_test",
+        {"model": {"canonical": KeyMetadata([1], torch.float32, aliases=("alias",))}},
+    )
+    checkpoint = tmp_path / "aliased.safetensors"
+    save_file({"alias": torch.tensor([2.0])}, checkpoint)
+    model = sd_mecha.model(checkpoint, config)
+    other = sd_mecha.model({"canonical": torch.tensor([4.0])}, config)
+    recipe = sd_mecha.weighted_sum(model, other, 0.5)
+
+    result = sd_mecha.merge(recipe, threads=0, output_dtype=torch.float32)
+
+    assert result.keys() - {"__metadata__"} == {"canonical"}
+    torch.testing.assert_close(result["canonical"], torch.tensor([3.0]))

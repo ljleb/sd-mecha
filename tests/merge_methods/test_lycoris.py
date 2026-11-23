@@ -1,4 +1,5 @@
 import warnings
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -7,6 +8,7 @@ from safetensors.torch import save_file
 import sd_mecha
 from sd_mecha.extensions import merge_methods
 from sd_mecha.extensions.builtin.merge_methods.kronecker import lokr_dims, lokr_dims_lycoris, truncate_kronecker
+from sd_mecha.graph_finalization import PropagatableKeyVisitor
 from sd_mecha.keys_map import RealizedKeyRelation
 
 
@@ -30,6 +32,35 @@ def test_lora_extraction_caps_rank_and_keeps_convolution_shape():
     assert adapter["up"].shape == (6, 2, 1, 1)
     assert adapter["alpha"].item() == 2
     torch.testing.assert_close(adapter["up"].flatten(1) @ adapter["down"].flatten(1), weight.flatten(1))
+
+
+def test_sparse_lora_merge_plans_only_the_available_weight():
+    weight = torch.eye(4).reshape(4, 4, 1, 1)
+    delta = sd_mecha.model({WEIGHT: weight}, CONFIG, "delta")
+    method = merge_methods.resolve("extract_lora_sd1-kohya_lycoris_lora")
+    recipe = method(delta, 4, False, 2, None)
+    extraction = method.__wrapped__
+    probe_sizes = []
+    output_groups = PropagatableKeyVisitor._root_output_groups
+
+    def count_groups(visitor, node):
+        groups = output_groups(visitor, node)
+        probe_sizes.append(len(groups))
+        return groups
+
+    with (
+        patch.object(extraction, "get_output_keys", wraps=extraction.get_output_keys) as get_output_keys,
+        patch.object(PropagatableKeyVisitor, "_root_output_groups", count_groups),
+    ):
+        result = merge(recipe)
+
+    get_output_keys.assert_called_once_with(WEIGHT)
+    assert probe_sizes == [3]
+    prefix = "lycoris_vae_post_quant_conv"
+    up = result[f"{prefix}.lora_up.weight"]
+    down = result[f"{prefix}.lora_down.weight"]
+    assert result[f"{prefix}.alpha"].item() == 4
+    torch.testing.assert_close(up.flatten(1) @ down.flatten(1), weight.flatten(1))
 
 
 def test_norm_extraction_and_deprecated_conversion():

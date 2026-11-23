@@ -8,7 +8,7 @@ from inspect import BoundArguments
 import torch
 from .extensions import model_configs, merge_methods, merge_spaces, model_dirs
 from .extensions.merge_spaces import MergeSpace
-from typing import Any, Callable, cast, List, Optional, Dict, Set, Tuple, Union
+from typing import Any, Callable, cast, Iterable, List, Optional, Dict, Set, Tuple, Union
 from .keys_map import KeyMap, KeyRelation
 from .streaming import SafetensorsMapping
 from .typing_ import is_instance
@@ -266,14 +266,19 @@ class MergeRecipeNode(RecipeNode):
         return visitor.visit_merge(self, *args, **kwargs)
 
     def key_map(self) -> KeyMap[KeyRelation]:
+        if self.__key_map is None:
+            self.__key_map = self._plan_key_map()
+        return self.__key_map
+
+    def _plan_key_map(self, **key_scope: Iterable[str]) -> KeyMap[KeyRelation]:
         if self.model_config is None:
             raise RuntimeError("Cannot call key_map() on a non-finalized merge node.")
 
-        if self.__key_map is None:
-            args_configs = [v.model_config for v in self.bound_args.args]
-            kwargs_configs = {k: v.model_config for k, v in self.bound_args.kwargs.items()}
-            self.__key_map = self.merge_method.build_key_map(args_configs, kwargs_configs, self.model_config)
-        return self.__key_map
+        args_configs = [v.model_config for v in self.bound_args.args]
+        kwargs_configs = {k: v.model_config for k, v in self.bound_args.kwargs.items()}
+        if not key_scope:
+            return self.merge_method.build_key_map(args_configs, kwargs_configs, self.model_config)
+        return self.merge_method._build_key_map(args_configs, kwargs_configs, self.model_config, **key_scope)
 
     def __eq__(self, other):
         if self.structural:

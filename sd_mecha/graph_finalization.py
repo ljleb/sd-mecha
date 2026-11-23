@@ -9,8 +9,8 @@ from typing import ContextManager, Dict, Generic, Iterable, Iterator, List, Mapp
 from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_formats
 from sd_mecha.extensions.merge_methods import value_to_node
 from sd_mecha.extensions.merge_spaces import MergeSpace, MergeSpaceSymbol
-from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfig, StructuralModelConfig
-from sd_mecha.keys_map import ActiveKeyMap, RealizedKeyRelation
+from sd_mecha.extensions.model_configs import ModelConfig, StructuralModelConfig
+from sd_mecha.keys_map import ActiveKeyMap, KeyMap, KeyRelation, RealizedKeyRelation
 from sd_mecha.recipe_nodes import (
     ClosedModelRecipeNode, LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode,
     OpenModelRecipeNode, RecipeNode, RecipeNodeOrValue, RecipeVisitor, TracingRecipeVisitor,
@@ -204,34 +204,28 @@ class RecipeGraph:
             finalized_node_to_indices[finalized_node].add(index)
 
         component_keys: Dict[ComponentIndex, Set[str]] = {}
-        component_metadata: Dict[ComponentIndex, Optional[Dict[str, TensorMetadata | KeyMetadata]]] = {}
+        for idx in set().union(*finalized_node_to_indices.values()):
+            solved = solutions[ModelConfigComponentType][idx]
+            cand = candidates[ModelConfigComponentType][idx]
+            keys = set(cand.possible_keys)
 
-        for idxs in finalized_node_to_indices.values():
-            for idx in idxs:
-                solved = solutions[ModelConfigComponentType][idx]
-                cand = candidates[ModelConfigComponentType][idx]
-
-                if solved.identifier == "structural":
-                    component_metadata[idx] = cand.possible_keys
-                    component_keys[idx] = set(cand.possible_keys.keys())
-                else:
-                    component_metadata[idx] = solved.keys()
-                    stats = cand.stats or {}
-                    match = stats.get(solved.identifier)
-                    if match is not None:
-                        component_keys[idx] = set(match.intersection) | set(cand.possible_keys)
-                    else:
-                        component_keys[idx] = set(cand.possible_keys) or set(solved.keys().keys())
+            if solved.identifier != "structural":
+                match = (cand.stats or {}).get(solved.identifier)
+                if match is not None:
+                    keys.update(match.intersection)
+                elif not keys:
+                    keys.update(solved.keys())
+            component_keys[idx] = keys
 
         node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
-        node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]] = {}
-
         for node, idxs in finalized_node_to_indices.items():
-            idxs = set(idxs)
-            node_to_key_domain[node] = _union_key_sets(component_keys[idx] for idx in idxs)
-            node_to_metadata_domain[node] = _merge_component_metadata(component_metadata[idx] for idx in idxs)
+            node_to_key_domain[node] = (
+                component_keys[next(iter(idxs))]
+                if len(idxs) == 1
+                else set().union(*(component_keys[idx] for idx in idxs))
+            )
 
-        keys_visitor = PropagatableKeyVisitor(node_to_key_domain, node_to_metadata_domain)
+        keys_visitor = PropagatableKeyVisitor(node_to_key_domain)
         keys_visitor.visit_all_keys(finalized_root)
 
         node_to_keys = {
@@ -1190,46 +1184,6 @@ def check_model_config(
             )
 
 
-def _union_key_sets(key_sets: Iterable[Set[str]]) -> Set[str]:
-    out = set()
-    for ks in key_sets:
-        out.update(ks)
-    return out
-
-
-def _merge_component_metadata(
-    metadata_dicts: Iterable[Optional[Dict[str, TensorMetadata | KeyMetadata]]]
-) -> Optional[Dict[str, KeyMetadata]]:
-    metadata_dicts = [d for d in metadata_dicts if d is not None]
-    if not metadata_dicts:
-        return None
-
-    common_keys = set(metadata_dicts[0].keys())
-    for d in metadata_dicts[1:]:
-        common_keys.intersection_update(d.keys())
-
-    out: Dict[str, KeyMetadata] = {}
-    for k in common_keys:
-        best = metadata_dicts[0][k]
-        for d in metadata_dicts[1:]:
-            cand = d[k]
-            # Keep the less informative / more conservative metadata.
-            # This matches the spirit of ModelConfigCandidates._update_common_keys().
-            best = _intersect_meta(best, cand)
-        out[k] = best
-
-    return out
-
-
-def _intersect_meta(a, b):
-    return KeyMetadata(
-        a.shape if b.shape == a.shape else None,
-        a.dtype if b.dtype == a.dtype else None,
-        [a for a in getattr(a, "aliases", ()) if a in set(getattr(b, "aliases", ()))],
-        getattr(a, "optional", True) and getattr(b, "optional", True),
-    )
-
-
 def _union_meta(a, b):
     return TensorMetadata(
         b.shape if a.shape is None else a.shape,
@@ -1242,10 +1196,11 @@ def _union_meta(a, b):
 @dataclasses.dataclass
 class PropagatableKeyVisitor(RecipeVisitor):
     node_to_key_domain: Dict[RecipeNode, Set[str]]
-    node_to_metadata_domain: Dict[RecipeNode, Optional[Dict[str, KeyMetadata]]]
 
     filtered_node_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=lambda: defaultdict(set))
     realized_key_maps: Dict[MergeRecipeNode, ActiveKeyMap[RealizedKeyRelation]] = dataclasses.field(default_factory=dict)
+    _candidate_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=dict)
+    _planned_key_maps: Dict[MergeRecipeNode, KeyMap[KeyRelation]] = dataclasses.field(default_factory=dict)
 
     # Exact-key memo for literal/model nodes only
     _key_memo: Dict[Tuple[RecipeNode, str], bool] = dataclasses.field(default_factory=dict)
@@ -1339,7 +1294,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
         if output_key not in self._possible_keys(node):
             return False
 
-        relation = node.key_map().get(output_key)
+        relation = self._key_map(node).get(output_key)
         if relation is None:
             return False
 
@@ -1394,7 +1349,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
     def _root_output_groups(self, node: MergeRecipeNode) -> list[Tuple[str, ...]]:
         possible = self._possible_keys(node)
-        key_map = node.key_map()
+        key_map = self._key_map(node)
         seen = set()
         out = []
 
@@ -1417,14 +1372,50 @@ class PropagatableKeyVisitor(RecipeVisitor):
         return out
 
     def _possible_keys(self, node: RecipeNode) -> Set[str]:
-        return self.node_to_key_domain.get(node, set())
+        if node in self._candidate_keys:
+            return self._candidate_keys[node]
 
-    def _leaf_has_key(self, node: RecipeNode, output_key: str, mapping) -> bool:
-        cfg = getattr(node, "model_config", None)
-        aliases = ()
-        if cfg is not None:
-            aliases = tuple(cfg.aliases().get(output_key, ()))
-        return any(k in mapping for k in (output_key, *aliases))
+        keys = self.node_to_key_domain.get(node, set())
+        if isinstance(node, MergeRecipeNode):
+            if node.merge_method._can_map_first_input_keys:
+                source = node.bound_args.args[0]
+                key_map = node._plan_key_map(first_input_keys=self._possible_keys(source))
+                self._planned_key_maps[node] = key_map
+                keys = keys.intersection(key_map.simple_map)
+            elif not node.merge_method._has_custom_key_map:
+                # A default relation requires the same key on every input.
+                inputs = (*node.bound_args.args, *node.bound_args.kwargs.values())
+                for child in inputs:
+                    keys = keys.intersection(self._possible_keys(child))
+                    if not keys:
+                        break
+        elif keys and isinstance(node, (LiteralRecipeNode, ModelRecipeNode)):
+            physical_keys = node.value_dict.keys() if isinstance(node, LiteralRecipeNode) else node.state_dict.keys()
+            keys = self._possible_leaf_keys(node, keys, set(physical_keys))
+
+        self._candidate_keys[node] = keys
+        return keys
+
+    @staticmethod
+    def _possible_leaf_keys(
+        node: LiteralRecipeNode | ModelRecipeNode, domain: Set[str], physical_keys: Set[str],
+    ) -> Set[str]:
+        keys = domain.intersection(physical_keys)
+        keys.update(
+            key for key, aliases in node.model_config.aliases().items()
+            if aliases and key in domain and not physical_keys.isdisjoint(aliases)
+        )
+        return keys
+
+    def _key_map(self, node: MergeRecipeNode) -> KeyMap[KeyRelation]:
+        candidates = self._possible_keys(node)
+        if node.merge_method._has_custom_key_map:
+            key_map = self._planned_key_maps.get(node)
+            return key_map if key_map is not None else node.key_map()
+
+        if node not in self._planned_key_maps:
+            self._planned_key_maps[node] = node._plan_key_map(output_keys=candidates)
+        return self._planned_key_maps[node]
 
 
 def _fmt_list(items, limit=12) -> str:

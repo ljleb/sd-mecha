@@ -274,23 +274,49 @@ class MergeMethod:
         return self.cache_factory()
 
     def build_key_map(self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig) -> KeyMap[KeyRelation]:
+        return self._build_key_map(args_configs, kwargs_configs, return_config)
+
+    @property
+    def _has_custom_key_map(self) -> bool:
+        return self.wrapped_is_class and hasattr(self.__wrapped__, "map_keys")
+
+    @property
+    def _can_map_first_input_keys(self) -> bool:
+        return self._has_custom_key_map and hasattr(self.__wrapped__, "_map_first_input_keys")
+
+    def _build_key_map(
+        self,
+        args_configs: Sequence[ModelConfig],
+        kwargs_configs: Mapping[str, ModelConfig],
+        return_config: ModelConfig,
+        *,
+        output_keys: Optional[Iterable[str]] = None,
+        first_input_keys: Optional[Iterable[str]] = None,
+    ) -> KeyMap[KeyRelation]:
         input_configs = self.__f_signature.bind(*args_configs, **kwargs_configs).arguments
         input_configs = {
             p.name: input_configs.get(p.name) if input_configs.get(p.name) is not None else p.annotation.data.model_config if p.annotation.data.model_config is not None else return_config
             for p in self.__f_signature.parameters.values()
             if p.kind != p.VAR_KEYWORD
         }
-        if self.wrapped_is_class and hasattr(self.__wrapped__, "map_keys"):
+        if self._has_custom_key_map:
             builder = KeyMapBuilder(MappingProxyType(input_configs), return_config)
-            self.__wrapped__.map_keys(builder)
+            if first_input_keys is not None and self._can_map_first_input_keys:
+                config_keys = next(iter(input_configs.values())).keys()
+                available_keys = (key for key in first_input_keys if key in config_keys)
+                self.__wrapped__._map_first_input_keys(builder, available_keys)
+            else:
+                self.__wrapped__.map_keys(builder)
             res = builder.build()
         else:
+            config_keys = return_config.keys()
+            keys = config_keys if output_keys is None else (key for key in output_keys if key in config_keys)
             res = KeyMap(MappingProxyType({
                 (key,): KeyRelation(
                     (key,),
                     (Clause({input_name: (key,) for input_name in input_configs}),),
                 )
-                for key in return_config.keys()
+                for key in keys
             }))
         return res
 
