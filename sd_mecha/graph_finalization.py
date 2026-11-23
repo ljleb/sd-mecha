@@ -530,11 +530,13 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
     explicit_ids: Set[str] = dataclasses.field(default_factory=set)
     possible_keys: Dict[str, TensorMetadata] = dataclasses.field(default_factory=dict)
     common_keys: Optional[Dict[str, TensorMetadata]] = None
+    _explicit_config: Optional[ModelConfig] = None
 
     def clone(self) -> "ModelConfigCandidates":
         out = ModelConfigCandidates()
         out.requires_known_config = self.requires_known_config
         out.explicit_ids = set(self.explicit_ids)
+        out._explicit_config = self._explicit_config
         out.possible_keys = dict(self.possible_keys)
         out.common_keys = None if self.common_keys is None else dict(self.common_keys)
         if self.stats is None:
@@ -561,8 +563,6 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
     def visit_literal(self, node: LiteralRecipeNode, **_kwargs):
         metadata: Dict[str, TensorMetadata] = {}
         for k, v in node.value_dict.items():
-            if isinstance(v, RecipeNode):
-                continue
             if isinstance(v, torch.Tensor):
                 metadata[k] = TensorMetadata(v.shape, v.dtype)
             else:
@@ -670,13 +670,14 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
                     f"  Reason:   {reason}\n"
                 )
             self.stats = {cfg_id: self.stats[cfg_id] for cfg_id in common_ids}
+        self._explicit_config = config
 
     def __iter__(self):
         if self.stats is None:
             return iter(())
 
         for cfg, stat in sorted(self.stats.items(), key=lambda kv: kv[1].state_dict_misses):
-            yield model_configs.resolve(cfg)
+            yield self._resolve_config(cfg)
 
     def __bool__(self) -> bool:
         return bool(self.stats)
@@ -704,11 +705,19 @@ class ModelConfigCandidates(ComponentCandidates[ModelConfig]):
                     "Fix: provide checkpoints/inputs matching the requested config, or let config auto-detection determine an appropriate shared config type."
                 )
 
-            keys = self.common_keys if self.common_keys is not None else {}
-            return StructuralModelConfig(keys)
+            common_keys = self.common_keys or {}
+            return StructuralModelConfig(
+                self.possible_keys | common_keys,
+                optional_keys=self.possible_keys.keys() - common_keys.keys(),
+            )
 
         best_id = min(self.stats.items(), key=lambda kv: kv[1].state_dict_misses)[0]
-        return model_configs.resolve(best_id)
+        return self._resolve_config(best_id)
+
+    def _resolve_config(self, identifier: str) -> ModelConfig:
+        if self._explicit_config is not None and self._explicit_config.identifier == identifier:
+            return self._explicit_config
+        return model_configs.resolve(identifier)
 
 
 @dataclasses.dataclass

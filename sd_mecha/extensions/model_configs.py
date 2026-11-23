@@ -10,7 +10,7 @@ import yaml
 from collections import OrderedDict
 from sd_mecha.streaming import TensorMetadata
 from types import MappingProxyType
-from typing import Dict, List, Iterable, Mapping, Protocol, runtime_checkable, Optional, Sequence
+from typing import AbstractSet, Dict, List, Iterable, Mapping, Protocol, runtime_checkable, Optional, Sequence
 
 try:
     from yaml import CLoader as YamlLoader
@@ -289,10 +289,16 @@ def resolve_lazy_model_config_attribute(self: LazyModelConfigBase, name: str):
 
 
 class StructuralModelConfig(ModelConfig):
-    def __init__(self, keys: Mapping[StateDictKey, TensorMetadata]):
+    def __init__(
+        self,
+        keys: Mapping[StateDictKey, TensorMetadata],
+        *,
+        optional_keys: AbstractSet[StateDictKey] = frozenset(),
+    ):
         self._metadata_cache = keys
-        self._keys_cache = {k: KeyMetadata(v.shape, v.dtype) for k, v in keys.items()}
-        self._metadata_cache = None
+        self._keys_cache = {
+            k: KeyMetadata(v.shape, v.dtype, optional=k in optional_keys) for k, v in keys.items()
+        }
         self._aliases_cache = None
         self._resolve_alias_cache = None
 
