@@ -2,7 +2,7 @@ import logging
 import pathlib
 from typing import List, Optional, Hashable
 
-from .extensions import merge_methods
+from ._recipe_compat import deserialize_merge_call
 from .recipe_nodes import (
     ClosedModelRecipeNode, RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode,
     MergeRecipeNode,
@@ -63,9 +63,8 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
             path = pathlib.Path(positional_args[0])
             results.append(ClosedModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
-            method, *positional_args = positional_args
-            method = merge_methods.resolve(method)
-            results.append(method(*positional_args, **keyword_args))
+            identifier, *positional_args = positional_args
+            results.append(deserialize_merge_call(identifier, positional_args, keyword_args))
         else:
             raise ValueError(f"unknown command: {command}")
 

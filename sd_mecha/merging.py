@@ -485,14 +485,25 @@ class KeyMergeVisitor(RecipeVisitor):
         for index in sorted(indices, key=depth_of_value, reverse=True):
             parent_port = (node, self.output_key, index)
             input_name = input_names[index]
+            input_type = input_types[index]
             input_node = node.bound_args.args[index] if isinstance(index, int) else node.bound_args.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_port=parent_port)
-            if is_subclass(input_types[index], StateDict):
-                input_keys = key_relation.inputs.get(input_name, ())
-                expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
+            input_keys = key_relation.inputs.get(input_name, ())
+            if is_subclass(input_type, StateDict):
+                expected_type = next(iter(typing.get_args(input_type) or (MergeMethodT,)))
                 merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, input_keys, self.validate_mm_contract)
             else:
-                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
+                if len(input_keys) > 1:
+                    type_name = getattr(input_type, "__name__", str(input_type))
+                    raise RuntimeError(
+                        f"Merge method {node.merge_method.identifier!r} failed to compute output key {self.output_key!r}. "
+                        f"map_keys() selected input keys {input_keys!r} for parameter {input_name!r}. "
+                        f"This parameter expects one {type_name} from one input key. "
+                        "Select one key in map_keys(), or use a StateDict annotation for this parameter."
+                    )
+                if input_keys:
+                    input_visitor.output_key = input_keys[0]
+                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_type)
 
         merged_args = tuple(merged.get(index) for index in range(len(node.bound_args.args)))
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}

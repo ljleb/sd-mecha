@@ -11,13 +11,13 @@ from typing import Optional, Tuple
 @merge_method(cache_factory=lambda: defaultdict(dict))
 def truncate_kronecker(
     a: Parameter(Tensor, "delta"),
-    dims: Parameter(Tensor, "param") = ((1, 1), (1, 1)),
+    dims: Parameter(Tensor, "param") = None,
     use_approximate_basis: Parameter(bool) = True,
     approximate_basis_iters: Parameter(int) = 2,
     approximate_basis_seed: Parameter(int) = None,
     **kwargs,
 ) -> Return(Tensor, "delta"):
-    if a.dim() < 2:
+    if a.dim() < 2 or a.numel() == 0:
         return a
 
     cache = kwargs.get("cache")
@@ -33,33 +33,42 @@ def truncate_kronecker(
         cache,
     )
 
+    while w1.ndim < w2.ndim:
+        w1 = w1.unsqueeze(-1)
     res = torch.kron(w1, w2).reshape(a.shape)
     return res
 
 
 def extract_lokr(
     a: torch.Tensor,
-    dims: torch.Tensor,
+    dims: Optional[torch.Tensor] = None,
     use_approximate_basis: bool = False,
     approximate_basis_iters: int = 0,
     approximate_basis_seed: Optional[int] = None,
     cache: Optional[dict] = None,
 ):
     shape_original = a.shape
-    lokr_dims = solve_lokr_dims(shape_original, dims.to(a.device))
+    if a.ndim < 2 or a.numel() == 0:
+        raise ValueError(f"LoKr extraction requires a nonempty tensor with at least two dimensions, got {tuple(a.shape)}")
+    if dims is None:
+        dims = a.new_ones((2, 2), dtype=torch.int64)
+    elif dims.ndim == 0:
+        # Old recipes supplied the factor ratio as the second positional argument.
+        dims = lokr_dims.__wrapped__(a, dims.item())
+    factor_dims = solve_lokr_dims(shape_original, dims.to(a.device))
+    svd_options = (use_approximate_basis, approximate_basis_iters, approximate_basis_seed)
 
     if (
         cache is not None
-        and cache.get("lokr_dims") == lokr_dims
-        and cache.get("iters") == approximate_basis_iters
-        and cache.get("seed") == approximate_basis_seed
+        and cache.get("lokr_dims") == factor_dims
+        and cache.get("svd_options") == svd_options
         and "w1" in cache
         and "w2" in cache
     ):
         w1 = cache["w1"].to(a)
         w2 = cache["w2"].to(a)
     else:
-        m1, m2, n1, n2 = lokr_dims
+        m1, m2, n1, n2 = factor_dims
         shape_extra = shape_original[2:]
         shape_w1 = torch.Size((m1, n1))
         shape_w2 = torch.Size((m2, n2, *shape_extra))
@@ -80,19 +89,11 @@ def extract_lokr(
         w1 = w1.reshape(shape_w1)
         w2 = w2.reshape(shape_w2)
 
-        while w1.dim() < w2.dim():
-            w1 = w1.unsqueeze(-1)
-
         if cache is not None:
-            cache["lokr_dims"] = lokr_dims
+            cache["lokr_dims"] = factor_dims
+            cache["svd_options"] = svd_options
             cache["w1"] = w1.to(device="cpu", dtype=torch.float16)
             cache["w2"] = w2.to(device="cpu", dtype=torch.float16)
-            if use_approximate_basis:
-                cache["iters"] = approximate_basis_iters
-                cache["seed"] = approximate_basis_seed
-            else:
-                cache.pop("iters", None)
-                cache.pop("seed", None)
 
     return w1, w2
 
@@ -146,19 +147,16 @@ def solve_lokr_dims(
 
 
 @merge_method
-def ratio_lokr_dims(
+def lokr_dims(
     a: Parameter(torch.Tensor),
     ratio: Parameter(float, "param") = 0.5,
 ) -> Return(torch.Tensor, "param"):
     shape = a.shape
-    if len(shape) < 2:
-        raise ValueError(f"expected shape with at least 2 dims, got {tuple(shape)}")
+    if a.ndim < 2 or a.numel() == 0:
+        return a.new_ones((2, 2), dtype=torch.int64)
 
     out_dim = int(shape[0])
     in_dim = int(shape[1])
-
-    if out_dim <= 0 or in_dim <= 0:
-        return a.new_tensor(((1, 1), (1, 1)))
 
     m_pairs = divisor_pairs(out_dim, device=a.device).to(torch.float64)  # [out_divs, 2]
     n_pairs = divisor_pairs(in_dim, device=a.device).to(torch.float64)   # [in_divs, 2]
@@ -188,7 +186,7 @@ def ratio_lokr_dims(
 
     # Primary objective: abs(s - s_target)
     s_cost = (s - s_target).abs()
-    mask = torch.is_close(s_cost, s_cost.min())
+    mask = torch.isclose(s_cost, s_cost.min())
 
     # Tie-break: balance
     masked_balance = torch.where(mask, balance, torch.inf)
@@ -199,14 +197,14 @@ def ratio_lokr_dims(
 
 
 @merge_method
-def lycoris_compatible_lokr_dims(
+def lokr_dims_lycoris(
     a: Parameter(torch.Tensor),
     factor: Parameter(int) = -1,
     unbalanced_factorization: Parameter(bool) = False,
 ) -> Return(torch.Tensor, "param"):
     shape = a.shape
-    if len(shape) < 2:
-        raise ValueError(f"expected shape with at least 2 dims, got {tuple(shape)}")
+    if a.ndim < 2 or a.numel() == 0:
+        return a.new_ones((2, 2), dtype=torch.int64)
 
     out_dim = shape[0]
     in_dim = shape[1]

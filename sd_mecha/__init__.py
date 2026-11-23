@@ -1,6 +1,6 @@
-import sd_mecha.extensions.builtin.model_configs
-from sd_mecha.extensions.builtin import lycoris
-from sd_mecha.extensions.builtin.lycoris import apply as apply_lycoris
+from .extensions.builtin import model_configs as _builtin_model_configs
+from .extensions.builtin import lycoris
+from .extensions.builtin.lycoris import apply as apply_lycoris
 from .recipe_nodes import RecipeNodeOrValue, RecipeNode
 from .merging import merge
 from .graph_finalization import open_graph

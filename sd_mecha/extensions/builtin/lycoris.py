@@ -14,7 +14,7 @@ from sd_mecha.extensions.model_configs import (
     LazyModelConfigBase, KeyMetadata,
 )
 from sd_mecha.keys_map import KeyMapBuilder, ComposeObject, KeysAccessor, ReqExpr
-from .merge_methods.svd import svd_lowrank
+from .merge_methods.svd import _truncated_svd
 from sd_mecha.typing_ import ClassObject, subclasses
 
 
@@ -131,7 +131,8 @@ def define_conversions(lyco_config: LycorisModelConfig, algorithms: Iterable[typ
 
                     lyco_inputs |= algo_inputs
 
-                b[base_key] = (lyco_inputs | b.base.keys[()]) & b.base.keys[base_key]
+                if lyco_inputs is not None:
+                    b[base_key] = lyco_inputs
 
         def __call__(
             self,
@@ -210,7 +211,7 @@ class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
     @staticmethod
     def targets_key(key: str, meta: KeyMetadata):
         bias = key.endswith("bias")
-        shape_at_least_2d = meta.shape is not None and len(meta.shape) >= 2
+        shape_at_least_2d = meta.shape is not None and len(meta.shape) >= 2 and meta.shape.numel() > 0
         return not bias and shape_at_least_2d
 
     @classmethod
@@ -371,46 +372,22 @@ class lora(LycorisAlgorithm):
             ) -> Return(StateDict[torch.Tensor], "weight", lyco_config):
                 (up_key, down_key, alpha_key) = kwargs["key_relation"].outputs
 
-                original_shape = base.shape
-                shape_vh = torch.Size((min(rank, original_shape[0]), *original_shape[1:]))
-                shape_2d = torch.Size((original_shape[:1].numel(), original_shape[1:].numel()))
+                base_2d = base.flatten(1)
+                rank = min(max(rank, 1), *base_2d.shape)
 
-                if (cache := kwargs["cache"]) is not None:
-                    cache = cache[kwargs["key"]]
+                if (cache := kwargs.get("cache")) is not None:
+                    cache = cache[up_key]
 
-                if (
-                    cache is not None and
-                    "s" in cache and cache["s"].numel() >= rank and
-                    cache.get("iters", approximate_basis_iters) == approximate_basis_iters and
-                    cache.get("seed", approximate_basis_seed) == approximate_basis_seed
-                ):
-                    u = cache["u"][..., :rank].to(base)
-                    s = cache["s"][..., :rank].to(base)
-                    vh = cache["vh"][..., :rank, :].to(base)
-                else:
-                    svd_driver = "gesvda" if base.is_cuda else None
-                    if use_approximate_basis:
-                        u, s, vh = svd_lowrank(base.reshape(shape_2d), rank=rank, iters=approximate_basis_iters, seed=approximate_basis_seed, driver=svd_driver)
-                    else:
-                        u, s, vh = torch.linalg.svd(base.reshape(shape_2d), full_matrices=False, driver=svd_driver)
-                    if cache is not None:
-                        cache["u"] = u.to(device="cpu", dtype=torch.float16)
-                        cache["s"] = s.to(device="cpu", dtype=torch.float16)
-                        cache["vh"] = vh.to(device="cpu", dtype=torch.float16)
-                        if use_approximate_basis:
-                            cache["iters"] = approximate_basis_iters
-                            cache["seed"] = approximate_basis_seed
-                        else:
-                            cache.pop("iters", None)
-                            cache.pop("seed", None)
-
-                s = s[..., :rank].sqrt()
-                u = u[..., :rank] * s.unsqueeze(-2)
-                vh = s.unsqueeze(-1) * vh[..., :rank, :]
+                u, s, vh = _truncated_svd(
+                    base_2d, rank, use_approximate_basis, approximate_basis_iters, approximate_basis_seed, cache
+                )
+                s = s.sqrt()
+                up = (u * s.unsqueeze(-2)).reshape(base.shape[0], rank, *((1,) * (base.ndim - 2)))
+                down = (s.unsqueeze(-1) * vh).reshape(rank, *base.shape[1:])
 
                 return {
-                    up_key: u,
-                    down_key: vh.reshape(shape_vh),
+                    up_key: up,
+                    down_key: down,
                     alpha_key: torch.tensor(rank, device=base.device, dtype=base.dtype),
                 }
 
@@ -506,7 +483,7 @@ class lokr(LycorisAlgorithm):
     @staticmethod
     def extract(
         base: Parameter(torch.Tensor, "delta"),
-        dims: Parameter(torch.Tensor, "param") = ((1, 1), (1, 1)),
+        dims: Parameter(torch.Tensor, "param") = None,
     ) -> Return(torch.Tensor, "weight"):
         ...
 
@@ -525,8 +502,8 @@ class lokr(LycorisAlgorithm):
                 keys = lyco_config.to_lycoris_keys(base_key, (cls,))
                 if not keys:
                     return ()
-                w1, _, _, w2, _, _, _, _ = keys
-                return w1, w2
+                w1, _, _, w2, _, _, _, alpha = keys
+                return w1, w2, alpha
 
             def __call__(
                 self,
@@ -534,11 +511,11 @@ class lokr(LycorisAlgorithm):
                 dims: Parameter(torch.Tensor, "param", base_config),
                 **kwargs,
             ) -> Return(StateDict[torch.Tensor], "weight", lyco_config):
-                w1_key, w2_key = kwargs["key_relation"].outputs
+                w1_key, w2_key, alpha_key = kwargs["key_relation"].outputs
 
                 cache = kwargs.get("cache")
                 if cache is not None:
-                    cache = cache[kwargs["key"]]
+                    cache = cache[w1_key]
 
                 w1, w2 = extract_lokr(
                     base,
@@ -549,6 +526,7 @@ class lokr(LycorisAlgorithm):
                 return {
                     w1_key: w1,
                     w2_key: w2,
+                    alpha_key: base.new_tensor(1.0),
                 }
 
 
@@ -657,7 +635,7 @@ class norm(LycorisAlgorithm):
 class BaseToLycoris(abc.ABC):
     @classmethod
     def map_keys(cls, b: KeyMapBuilder):
-        for base_key in b.base.keys():
+        for base_key in b.keys():
             if output_keys := cls.get_output_keys(base_key):
                 b[output_keys] = b.keys[base_key]
 
