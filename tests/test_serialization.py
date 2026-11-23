@@ -14,6 +14,18 @@ def test_model_path_round_trips_through_recipe_file(tmp_path, filename):
     assert sd_mecha.deserialize_path(recipe_file).path == checkpoint
 
 
+def test_deprecated_anima_config_alias_round_trips_as_canonical(tmp_path):
+    checkpoint = tmp_path / "anima.safetensors"
+    canonical = sd_mecha.serialize(sd_mecha.model(checkpoint, "anima-diffusion_pipe"))
+    legacy = canonical.replace('model_config="anima-diffusion_pipe"', 'model_config="anima-diffuser"')
+
+    with pytest.warns(FutureWarning, match=r"'anima-diffuser'.*removed in sd-mecha 1\.3\.0"):
+        restored = sd_mecha.deserialize(legacy)
+
+    assert restored.model_config.identifier == "anima-diffusion_pipe"
+    assert sd_mecha.serialize(restored) == canonical
+
+
 def test_deserialize_accepts_blank_lines_between_instructions():
     recipe = sd_mecha.literal({"key": 7}, config="singleton-mecha", merge_space="param")
     serialized = sd_mecha.serialize(recipe)

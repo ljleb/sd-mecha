@@ -511,6 +511,11 @@ def resolve(identifier: str) -> ModelConfig:
             "it needs to be manually instantiated in this way: model_configs.StructuralModelConfig(...)"
         )
 
+    from sd_mecha._recipe_compat import deprecated_model_config_alias
+
+    if replacement := deprecated_model_config_alias(identifier):
+        return resolve(replacement)
+
     suggestions = fuzzywuzzy.process.extractOne(identifier, _model_configs_registry_base.keys())
     postfix = ""
     if suggestions is not None:

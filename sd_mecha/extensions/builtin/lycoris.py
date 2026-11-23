@@ -194,19 +194,17 @@ def _to_lycoris_keys(
                 canonical = f"{prefix}_{key}"
                 stem, _, suffix = key.partition(".")
                 alternatives = algo.suffix_aliases.get(suffix, ())
-                if meta.aliases or alternatives:
-                    aliases = list(metadata.aliases)
-                    aliases.extend(f"{prefix}_{stem}.{alt}" for alt in alternatives)
-                    for alias in meta.aliases:
-                        module = alias.removesuffix(".weight").removesuffix(".bias")
-                        flat = algo.stem(alias)
-                        for spelling in (suffix, *alternatives):
-                            aliases.extend((f"{prefix}_{flat}.{spelling}", f"{module}.{spelling}"))
-                        aliases.extend(f"{flat}.{alt}" for alt in alternatives)
-                    metadata = dataclasses.replace(
-                        metadata, aliases=tuple(dict.fromkeys(alias for alias in aliases if alias != canonical)),
-                    )
-                lyco_keys[canonical] = metadata
+                aliases = list(metadata.aliases)
+                aliases.extend(f"{prefix}_{stem}.{alt}" for alt in alternatives)
+                for base_spelling in (base_key, *meta.aliases):
+                    module = base_spelling.removesuffix(".weight").removesuffix(".bias")
+                    flat = algo.stem(base_spelling)
+                    for spelling in (suffix, *alternatives):
+                        aliases.extend((f"{prefix}_{flat}.{spelling}", f"{flat}.{spelling}", f"{module}.{spelling}"))
+
+                lyco_keys[canonical] = dataclasses.replace(
+                    metadata, aliases=tuple(dict.fromkeys(alias for alias in aliases if alias != canonical)),
+                )
 
     return lyco_keys
 

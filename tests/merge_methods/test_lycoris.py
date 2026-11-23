@@ -134,6 +134,29 @@ def test_anima_adapter_reads_lora_factor_aliases(tmp_path, up_key, down_key):
     torch.testing.assert_close(result[key], torch.full((64, 2048), 3.0))
 
 
+@pytest.mark.parametrize(
+    "stem, up, down",
+    [
+        ("text_encoders_qwen3_06b_transformer_model_layers_0_self_attn_q_proj", "lora_up", "lora_down"),
+        ("text_encoders.qwen3_06b.transformer.model.layers.0.self_attn.q_proj", "lora_up", "lora_down"),
+        ("text_encoders.qwen3_06b.transformer.model.layers.0.self_attn.q_proj", "lora_B", "lora_A"),
+        ("lora_te_layers_0_self_attn_q_proj", "lora_up", "lora_down"),
+    ],
+)
+def test_anima_qwen_lora_resolves_dotted_and_flattened_stems(tmp_path, stem, up, down):
+    checkpoint = tmp_path / "anima-qwen-lora.safetensors"
+    save_file({
+        f"{stem}.{up}.weight": torch.full((2048, 1), 2.0),
+        f"{stem}.{down}.weight": torch.ones((1, 1024)),
+    }, checkpoint)
+    key = "text_encoders.qwen3_06b.transformer.model.layers.0.self_attn.q_proj.weight"
+    base = sd_mecha.model({key: torch.ones(2048, 1024)}, "anima-diffusion_pipe")
+
+    result = merge(sd_mecha.apply_lycoris(base, sd_mecha.model(checkpoint)))
+
+    torch.testing.assert_close(result[key], torch.full((2048, 1024), 3.0))
+
+
 def test_lokr_extraction_default_round_trips_through_application():
     w1 = torch.diag(torch.tensor([1., 2.]))
     w2 = torch.tensor([[3., 1.], [-2., 4.]])

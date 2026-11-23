@@ -1,10 +1,24 @@
-"""Migrate deprecated extraction method calls in saved recipes until sd-mecha 1.3.0."""
+"""Resolve deprecated model config IDs and recipe method calls until sd-mecha 1.3.0."""
 
 import re
 import warnings
 from copy import copy
 
 from .extensions import merge_methods
+
+
+def deprecated_model_config_alias(identifier: str) -> str | None:
+    if identifier != "anima-diffuser":
+        return None
+
+    replacement = "anima-diffusion_pipe"
+    warnings.warn(
+        f"Model config alias {identifier!r} is deprecated and will be removed in sd-mecha 1.3.0. "
+        f"Use {replacement!r} instead.",
+        FutureWarning,
+        stacklevel=3,
+    )
+    return replacement
 
 
 def deserialize_merge_call(identifier, args, kwargs):
