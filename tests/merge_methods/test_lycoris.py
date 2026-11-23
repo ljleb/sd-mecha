@@ -75,6 +75,65 @@ def test_norm_extraction_and_deprecated_conversion():
     torch.testing.assert_close(converted[BIAS], bias)
 
 
+@pytest.mark.parametrize("tucker", [False, True])
+def test_loha_applies_a_scaled_hadamard_update(tucker):
+    prefix = "lycoris_vae_post_quant_conv"
+    left = torch.arange(1.0, 9.0).reshape(4, 2)
+    right = torch.arange(1.0, 9.0).reshape(2, 4)
+    factors = {
+        "hada_w1_a": left.T if tucker else left,
+        "hada_w1_b": right,
+        "hada_w2_a": torch.ones_like(left.T if tucker else left),
+        "hada_w2_b": torch.ones_like(right),
+        "alpha": torch.tensor(0.5),
+    }
+    if tucker:
+        factors["hada_t1"] = torch.eye(2).reshape(2, 2, 1, 1)
+        factors["hada_t2"] = factors["hada_t1"].clone()
+    weights = {f"{prefix}.{suffix}": tensor.contiguous() for suffix, tensor in factors.items()}
+    delta = (0.5 * (left @ right)).reshape(4, 4, 1, 1)
+    base = sd_mecha.model({WEIGHT: torch.ones_like(delta)}, CONFIG)
+    adapter = sd_mecha.model(weights, f"{CONFIG}_lycoris_lora")
+
+    torch.testing.assert_close(merge(sd_mecha.apply_lycoris(base, adapter))[WEIGHT], 1 + delta)
+    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
+        torch.testing.assert_close(merge(sd_mecha.convert(adapter, CONFIG), "delta")[WEIGHT], delta)
+
+
+def test_full_delta_applies_to_weights_and_biases():
+    prefix = "lycoris_vae_post_quant_conv"
+    weight = torch.arange(16.0).reshape(4, 4, 1, 1)
+    bias = torch.arange(4.0)
+    base = sd_mecha.model({WEIGHT: weight, BIAS: bias}, CONFIG)
+    adapter = sd_mecha.model({
+        f"{prefix}.diff": weight + 1,
+        f"{prefix}.diff_b": bias + 2,
+    }, f"{CONFIG}_lycoris_lora")
+
+    result = merge(sd_mecha.apply_lycoris(base, adapter))
+    torch.testing.assert_close(result[WEIGHT], 2 * weight + 1)
+    torch.testing.assert_close(result[BIAS], 2 * bias + 2)
+
+
+@pytest.mark.parametrize(
+    "up_key, down_key",
+    [
+        ("lora_unet_final_layer_linear.lora_up.weight", "lora_unet_final_layer_linear.lora_down.weight"),
+        ("diffusion_model.final_layer.linear.lora_B.weight", "diffusion_model.final_layer.linear.lora_A.weight"),
+    ],
+)
+def test_anima_adapter_reads_lora_factor_aliases(tmp_path, up_key, down_key):
+    checkpoint = tmp_path / "anima-lora.safetensors"
+    save_file({up_key: torch.full((64, 1), 2.0), down_key: torch.ones((1, 2048))}, checkpoint)
+    key = "net.final_layer.linear.weight"
+    base = sd_mecha.model({key: torch.ones(64, 2048)}, "anima-diffusion_pipe")
+    adapter = sd_mecha.model(checkpoint)
+
+    result = merge(sd_mecha.apply_lycoris(base, adapter))
+
+    torch.testing.assert_close(result[key], torch.full((64, 2048), 3.0))
+
+
 def test_lokr_extraction_default_round_trips_through_application():
     w1 = torch.diag(torch.tensor([1., 2.]))
     w2 = torch.tensor([[3., 1.], [-2., 4.]])

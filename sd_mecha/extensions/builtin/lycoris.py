@@ -22,6 +22,8 @@ __all__ = [
     "lora",
     "lokr",
     "norm",
+    "loha",
+    "full",
     "apply",
 ]
 
@@ -36,6 +38,7 @@ def _register_all_lycoris_configs():
             "sdxl-kohya",
             "sdxl-kohya_but_diffusers",
             "sd1-kohya",
+            "anima-diffusion_pipe",
         ):
             base_config = model_configs.resolve(base_config_id)
             lyco_config = LycorisModelConfig(
@@ -47,8 +50,9 @@ def _register_all_lycoris_configs():
             model_configs.register_aux(lyco_config)
 
             define_application(lyco_config, algorithms)
-            for algo in algorithms:
-                algo.implement_extract_method(lyco_config, base_config)
+            for algorithm in algorithms:
+                if algorithm.extract_method is not None:
+                    algorithm.implement_extract_method(lyco_config, base_config)
 
             define_conversions(lyco_config, algorithms)
 
@@ -186,8 +190,23 @@ def _to_lycoris_keys(
                 continue
 
             algo_keys = algo.convert_key(base_key, meta)
-            for algo_key, algo_val in algo_keys.items():
-                lyco_keys[f"{prefix}_{algo_key}"] = algo_val
+            for key, metadata in algo_keys.items():
+                canonical = f"{prefix}_{key}"
+                stem, _, suffix = key.partition(".")
+                alternatives = algo.suffix_aliases.get(suffix, ())
+                if meta.aliases or alternatives:
+                    aliases = list(metadata.aliases)
+                    aliases.extend(f"{prefix}_{stem}.{alt}" for alt in alternatives)
+                    for alias in meta.aliases:
+                        module = alias.removesuffix(".weight").removesuffix(".bias")
+                        flat = algo.stem(alias)
+                        for spelling in (suffix, *alternatives):
+                            aliases.extend((f"{prefix}_{flat}.{spelling}", f"{module}.{spelling}"))
+                        aliases.extend(f"{flat}.{alt}" for alt in alternatives)
+                    metadata = dataclasses.replace(
+                        metadata, aliases=tuple(dict.fromkeys(alias for alias in aliases if alias != canonical)),
+                    )
+                lyco_keys[canonical] = metadata
 
     return lyco_keys
 
@@ -198,15 +217,16 @@ _algos_by_name: Dict[str, type[LycorisAlgorithm]] = {}
 @dataclasses.dataclass(frozen=True)
 class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
     suffixes: ClassVar[Tuple[str, ...]]
-    extract: ClassVar[Callable]
-    extract_method: ClassVar[MergeMethod]
+    suffix_aliases: ClassVar[Mapping[str, tuple[str, ...]]] = {}
+    extract: ClassVar[Optional[Callable]] = None
+    extract_method: ClassVar[Optional[MergeMethod]] = None
     supports_delta_conversion: ClassVar[bool] = False
 
     @classmethod
     def __init_subclass__(cls, **kwargs):
-        global _algos_by_name
-        cls.extract_method = merge_method(cls.extract, identifier=extraction_interface_name(cls.__name__), is_interface=True)
-        _algos_by_name[cls.__name__] = cls
+        if cls.extract is not None:
+            cls.extract_method = merge_method(cls.extract, identifier=extraction_interface_name(cls.__name__), is_interface=True)
+            _algos_by_name[cls.__name__] = cls
 
     @staticmethod
     def targets_key(key: str, meta: KeyMetadata):
@@ -246,9 +266,8 @@ class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
         ...
 
     @classmethod
-    @abc.abstractmethod
     def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
-        ...
+        raise NotImplementedError(f"{cls.__name__} does not implement extraction.")
 
 
 def extraction_interface_name(algo_name: str):
@@ -277,6 +296,10 @@ class lora(LycorisAlgorithm):
         "lora_down.weight",
         "alpha",
     )
+    suffix_aliases = {
+        "lora_up.weight": ("lora_B.weight",),
+        "lora_down.weight": ("lora_A.weight",),
+    }
     supports_delta_conversion = True
 
     @classmethod
@@ -629,6 +652,83 @@ class norm(LycorisAlgorithm):
                 **kwargs,
             ) -> Return(torch.Tensor, "weight", lyco_config):
                 return diff
+
+
+class loha(LycorisAlgorithm):
+    suffixes = ("hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b", "hada_t1", "hada_t2", "alpha")
+    supports_delta_conversion = True
+
+    @classmethod
+    def build_input_keys(cls, keys: KeysAccessor, lyco_config: LycorisModelConfig, base_key: str) -> Optional[ReqExpr]:
+        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(cls,))
+        if not lyco_keys:
+            return None
+
+        w1a, w1b, w2a, w2b, t1, t2, alpha = lyco_keys
+        factors = keys[w1a, w1b, w2a, w2b]
+        tucker = (factors & keys[t1, t2]) @ cls.apply_tucker
+        return (tucker | factors @ cls.apply) & (keys[alpha] @ cls.with_alpha | keys[()])
+
+    class apply(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            w1a, w1b, w2a, w2b = (state_dict.get_lyco_tensor(suffix) for suffix in loha.suffixes[:4])
+            first = cls.rebuild_factor(state_dict, w1a, w1b, "hada_t1")
+            second = cls.rebuild_factor(state_dict, w2a, w2b, "hada_t2")
+            delta = (first * second).reshape(target_shape)
+            return state_dict.get_base_tensor() + delta * cls.scale(state_dict, w1b.shape[0])
+
+        @staticmethod
+        def rebuild_factor(state_dict, a, b, core_suffix):
+            return a.flatten(1) @ b.flatten(1)
+
+        @staticmethod
+        def scale(state_dict, rank):
+            return 1
+
+    class apply_tucker(apply):
+        @staticmethod
+        def rebuild_factor(state_dict, a, b, core_suffix):
+            return rebuild_tucker(state_dict.get_lyco_tensor(core_suffix), a, b)
+
+    class with_alpha(apply):
+        @staticmethod
+        def scale(state_dict, rank):
+            alpha = state_dict.get_lyco_tensor("alpha")
+            return alpha / rank if alpha.isfinite() and alpha != 0 else 1
+
+
+class full(LycorisAlgorithm):
+    suffixes = ("diff", "diff_b")
+    supports_delta_conversion = True
+
+    @staticmethod
+    def targets_key(key: str, meta: KeyMetadata):
+        return meta.shape is not None and meta.shape.numel() > 0
+
+    @classmethod
+    def convert_key(cls, base_key: str, meta: KeyMetadata) -> Dict[str, KeyMetadata]:
+        suffix = cls.suffixes[base_key.endswith(".bias")]
+        aliases = tuple(f"{cls.stem(alias)}.{suffix}" for alias in meta.aliases)
+        return {f"{cls.stem(base_key)}.{suffix}": dataclasses.replace(meta, aliases=aliases, optional=True)}
+
+    @classmethod
+    def build_input_keys(cls, keys: KeysAccessor, lyco_config: LycorisModelConfig, base_key: str) -> Optional[ReqExpr]:
+        lyco_keys = lyco_config.to_lycoris_keys(base_key, algos=(cls,))
+        if lyco_keys:
+            apply_delta = cls.apply_bias if base_key.endswith(".bias") else cls.apply_weight
+            return keys[next(iter(lyco_keys))] @ apply_delta
+        return None
+
+    class apply_weight(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            return state_dict.get_base_tensor() + state_dict.get_lyco_tensor("diff").reshape(target_shape)
+
+    class apply_bias(ComposeObject):
+        @classmethod
+        def __call__(cls, state_dict: StateDictKeyHelper, target_shape: torch.Size) -> torch.Tensor:
+            return state_dict.get_base_tensor() + state_dict.get_lyco_tensor("diff_b").reshape(target_shape)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
