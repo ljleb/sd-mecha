@@ -16,19 +16,29 @@
           default = pkgs.mkShell {
             packages = [ python ];
 
-            shellHook = pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}:/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-            '' + ''
+            shellHook = ''
               sd_mecha_setup_venv() {
-                local root venv venv_python
+                local root venv venv_python nixos=
+                if [[ -e /run/current-system/nixos-version ]]; then
+                  nixos=1
+                fi
+
+                ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+                  local library_path="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]}"
+                  if [[ -n "$nixos" && -d /run/opengl-driver/lib ]]; then
+                    library_path="$library_path:/run/opengl-driver/lib"
+                  fi
+                  export LD_LIBRARY_PATH="$library_path''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+                ''}
+
                 root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
                 venv="$root/venv"
                 venv_python="$venv/bin/python"
 
                 if [[ ! -f "$venv/pyvenv.cfg" ]]; then
-                  printf 'Creating %s and installing locked dependencies.\n' "$venv"
+                  printf 'Creating virtual environment at %s\n' "$venv"
                   "${python}/bin/python3.11" -m venv "$venv" || return
-                elif [[ ! "$venv_python" -ef "${python}/bin/python3.11" ]]; then
+                elif [[ -n "$nixos" && ! "$venv_python" -ef "${python}/bin/python3.11" ]]; then
                   printf 'Move %s aside to recreate it with the Python pinned by Nix.\n' "$venv" >&2
                   return 1
                 fi
@@ -37,14 +47,14 @@
                   "$venv_python" -m ensurepip --default-pip || return
                 fi
 
-                "$venv_python" -m pip --isolated --disable-pip-version-check install --quiet \
-                  --index-url https://pypi.org/simple --require-hashes --only-binary=:all: \
-                  --requirement "$root/requirements-nix.txt" &&
-                "$venv_python" -m pip --isolated --disable-pip-version-check install --quiet \
-                  --no-index --no-deps --no-build-isolation --editable "$root" &&
+                "$venv_python" -m pip install --editable "$root" \
+                  --requirement "$root/requirements-dev.txt" &&
                 source "$venv/bin/activate"
               }
-              sd_mecha_setup_venv
+
+              if sd_mecha_setup_venv; then
+                printf '%s\n' 'sd-mecha dev shell ready' 'Run tests with: pytest'
+              fi
               unset -f sd_mecha_setup_venv
             '';
           };
