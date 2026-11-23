@@ -10,7 +10,7 @@ from sd_mecha.extensions import merge_spaces, model_configs, model_dirs, model_f
 from sd_mecha.extensions.merge_methods import value_to_node
 from sd_mecha.extensions.merge_spaces import MergeSpace, MergeSpaceSymbol
 from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfig, StructuralModelConfig
-from sd_mecha.keys_map import ActiveKeyMap, KeyMap, RealizedKeyRelation
+from sd_mecha.keys_map import ActiveKeyMap, RealizedKeyRelation
 from sd_mecha.recipe_nodes import (
     ClosedModelRecipeNode, LiteralRecipeNode, MergeRecipeNode, ModelRecipeNode,
     OpenModelRecipeNode, RecipeNode, RecipeNodeOrValue, RecipeVisitor, TracingRecipeVisitor,
@@ -306,6 +306,18 @@ class FinalizeWithKeysReturn:
 class CandidatesReturn:
     model_config: Optional["ModelConfigCandidates"]
     merge_space: Optional["MergeSpaceCandidates"]
+
+
+def is_finalized(recipe: RecipeNode, check_merge_nodes: bool = True) -> bool:
+    types_to_check = LiteralRecipeNode, ModelRecipeNode
+    if check_merge_nodes:
+        types_to_check += MergeRecipeNode,
+
+    return all(
+        n.merge_space is not None or n.model_config is not None
+        for n in recipe
+        if isinstance(n, types_to_check)
+    )
 
 
 @dataclasses.dataclass

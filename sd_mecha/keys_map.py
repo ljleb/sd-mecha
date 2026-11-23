@@ -1,7 +1,9 @@
 import dataclasses
 from collections import OrderedDict
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Generic, Iterator, Mapping, Optional, Set, Tuple, TypeVar, Union
+from typing import Any, Dict, Generic, Iterator, Mapping, Optional, Set, Tuple, TypeVar, Union
+from sd_mecha.extensions import model_configs
+from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfig
 from sd_mecha.typing_ import ClassObject
 
 
@@ -31,20 +33,19 @@ class Clause:
     by_param: Mapping[str, Tuple[str, ...]]
     meta: Any = None
 
-    def __and__(self, other: "Clause") -> "Clause":
+    def __and__(self, other: "Clause") -> "ReqExpr":
+        if other is None:
+            return ReqExpr((self,))
         if not isinstance(other, Clause):
             return NotImplemented
 
         merged: Dict[str, Tuple[str, ...]] = OrderedDict(self.by_param)
         for p, ks in other.by_param.items():
-            if p in merged:
-                raise ValueError(
-                    "Each parameter may appear at most once within one conjunction."
-                )
-            merged[p] = ks
+            prev = merged.get(p, ())
+            merged[p] = prev + tuple(k for k in ks if k not in prev)
 
         meta = self._merge_clause_meta(self.meta, other.meta)
-        return Clause(MappingProxyType(merged), meta=meta)
+        return ReqExpr((Clause(MappingProxyType(merged), meta=meta),))
 
     def __rand__(self, other: "Clause") -> "Clause":
         return self & other
@@ -80,6 +81,8 @@ class ReqExpr:
     clauses: Tuple[Clause, ...]
 
     def __and__(self, other: object) -> "ReqExpr":
+        if other is None:
+            return self
         if isinstance(other, Clause):
             other = ReqExpr((other,))
         if not isinstance(other, ReqExpr):
@@ -192,106 +195,75 @@ def _ensure_no_dupes(seq: Tuple[str, ...], *, what: str) -> None:
         raise ValueError(f"Duplicate {what}: {dupes}")
 
 
-class ParamKeysAccessor:
-    """
-    b.param.keys()       -> iterate keys (strings) for that param
-    b.param.keys.items() -> iterate (key, props) from cfg.keys()
-    b.param.keys[...]    -> select tuple of keys for that param
-    """
-    def __init__(self, builder: "KeyMapBuilder", param: str):
-        self._b = builder
-        self._p = param
+@dataclasses.dataclass(frozen=True, slots=True)
+class KeysAccessor:
+    params: Tuple[str, ...]
+    config: ModelConfig
 
     def __call__(self) -> Iterator[str]:
-        yield from self._b._input_keys_for(self._p)
+        yield from self.config.keys().keys()
 
-    def items(self) -> Iterator[Tuple[str, Any]]:
-        yield from self._b._input_items_for(self._p)
+    def items(self) -> Iterator[Tuple[str, KeyMetadata]]:
+        yield from self.config.keys().items()
 
-    def __getitem__(self, sel: object) -> Clause:
+    def __getitem__(self, sel: object) -> ReqExpr:
         keys = _to_tuple(sel, what="input key")
         if not keys:
-            return Clause(MappingProxyType({self._p: ()}))
-        _ensure_no_dupes(keys, what=f"input keys (param '{self._p}')")
-        for k in keys:
-            self._b._validate_input_key(self._p, k)
-        return Clause(MappingProxyType({self._p: keys}))
+            return ReqExpr((Clause(MappingProxyType({param: () for param in self.params})),))
+        self.validate_keys(keys)
+        return ReqExpr((Clause(MappingProxyType({param: keys for param in self.params})),))
+
+    def validate_keys(self, keys: Tuple[str, ...]):
+        _ensure_no_dupes(keys, what=f"input keys ({self.config})")
+        config_keys = self.config.keys()
+
+        for key in keys:
+            key = _norm_one(key, what="input key")
+            if key not in config_keys:
+                hint = ", ".join(list(config_keys)[:10])
+                cfg_id = self.config.identifier
+                raise ValueError(
+                    f"{self.params}: unknown input key '{key}' (config={cfg_id}). "
+                    f"Possible includes: {hint}"
+                )
 
 
-class AllKeysAccessor:
-    """
-    Enabled only if all input configs are equal (same keyset).
-    b.keys()       -> iterate keys shared by all params
-    b.keys.items() -> iterate (key, props) from the shared config
-    b.keys[...]    -> select same key tuple across ALL params (validated)
-    """
-    def __init__(self, builder: "KeyMapBuilder"):
-        self._b = builder
-
-    def _require_enabled(self) -> None:
-        if not self._b._all_inputs_share_config:
-            ids = {p: self._b.input_configs[p].identifier for p in self._b.params}
-            raise ValueError(
-                "b.keys() is only available when all input configs share the same keyset. "
-                f"Got config identifiers per param: {ids}"
-            )
-
-    def __call__(self) -> Iterator[str]:
-        self._require_enabled()
-        yield from self._b._shared_input_keys()
-
-    def items(self) -> Iterator[Tuple[str, Any]]:
-        self._require_enabled()
-        yield from self._b._shared_input_items()
-
-    def __getitem__(self, sel: object) -> Clause:
-        self._require_enabled()
-        keys = _to_tuple(sel, what="input key")
-        if not keys:
-            return Clause(MappingProxyType({p: () for p in self._b.params}))
-        _ensure_no_dupes(keys, what="input keys (same-across-all-params selection)")
-
-        for k in keys:
-            if k not in self._b._shared_input_keyset:
-                hint = ", ".join(list(self._b._shared_input_keyset)[:10])
-                raise ValueError(f"Unknown shared input key '{k}'. Shared keys include: {hint}")
-
-        by = {p: keys for p in self._b.params}
-        return Clause(MappingProxyType(by))
-
-
+@dataclasses.dataclass(frozen=True, slots=True)
 class OutputKeysAccessor:
-    """
-    b.out.keys()       -> iterate output keys
-    b.out.keys.items() -> iterate (key, props) for output config
-    """
-    def __init__(self, builder: "KeyMapBuilder"):
-        self._b = builder
+    config: ModelConfig
 
     def __call__(self) -> Iterator[str]:
-        yield from self._b._output_keys()
+        yield from self.config.keys().keys()
 
-    def items(self) -> Iterator[Tuple[str, Any]]:
-        yield from self._b._output_items()
+    def items(self) -> Iterator[Tuple[str, KeyMetadata]]:
+        yield from self.config.keys().items()
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
 class ParamProxy:
-    def __init__(self, builder: "KeyMapBuilder", name: str):
-        self.name = name
-        self.keys = ParamKeysAccessor(builder, name)
+    names: Tuple[str, ...]
+    config: ModelConfig
+    keys: KeysAccessor = dataclasses.field(init=False, hash=False, compare=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "keys", KeysAccessor(self.names, self.config))
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
 class OutputProxy:
-    def __init__(self, builder: "KeyMapBuilder"):
-        self.keys = OutputKeysAccessor(builder)
+    config: ModelConfig
+    keys: OutputKeysAccessor = dataclasses.field(init=False, hash=False, compare=False)
+
+    def __post_init__(self):
+        object.__setattr__(self, "keys", OutputKeysAccessor(self.config))
 
 
 T = TypeVar("T")
 
 
 class KeyMap(Generic[T]):
-    def __init__(self, n_to_n_map: Mapping[Tuple[str, ...], T]):
-        self.n_to_n_map = MappingProxyType(n_to_n_map)
+    def __init__(self, n_to_n_map: MappingProxyType[Tuple[str, ...], T]):
+        self.n_to_n_map = n_to_n_map
         self.simple_map = MappingProxyType({
             k: g
             for ks, g in self.n_to_n_map.items()
@@ -322,10 +294,10 @@ class KeyMap(Generic[T]):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ActiveKeyMap(Generic[T]):
-    simple_map: Mapping[str, T]
+    simple_map: MappingProxyType[str, T]
 
-    def __init__(self, simple_map: Mapping[str, T]):
-        object.__setattr__(self, "simple_map", MappingProxyType(dict(simple_map)))
+    def __post_init__(self):
+        object.__setattr__(self, "simple_map", MappingProxyType(dict(self.simple_map)))
 
     def __getitem__(self, k: str) -> T:
         return self.simple_map[k]
@@ -346,6 +318,7 @@ class ActiveKeyMap(Generic[T]):
             yield rel
 
 
+@dataclasses.dataclass(slots=True)
 class KeyMapBuilder:
     """
     Construct with:
@@ -358,108 +331,74 @@ class KeyMapBuilder:
       - output key uniqueness across entire spec (strict)
     """
 
-    def __init__(self, input_configs: Mapping[str, Optional[Any]], output_config: Any):
-        self.input_configs: Dict[str, Any] = OrderedDict(input_configs)
-        self.output_config: Any = output_config
-        self.params: Tuple[str, ...] = tuple(self.input_configs.keys())
-        self.param_proxies = {}
+    __input_configs: MappingProxyType[str, ModelConfig]
+    __output_config: ModelConfig
 
-        self.out = OutputProxy(self)
+    __relations: Dict[Tuple[str, ...], KeyRelation] = dataclasses.field(default_factory=dict)
+    __out_key_owner: Dict[str, Tuple[str, ...]] = dataclasses.field(default_factory=dict)
+    __param_proxies_cache: Dict[str, ParamProxy] = dataclasses.field(default_factory=dict, init=False, hash=False, compare=False)
+    __shared_key_accessor_cache: Optional[KeysAccessor] = dataclasses.field(default=None, init=False, hash=False, compare=False)
+    __output_proxy_cache: Optional[OutputProxy] = dataclasses.field(default=None, init=False, hash=False, compare=False)
+    __shared_config: Optional[ModelConfig] = dataclasses.field(default=None, init=False, hash=False, compare=False)
 
-        self._all_inputs_share_config = self._compute_all_inputs_share_config()
-        self.keys = AllKeysAccessor(self)
+    def __post_init__(self):
+        self.__shared_config = self.__compute_shared_input_config()
 
-        self._shared_input_keyset: Set[str] = set()
-        if self.params and self._all_inputs_share_config:
-            first_cfg = self.input_configs[self.params[0]]
-            self._shared_input_keyset = set(first_cfg.keys().keys())
+    def __getattr__(self, name) -> ParamProxy | KeysAccessor | OutputProxy:
+        if name == "keys":
+            if self.__shared_config is not None:
+                if self.__shared_key_accessor_cache is None:
+                    self.__shared_key_accessor_cache = KeysAccessor(tuple(self.__input_configs), self.__shared_config)
+                return self.__shared_key_accessor_cache
+            else:
+                ids = {param: cfg.identifier for param, cfg in self.__input_configs.items()}
+                raise AttributeError(
+                    "b.keys is only available when all parameters share the same config. "
+                    f"Got config identifiers per param: {ids}"
+                )
 
-        self._relations: Dict[Tuple[str, ...], KeyRelation] = {}
-        self._out_key_owner: Dict[str, Tuple[str, ...]] = {}
+        if name == "return":
+            if self.__output_proxy_cache is None:
+                self.__output_proxy_cache = OutputProxy(self.__output_config)
+            return self.__output_proxy_cache
 
-    def __getattr__(self, param):
-        if param in self.input_configs:
-            if param not in self.param_proxies:
-                self.param_proxies[param] = ParamProxy(self, param)
-            return self.param_proxies[param]
+        if name in self.__input_configs:
+            if name not in self.__param_proxies_cache:
+                self.__param_proxies_cache[name] = ParamProxy(
+                    (name,),
+                    self.__input_configs[name]
+                )
+            return self.__param_proxies_cache[name]
 
-        available = ", ".join(repr(p) for p in self.params)
+        available = ", ".join(repr(p) for p in self.__input_configs)
         raise AttributeError(
-            f"{type(self).__name__} has no parameter or attribute {param!r}. "
+            f"{type(self).__name__} has no parameter or attribute {name!r}. "
             f"This may indicate an invalid input parameter name. "
             f"Available parameters: {available}"
         )
 
-    def _compute_all_inputs_share_config(self) -> bool:
-        if not self.params:
-            return True
-        cfgs = [self.input_configs[p] for p in self.params]
-        first = cfgs[0]
-        return all(cfg == first for cfg in cfgs[1:])
-
-    def _input_keydict_for(self, param: str) -> Dict[str, Any]:
-        cfg = self.input_configs[param]
-        kd = cfg.keys()
-        if not isinstance(kd, dict):
-            kd = OrderedDict(kd)
-        return kd
-
-    def _input_keys_for(self, param: str) -> Iterator[str]:
-        yield from self._input_keydict_for(param).keys()
-
-    def _input_items_for(self, param: str) -> Iterator[Tuple[str, Any]]:
-        yield from self._input_keydict_for(param).items()
-
-    def _shared_input_keys(self) -> Iterator[str]:
-        if not self.params:
-            yield from ()
-        first_cfg = self.input_configs[self.params[0]]
-        yield from first_cfg.keys().keys()
-
-    def _shared_input_items(self) -> Iterator[Tuple[str, Any]]:
-        if not self.params:
-            yield from ()
-        first_cfg = self.input_configs[self.params[0]]
-        yield from first_cfg.keys().items()
-
-    def _output_keydict(self) -> Dict[str, Any]:
-        kd = self.output_config.keys()
-        if not isinstance(kd, dict):
-            kd = OrderedDict(kd)
-        return kd
-
-    def _output_keys(self) -> Iterator[str]:
-        yield from self._output_keydict().keys()
-
-    def _output_items(self) -> Iterator[Tuple[str, Any]]:
-        yield from self._output_keydict().items()
-
-    # ----- validation -----
-
-    def _validate_input_key(self, param: str, key: str) -> None:
-        k = _norm_one(key, what="input key")
-        kd = self._input_keydict_for(param)
-        if k not in kd:
-            hint = ", ".join(list(kd.keys())[:10])
-            cfg_id = getattr(self.input_configs[param], "identifier", "<unknown>")
-            raise ValueError(
-                f"{param}: unknown input key '{k}' (config={cfg_id}). "
-                f"Possible includes: {hint}"
-            )
+    def __compute_shared_input_config(self) -> Optional[ModelConfig]:
+        if not self.__input_configs:
+            return model_configs.EMPTY
+        cfgs = iter(self.__input_configs.values())
+        first = next(cfgs)
+        if all(cfg == first for cfg in cfgs):
+            return first
+        return None
 
     def _validate_output_key(self, key: str) -> None:
         k = _norm_one(key, what="output key")
-        kd = self._output_keydict()
-        if k not in kd:
-            hint = ", ".join(list(kd.keys())[:10])
-            cfg_id = getattr(self.output_config, "identifier", "<unknown>")
+        keys = self.__output_config.keys()
+        if k not in keys:
+            hint = ", ".join(list(keys)[:10])
+            cfg_id = getattr(self.__output_config, "identifier", "<unknown>")
             raise ValueError(
                 f"Unknown output key '{k}' (output_config={cfg_id}). Possible includes: {hint}"
             )
 
     def __setitem__(self, out_keys: object, rhs: object) -> None:
         if isinstance(out_keys, type(Ellipsis)):
-            outs = tuple(self._output_keys())
+            outs = tuple(self.__output_config.keys())
         else:
             outs = _to_tuple(out_keys, what="output key")
 
@@ -470,11 +409,11 @@ class KeyMapBuilder:
         for k in outs:
             self._validate_output_key(k)
         for k in outs:
-            if k in self._out_key_owner:
-                prev = self._out_key_owner[k]
+            if k in self.__out_key_owner:
+                prev = self.__out_key_owner[k]
                 raise ValueError(f"Output key '{k}' is already used in output group {prev}")
         for k in outs:
-            self._out_key_owner[k] = outs
+            self.__out_key_owner[k] = outs
 
         if isinstance(rhs, Clause):
             expr = ReqExpr((rhs,))
@@ -486,26 +425,14 @@ class KeyMapBuilder:
         validated_clauses = []
         for clause in expr.clauses:
             inputs_mut: Dict[str, Tuple[str, ...]] = {}
-            for p, ks in clause.by_param.items():
-                if p not in self.input_configs:
+            for p, keys in clause.by_param.items():
+                if p not in self.__input_configs:
                     raise ValueError(f"Unknown parameter '{p}' in requirements.")
-                _ensure_no_dupes(ks, what=f"input keys (param '{p}')")
-                for k in ks:
-                    self._validate_input_key(p, k)
-                inputs_mut[p] = ks
+                self.__getattr__(p).keys.validate_keys(keys)
+                inputs_mut[p] = keys
             validated_clauses.append(Clause(MappingProxyType(inputs_mut), meta=clause.meta))
 
-        self._relations[outs] = KeyRelation(outputs=outs, clauses=tuple(validated_clauses))
+        self.__relations[outs] = KeyRelation(outputs=outs, clauses=tuple(validated_clauses))
 
     def build(self) -> KeyMap:
-        return KeyMap(self._relations)
-
-
-def build_keys_map(
-    map_keys: Callable[[KeyMapBuilder], None],
-    input_configs: Mapping[str, Any],
-    output_config: Any,
-) -> KeyMap:
-    b = KeyMapBuilder(input_configs=input_configs, output_config=output_config)
-    map_keys(b)
-    return b.build()
+        return KeyMap(MappingProxyType(self.__relations))

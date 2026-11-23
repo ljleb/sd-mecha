@@ -18,6 +18,9 @@ class MergeSpace:
     def __repr__(self):
         return f"MergeSpace('{self.identifier}')"
 
+    def __str__(self):
+        return self.identifier
+
 
 class MergeSpaceSymbol:
     def __init__(self, *merge_spaces: Tuple[str | MergeSpace, ...]):
@@ -31,6 +34,12 @@ class MergeSpaceSymbol:
 
     def __contains__(self, item):
         return item in self.merge_spaces
+
+    def __repr__(self):
+        return f"MergeSpaceSymbol('{self.merge_spaces}')"
+
+    def __str__(self):
+        return repr(self.merge_spaces)
 
 
 AnyMergeSpace = Set[MergeSpace] | MergeSpaceSymbol

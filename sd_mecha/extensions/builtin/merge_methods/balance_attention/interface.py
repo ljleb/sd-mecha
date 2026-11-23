@@ -4,7 +4,7 @@ from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, S
 
 @merge_method(is_interface=True)
 def balance_attention(
-    a: Parameter(StateDict[Tensor]),
+    a: Parameter(Tensor),
     **kwargs,
 ) -> Return(Tensor):
     ...
