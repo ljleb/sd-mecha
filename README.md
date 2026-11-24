@@ -121,4 +121,4 @@ This allows to merge a very large number of models simultaneously on low-end har
 
 ## Special mentions
 
-Thanks to blue-pen5805 for their work that helped bring Anima support to sd-mecha. [Original comfy-mecha extension](https://github.com/blue-pen5805/comfy-mecha-extensions-anima)
+Thanks to @blue-pen5805 for their work that helped bring Anima support to sd-mecha. [Original comfy-mecha extension](https://github.com/blue-pen5805/comfy-mecha-extensions-anima)
