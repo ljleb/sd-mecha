@@ -39,6 +39,7 @@ def _register_all_lycoris_configs():
             "sdxl-kohya_but_diffusers",
             "sd1-kohya",
             "anima-diffusion_pipe",
+            "moss_image-diffusers",
         ):
             base_config = model_configs.resolve(base_config_id)
             lyco_config = LycorisModelConfig(
@@ -295,8 +296,8 @@ class lora(LycorisAlgorithm):
         "alpha",
     )
     suffix_aliases = {
-        "lora_up.weight": ("lora_B.weight",),
-        "lora_down.weight": ("lora_A.weight",),
+        "lora_up.weight": ("lora_B.weight", "lora_B.default.weight", "lora_B"),
+        "lora_down.weight": ("lora_A.weight", "lora_A.default.weight", "lora_A"),
     }
     supports_delta_conversion = True
 

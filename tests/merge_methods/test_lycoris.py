@@ -157,6 +157,35 @@ def test_anima_qwen_lora_resolves_dotted_and_flattened_stems(tmp_path, stem, up,
     torch.testing.assert_close(result[key], torch.full((2048, 1024), 3.0))
 
 
+def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path):
+    checkpoint = tmp_path / "moss-image-edit-lora.safetensors"
+    save_file({
+        "layers.0.proj.q.lora_A": torch.ones((1, 3072)),
+        "layers.0.proj.q.lora_B": torch.full((3072, 1), 10.0),
+        "layers.0.proj.v.lora_A.default.weight": torch.ones((1, 3072)),
+        "layers.0.proj.v.lora_B.default.weight": torch.full((3072, 1), 20.0),
+    }, checkpoint)
+    key = "layers.0.proj.qkv.weight"
+    qkv = torch.arange(1.0, 4.0).repeat_interleave(3072).unsqueeze(1).expand(-1, 3072)
+    rope = torch.arange(16.0)
+    base = sd_mecha.model({key: qkv, "rope.bands": rope}, "moss_image-comfyui")
+
+    split = sd_mecha.convert(base, "moss_image-diffusers")
+    applied = sd_mecha.apply_lycoris(split, sd_mecha.model(checkpoint))
+    result = sd_mecha.merge(
+        sd_mecha.convert(applied, "moss_image-comfyui"),
+        output_dtype=torch.float32,
+        threads=0,
+        check_finite_output=False,
+        omit_non_finite_inputs=False,
+    )
+
+    for projection, expected in zip(result[key].chunk(3), (11.0, 2.0, 23.0), strict=True):
+        sample = projection[:, :4]
+        torch.testing.assert_close(sample, torch.full_like(sample, expected))
+    torch.testing.assert_close(result["rope.bands"], rope)
+
+
 def test_lokr_extraction_default_round_trips_through_application():
     w1 = torch.diag(torch.tensor([1., 2.]))
     w2 = torch.tensor([[3., 1.], [-2., 4.]])
