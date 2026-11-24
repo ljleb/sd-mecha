@@ -277,8 +277,12 @@ class MergeRecipeNode(RecipeNode):
         args_configs = [v.model_config for v in self.bound_args.args]
         kwargs_configs = {k: v.model_config for k, v in self.bound_args.kwargs.items()}
         if not key_scope:
-            return self.merge_method.build_key_map(args_configs, kwargs_configs, self.model_config)
-        return self.merge_method._build_key_map(args_configs, kwargs_configs, self.model_config, **key_scope)
+            return self.merge_method.build_key_map(
+                args_configs, kwargs_configs, self.model_config, output_merge_space=self.merge_space,
+            )
+        return self.merge_method._build_key_map(
+            args_configs, kwargs_configs, self.model_config, output_merge_space=self.merge_space, **key_scope,
+        )
 
     def __eq__(self, other):
         if self.structural:

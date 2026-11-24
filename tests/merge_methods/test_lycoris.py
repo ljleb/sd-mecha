@@ -259,7 +259,8 @@ def test_anima_qwen_lora_resolves_dotted_and_flattened_stems(tmp_path, stem, up,
     torch.testing.assert_close(result[key], torch.full((2048, 1024), 3.0))
 
 
-def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path):
+@pytest.mark.parametrize("entry_point", ["apply_lycoris", "add_difference", "convert"])
+def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path, entry_point):
     checkpoint = tmp_path / "moss-image-edit-lora.safetensors"
     save_file({
         "layers.0.proj.q.lora_A": torch.ones((1, 3072)),
@@ -272,20 +273,73 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path):
     rope = torch.arange(16.0)
     base = sd_mecha.model({key: qkv, "rope.bands": rope}, "moss_image-comfyui")
 
-    applied = sd_mecha.apply_lycoris(base, sd_mecha.model(checkpoint))
-    assert applied.bound_args.arguments["base"].merge_method.identifier == "convert_moss_image_comfyui_to_diffusers"
-    result = sd_mecha.merge(
-        sd_mecha.convert(applied, "moss_image-comfyui"),
-        output_dtype=torch.float32,
-        threads=0,
-        check_finite_output=False,
-        omit_non_finite_inputs=False,
-    )
+    adapter = sd_mecha.model(checkpoint)
+    if entry_point == "apply_lycoris":
+        applied = sd_mecha.apply_lycoris(base, adapter)
+        assert applied.bound_args.arguments["base"].merge_method.identifier == "convert_moss_image_comfyui_to_diffusers"
+        recipe = sd_mecha.convert(applied, base)
+    elif entry_point == "add_difference":
+        recipe = sd_mecha.add_difference(base, adapter)
+    else:
+        recipe = (base + sd_mecha.convert(adapter, base)) | base
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", "converting lycoris to base is deprecated")
+        result = sd_mecha.merge(
+            recipe, output_dtype=torch.float32, threads=0, check_finite_output=False, omit_non_finite_inputs=False,
+        )
 
     for projection, expected in zip(result[key].chunk(3), (11.0, 2.0, 23.0), strict=True):
         sample = projection[:, :4]
         torch.testing.assert_close(sample, torch.full_like(sample, expected))
     torch.testing.assert_close(result["rope.bands"], rope)
+
+
+@pytest.mark.parametrize("config", ["sdxl-kohya", "sdxl-kohya_but_diffusers"])
+def test_sdxl_clip_g_packing_preserves_sparse_projection_deltas(config):
+    key = "conditioner.embedders.1.model.transformer.resblocks.0.attn.in_proj_weight"
+    prefix = "lycoris_te2_text_model_encoder_layers_0_self_attn"
+    adapter = sd_mecha.model({
+        f"{prefix}_{part}_proj.lora_up.weight": torch.full((1280, 1), scale)
+        for part, scale in (("q", 2.), ("v", 3.))
+    } | {
+        f"{prefix}_{part}_proj.lora_down.weight": torch.ones(1, 1280)
+        for part in ("q", "v")
+    }, f"{config}_lycoris_lora")
+
+    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
+        result = merge(sd_mecha.convert(adapter, "sdxl-sgm"), "delta")
+    for projection, expected in zip(result[key].chunk(3), (2., 0., 3.), strict=True):
+        torch.testing.assert_close(projection[:, :4], torch.full_like(projection[:, :4], expected))
+
+    partial_weights = sd_mecha.model({
+        f"te2.text_model.encoder.layers.0.self_attn.{part}_proj.weight": torch.ones(1280, 1280)
+        for part in ("q", "v")
+    }, config)
+    with sd_mecha.open_graph(sd_mecha.convert(partial_weights, "sdxl-sgm")) as graph:
+        plan = graph.finalize_with_keys(check_mandatory_keys=False)
+    assert key not in plan.node_to_keys.get(plan.root, ())
+
+
+def test_sdxl_diffusers_key_layout_retains_vae_and_text_encoders():
+    tensors = {
+        "first_stage_model.decoder.conv_out.bias": torch.arange(3.),
+        "conditioner.embedders.0.transformer.text_model.final_layer_norm.bias": torch.ones(768),
+        "conditioner.embedders.1.model.ln_final.bias": torch.ones(1280),
+        "model.diffusion_model.out.2.bias": torch.arange(4.),
+    }
+    recipe = sd_mecha.convert(sd_mecha.model(tensors, "sdxl-sgm"), "sdxl-kohya_but_diffusers")
+
+    result = merge(recipe)
+
+    expected_keys = (
+        "first_stage_model.decoder.conv_out.bias",
+        "te1.text_model.final_layer_norm.bias",
+        "te2.text_model.final_layer_norm.bias",
+        "unet.conv_out.bias",
+    )
+    for key, tensor in zip(expected_keys, tensors.values(), strict=True):
+        torch.testing.assert_close(result[key], tensor)
 
 
 def test_adapter_key_aliases_merge_to_canonical_keys():

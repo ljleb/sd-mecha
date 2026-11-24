@@ -1,8 +1,48 @@
 import math
 
 import pytest
+import torch
+from safetensors.torch import save_file
 
 import sd_mecha
+
+
+def test_rotate_recipe_with_default_legacy_alignment_is_migrated():
+    saved = '\n'.join((
+        'version 0.1.0',
+        'model "a.safetensors" model_config="sd1-kohya" merge_space="weight"',
+        'model "b.safetensors" model_config="sd1-kohya" merge_space="weight"',
+        'dict key=1.0',
+        'literal &2 model_config="singleton-mecha" merge_space=null',
+        'merge "rotate" &0 &1 &3 0.25 0.5 1e-8 100',
+    ))
+
+    with pytest.warns(FutureWarning, match=r"alignment parameter has no effect.*1\.1\.8.*raise an error.*1\.3\.0"):
+        recipe = sd_mecha.deserialize(saved)
+
+    assert tuple(recipe.bound_args.arguments) == ("a", "b", "alpha", "centralization")
+    migrated = sd_mecha.serialize(recipe, finalize=False)
+    assert sd_mecha.serialize(sd_mecha.deserialize(migrated), finalize=False) == migrated
+
+
+def test_rotate_recipe_ignores_custom_legacy_alignment(tmp_path):
+    a, b = tmp_path / "a.safetensors", tmp_path / "b.safetensors"
+    expected = torch.tensor([[0., -1.], [1., 0.]])
+    save_file({"matrix": torch.eye(2)}, a)
+    save_file({"matrix": expected}, b)
+    saved = '\n'.join((
+        'version 0.1.0',
+        f'model "{a}" merge_space="weight"',
+        f'model "{b}" merge_space="weight"',
+        'merge "rotate" &0 &1 alignment=0.5 alpha=0.0 centralization=0.0',
+    ))
+
+    with pytest.warns(FutureWarning, match=r"alignment parameter has no effect.*1\.1\.8.*raise an error.*1\.3\.0"):
+        recipe = sd_mecha.deserialize(saved)
+    restored = sd_mecha.deserialize(sd_mecha.serialize(recipe, finalize=False))
+
+    output = sd_mecha.merge(restored, output_dtype=torch.float32, threads=0)
+    torch.testing.assert_close(output["matrix"], expected)
 
 
 @pytest.mark.parametrize("filename", ["model.safetensors", "model epoch=5.safetensors"])

@@ -5,7 +5,7 @@ from torch import Tensor
 from sd_mecha.extensions import model_configs
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
 
-from .convert_n_to_1 import convert_1_to_n, convert_n_to_1
+from .convert_n_to_1 import convert_1_to_n, convert_n_to_1, pack_key_requirements
 
 
 diffusers_config = model_configs.resolve("moss_image-diffusers")
@@ -49,14 +49,15 @@ class convert_moss_image_diffusers_to_comfyui:
     @staticmethod
     def map_keys(b):
         for key, sources in _diffusers_keys_by_comfyui_key.items():
-            b[key] = b.keys[sources]
+            b[key] = pack_key_requirements(b, sources) @ sources
 
     def __call__(
         self,
         state_dict: Parameter(StateDict[Tensor], model_config=diffusers_config),
         **kwargs,
     ) -> Return(Tensor, model_config=comfyui_config):
-        return convert_n_to_1(state_dict, kwargs["key_relation"].inputs["state_dict"])
+        relation = kwargs["key_relation"]
+        return convert_n_to_1(state_dict, relation.inputs["state_dict"], source_keys=relation.meta)
 
 
 @merge_method(is_conversion=True, reuse_outputs=False)

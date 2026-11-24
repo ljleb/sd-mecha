@@ -3,6 +3,7 @@ from collections import OrderedDict
 from types import MappingProxyType
 from typing import Any, Dict, Generic, Iterator, Mapping, Optional, Set, Tuple, TypeVar, Union
 from sd_mecha.extensions import model_configs
+from sd_mecha.extensions.merge_spaces import MergeSpace
 from sd_mecha.extensions.model_configs import KeyMetadata, ModelConfig
 from sd_mecha.typing_ import ClassObject
 
@@ -252,6 +253,7 @@ class ParamProxy:
 @dataclasses.dataclass(frozen=True, slots=True)
 class OutputProxy:
     config: ModelConfig
+    merge_space: Optional[MergeSpace] = None
     keys: OutputKeysAccessor = dataclasses.field(init=False, hash=False, compare=False)
 
     def __post_init__(self):
@@ -333,6 +335,7 @@ class KeyMapBuilder:
 
     __input_configs: MappingProxyType[str, ModelConfig]
     __output_config: ModelConfig
+    _output_merge_space: Optional[MergeSpace] = dataclasses.field(default=None, kw_only=True)
 
     __relations: Dict[Tuple[str, ...], KeyRelation] = dataclasses.field(default_factory=dict)
     __out_key_owner: Dict[str, Tuple[str, ...]] = dataclasses.field(default_factory=dict)
@@ -359,7 +362,7 @@ class KeyMapBuilder:
 
         if name == "return":
             if self.__output_proxy_cache is None:
-                self.__output_proxy_cache = OutputProxy(self.__output_config)
+                self.__output_proxy_cache = OutputProxy(self.__output_config, self._output_merge_space)
             return self.__output_proxy_cache
 
         if name in self.__input_configs:

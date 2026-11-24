@@ -288,8 +288,11 @@ class MergeMethod:
     def create_cache(self):
         return self.cache_factory()
 
-    def build_key_map(self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig) -> KeyMap[KeyRelation]:
-        return self._build_key_map(args_configs, kwargs_configs, return_config)
+    def build_key_map(
+        self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig,
+        *, output_merge_space: Optional[MergeSpace] = None,
+    ) -> KeyMap[KeyRelation]:
+        return self._build_key_map(args_configs, kwargs_configs, return_config, output_merge_space=output_merge_space)
 
     @property
     def _has_custom_key_map(self) -> bool:
@@ -305,6 +308,7 @@ class MergeMethod:
         kwargs_configs: Mapping[str, ModelConfig],
         return_config: ModelConfig,
         *,
+        output_merge_space: Optional[MergeSpace] = None,
         output_keys: Optional[Iterable[str]] = None,
         first_input_keys: Optional[Iterable[str]] = None,
     ) -> KeyMap[KeyRelation]:
@@ -315,7 +319,7 @@ class MergeMethod:
             if p.kind != p.VAR_KEYWORD
         }
         if self._has_custom_key_map:
-            builder = KeyMapBuilder(MappingProxyType(input_configs), return_config)
+            builder = KeyMapBuilder(MappingProxyType(input_configs), return_config, _output_merge_space=output_merge_space)
             if first_input_keys is not None and self._can_map_first_input_keys:
                 config_keys = next(iter(input_configs.values())).keys()
                 available_keys = (key for key in first_input_keys if key in config_keys)

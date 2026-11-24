@@ -38,6 +38,10 @@ def deprecated_model_config_alias(identifier: str) -> str | None:
 
 
 def deserialize_merge_call(identifier, args, kwargs):
+    if identifier == "rotate" and (
+        len(args) > 4 or {"alignment", "stiefel_eps", "stiefel_max_iters"}.intersection(kwargs)
+    ):
+        return _deserialize_legacy_rotate(*args, **kwargs)
     try:
         method = merge_methods.resolve(identifier)
     except KeyError:
@@ -99,6 +103,18 @@ def _deserialize_legacy_merge_call(identifier, args, kwargs):
 
 def _identity(adapter):
     return adapter
+
+
+def _deserialize_legacy_rotate(a, b, alignment=1.0, alpha=0.0, centralization=1.0, stiefel_eps=1e-8, stiefel_max_iters=100):
+    warnings.warn(
+        "The rotate alignment parameter has no effect in sd-mecha 1.2.0. "
+        "The last version where it affected rotation was 1.1.8. "
+        "Loading recipes with legacy alignment arguments will raise an error in sd-mecha 1.3.0. "
+        "Save this recipe again to migrate it to the current rotate signature.",
+        FutureWarning,
+        stacklevel=3,
+    )
+    return merge_methods.resolve("rotate")(a, b, alpha, centralization)
 
 
 def _deserialize_legacy_lokr(method, base, kronecker_ratio=0.5):
