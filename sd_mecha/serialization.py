@@ -2,11 +2,12 @@ import logging
 import pathlib
 from typing import List, Optional, Hashable
 
-from .extensions import merge_methods
+from ._recipe_compat import deserialize_merge_call
 from .recipe_nodes import (
     ClosedModelRecipeNode, RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode,
     MergeRecipeNode,
 )
+from .graph_finalization import open_graph, is_finalized
 
 
 MECHA_FORMAT_VERSION = "0.1.0"
@@ -49,7 +50,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
 
     def parse(line):
         line = line.strip()
-        if line.startswith("#"):
+        if not line or line.startswith("#"):
             return
 
         command, *args = tokenize(line)
@@ -62,9 +63,8 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
             path = pathlib.Path(positional_args[0])
             results.append(ClosedModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
-            method, *positional_args = positional_args
-            method = merge_methods.resolve(method)
-            results.append(method(*positional_args, **keyword_args))
+            identifier, *positional_args = positional_args
+            results.append(deserialize_merge_call(identifier, positional_args, keyword_args))
         else:
             raise ValueError(f"unknown command: {command}")
 
@@ -72,7 +72,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
         positional_args = []
         named_args = {}
         for arg_index, arg in enumerate(args):
-            if '=' in arg:
+            if not arg.startswith('"') and '=' in arg:
                 key, value = arg.split('=', maxsplit=1)
                 named_args[key] = get_arg_value(value, arg_index)
             else:
@@ -90,7 +90,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
                 return results[ref_index]
             elif arg.startswith('"') and arg.endswith('"'):
                 return arg[1:-1]
-            elif '.' in arg or 'e' in arg.lower():
+            elif arg in ("inf", "-inf", "nan") or '.' in arg or 'e' in arg.lower():
                 return float(arg)
             else:
                 return int(arg)
@@ -140,7 +140,7 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
     return results[-1]
 
 
-def serialize(recipe: RecipeNode, *, finalize: bool = True, output: Optional[pathlib.Path | str] = None) -> str:
+def serialize(recipe: RecipeNode, *, finalize: Optional[bool] = None, output: Optional[pathlib.Path | str] = None) -> str:
     """
     Convert a recipe graph into a string that captures its merge instructions.
 
@@ -149,16 +149,17 @@ def serialize(recipe: RecipeNode, *, finalize: bool = True, output: Optional[pat
     Args:
         recipe:
             A `RecipeNode` describing the merge.
-        finalize:
-            Whether to finalize the recipe before serializing.
-        output:
-            Path to the output file to save.
+        finalize: (optional)
+            Whether to finalize the recipe before serializing. Defaults to finalizing if the recipe is discovered to be incomplete.
+        output: (optional)
+            Path to the output file to save. Defaults to not saving.
 
     Returns:
         A string representation of the recipe, suitable for writing to a .mecha file.
     """
-    from . import open_graph
     serializer = SerializerVisitor()
+    if finalize is None:
+        finalize = not is_finalized(recipe, check_merge_nodes=False)
     if finalize:
         with open_graph(recipe) as graph:
             recipe = graph.finalize_root(model_config_preference=("singleton-mecha",))

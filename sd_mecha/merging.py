@@ -98,6 +98,7 @@ def merge(
         validate_mm_contract (optional):
             If True, validates that merge methods return the right amount of outputs indicated by `map_keys`
             and do not read other inputs than those reported by `map_keys`. Defaults to True.
+            Raises RuntimeError for keys
         cache (optional):
             Dictionary of caches for any recipe nodes in `recipe`.
             Items should be created like this: `node: node.create_cache()`.
@@ -484,17 +485,25 @@ class KeyMergeVisitor(RecipeVisitor):
         for index in sorted(indices, key=depth_of_value, reverse=True):
             parent_port = (node, self.output_key, index)
             input_name = input_names[index]
+            input_type = input_types[index]
             input_node = node.bound_args.args[index] if isinstance(index, int) else node.bound_args.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_port=parent_port)
-            if is_subclass(input_types[index], StateDict):
-                if self.validate_mm_contract:
-                    input_keys_constraints = key_relation.inputs.get(input_name, ())
-                else:
-                    input_keys_constraints = None
-                expected_type = next(iter(typing.get_args(input_types[index]) or (MergeMethodT,)))
-                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, input_keys_constraints)
+            input_keys = key_relation.inputs.get(input_name, ())
+            if is_subclass(input_type, StateDict):
+                expected_type = next(iter(typing.get_args(input_type) or (MergeMethodT,)))
+                merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, input_keys, self.validate_mm_contract)
             else:
-                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_types[index])
+                if len(input_keys) > 1:
+                    type_name = getattr(input_type, "__name__", str(input_type))
+                    raise RuntimeError(
+                        f"Merge method {node.merge_method.identifier!r} failed to compute output key {self.output_key!r}. "
+                        f"map_keys() selected input keys {input_keys!r} for parameter {input_name!r}. "
+                        f"This parameter expects one {type_name} from one input key. "
+                        "Select one key in map_keys(), or use a StateDict annotation for this parameter."
+                    )
+                if input_keys:
+                    input_visitor.output_key = input_keys[0]
+                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_type)
 
         merged_args = tuple(merged.get(index) for index in range(len(node.bound_args.args)))
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
@@ -589,18 +598,20 @@ class MergeNodeWrapperStateDict(StateDict):
         node: recipe_nodes.RecipeNode,
         expected_type: type,
         original_merge_visitor: KeyMergeVisitor,
-        input_keys_constraints: Optional[Tuple[str, ...]],
+        inputs: Tuple[str, ...],
+        validate_mm_contract: bool,
     ):
         self.node = node
         self.expected_type = expected_type
         self.original_merge_visitor = original_merge_visitor
-        self.input_keys_constraints = input_keys_constraints
+        self.inputs = inputs
+        self.validate_mm_contract = validate_mm_contract
 
     def __getitem__(self, key):
-        if self.input_keys_constraints is not None:
-            assert key in self.input_keys_constraints, (
+        if self.validate_mm_contract and key not in self.inputs:
+            raise RuntimeError(
                 f"node {self.node} tried to fetch key '{key}' "
-                f"but only requested these keys through input_keys_for_output(): {self.input_keys_constraints}"
+                f"but only requested these keys through its definition of map_keys(builder): {self.inputs}"
             )
 
         key_merger = dataclasses.replace(self.original_merge_visitor, output_key=key)
@@ -609,16 +620,16 @@ class MergeNodeWrapperStateDict(StateDict):
         return res
 
     def __len__(self):
-        return len(self.compute_keys())
+        return len(self.inputs)
 
     def __iter__(self):
         return iter(self.keys())
 
     def __contains__(self, item):
-        return item in self.compute_keys()
+        return item in self.inputs
 
     def keys(self) -> Iterable[str]:
-        return self.compute_keys().keys()
+        return self.inputs
 
     @property
     def model_config(self) -> ModelConfig:

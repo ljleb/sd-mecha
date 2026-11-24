@@ -1,6 +1,9 @@
 import functools
-import heapq
+from collections import defaultdict
+
+from .extensions import merge_spaces
 from .extensions.merge_methods import get_converter_paths
+from .extensions.merge_spaces import MergeSpaceSymbol
 from .extensions.model_configs import ModelConfig, resolve as resolve_model_config
 from .recipe_nodes import RecipeNode, RecipeNodeOrValue
 from .graph_finalization import open_graph
@@ -10,94 +13,119 @@ def convert(recipe: RecipeNodeOrValue, config: str | ModelConfig | RecipeNode) -
     """
     Convert a recipe from one model config to another.
 
-    This searches for a chain of registered conversion functions that transform `recipe`’s underlying
-    config into the target config, then composes them. For example, you might need to
-    convert a LoRA adapter into the base model’s format.
+    Search for a chain of registered converters that accept the recipe's config and merge space.
+    Each converter can change both. For example, a converter can turn adapter weights into a delta.
 
     Args:
-        recipe:
-            A `RecipeNode` or dictionary representing the input model or partial recipe.
-        config (str, ModelConfig or RecipeNode):
-            The desired output config, or a recipe node that has the desired config.
+        recipe (RecipeNodeOrValue):
+            The model, state dict, or recipe to convert.
+        config (str, ModelConfig, RecipeNode or None):
+            The target model config or its registered identifier. If you pass a recipe, use its
+            resolved model config as the target. For example, pass the base model to convert an
+            adapter to its layout. If you pass None, return the input recipe directly.
 
     Returns:
-        A new recipe node describing the entire conversion.
+        RecipeNodeOrValue: A recipe with the selected converters applied in order.
+        If the input already uses the target config, return it directly.
 
     Raises:
-        TypeError:
-            If no conversion path is found.
+        TypeError: If no registered conversion path connects the input to the target config.
     """
     if config is None:
         return recipe
 
     if isinstance(config, RecipeNode):
         with open_graph(config, root_only=True, solve_merge_space=False) as config_graph:
-            tgt_candidates = list(config_graph.root_candidates().model_config)
+            targets = tuple(config_graph.root_candidates().model_config)
     else:
-        tgt_candidates = [resolve_model_config(config) if isinstance(config, str) else config]
+        targets = (resolve_model_config(config) if isinstance(config, str) else config,)
 
-    converter_paths = get_converter_paths()
+    with open_graph(recipe, root_only=True) as recipe_graph:
+        candidates = recipe_graph.root_candidates()
+        sources = tuple(candidates.model_config)
+        source_stats = candidates.model_config.stats or {}
+        spaces = candidates.merge_space.allowed or merge_spaces.get_all()
+        for target in targets:
+            ranked_sources = sorted(sources, key=lambda source: (
+                source_stats[source.identifier].state_dict_misses, source.identifier != target.identifier,
+            ))
+            for source in ranked_sources:
+                routes = _find_conversion_routes((source,), spaces, (target,))
+                if routes:
+                    return _apply_conversion_route(recipe, routes[0])
 
-    with open_graph(recipe, root_only=True, solve_merge_space=False) as recipe_graph:
-        for tgt_config in tgt_candidates:
-            src_candidates = list(recipe_graph.root_candidates(model_config_preference=(tgt_config,)).model_config)
-            for src_config in src_candidates:
-                res = create_conversion_recipe(recipe, converter_paths, src_config.identifier, tgt_config.identifier)
-                if res is not None:
-                    return res
-
-        src_candidates_str = tuple(src_config.identifier for src_config in src_candidates)
-        raise TypeError(f"Could not convert recipe from config from candidate configs {src_candidates_str} to config {tgt_config.identifier}.")
-
-
-def create_conversion_recipe(recipe, paths, src_config, tgt_config):
-    shortest_path = dijkstra(paths, src_config, tgt_config)
-    if shortest_path is None:
-        return None
-    return functools.reduce(lambda v, mm: mm(v), shortest_path, recipe)
+    source_ids = tuple(config.identifier for config in sources)
+    target_ids = tuple(config.identifier for config in targets)
+    raise TypeError(f"Could not convert recipe from candidate configs {source_ids} to {target_ids}.")
 
 
-def dijkstra(graph, start, goal):
+def _apply_conversion_route(recipe, route):
+    """Build the conversion recipe by applying each merge method to the previous result.
+
+    Args:
+        recipe: The original recipe or value.
+        route: The registered conversion methods in execution order.
+
+    Returns:
+        The last conversion node, or the original input if the route is empty.
     """
-    graph: Dict[str, List[Tuple[str, any_id]]]
-        For each node (str), a list of (neighbor_node, edge_id).
-    start: str
-    goal: str
+    return functools.reduce(lambda node, method: method(node), route, recipe)
 
-    Returns: List of edge IDs (in order) that forms the shortest path from start to goal,
-             or None if no path exists.
+
+def _find_conversion_routes(source_configs, source_spaces, target_configs, target_spaces=None):
+    """Search for the routes that use the fewest registered converters.
+
+    A search state holds a model config and a merge space. Each converter's signature
+    determines which states it accepts and which state it produces.
+
+    Args:
+        source_configs: The possible model configs of the input recipe.
+        source_spaces: The possible merge spaces of the input recipe.
+        target_configs: The model configs that the converted recipe can use.
+        target_spaces: The allowed output merge spaces. If None, any output space is valid.
+
+    Returns:
+        A tuple of up to two routes, each an ordered tuple of conversion methods.
+        An empty route represents a direct match. An empty result means no route exists.
+        Two routes indicate that the shortest route is ambiguous.
     """
+    converters = get_converter_paths()
+    target_ids = {config.identifier for config in target_configs}
+    source_spaces = sorted(source_spaces, key=lambda space: space.identifier)
+    frontier = {(config.identifier, space): [()] for config in source_configs for space in source_spaces}
+    visited = set(frontier)
+    while frontier:
+        matches = {}
+        for (config, space), routes in frontier.items():
+            if config in target_ids and (target_spaces is None or space in target_spaces):
+                matches.update(dict.fromkeys(routes))
+                if len(matches) >= 2:
+                    return tuple(matches)[:2]
+        if matches:
+            return tuple(matches)
 
-    distances = {node: float('inf') for node in graph}
-    distances[start] = 0
-    predecessors = {node: None for node in graph}  # will store the node we came from
-    edge_used = {node: None for node in graph}  # will store which edge ID led here
-    heap = [(0, start)]
-
-    while heap:
-        current_dist, current_node = heapq.heappop(heap)
-        if current_dist > distances.get(current_node, float("inf")):
-            continue
-
-        if current_node == goal:
-            break
-
-        for neighbor, edge_id in graph.get(current_node, ()):
-            distance_via_current = current_dist + 1
-            if distance_via_current < distances.get(neighbor, float("inf")):
-                distances[neighbor] = distance_via_current
-                predecessors[neighbor] = current_node
-                edge_used[neighbor] = edge_id
-                heapq.heappush(heap, (distance_via_current, neighbor))
-
-    if distances.get(goal, float("inf")) == float("inf"):
-        return None
-
-    path_ids = []
-    node = goal
-    while node != start:
-        path_ids.append(edge_used[node])
-        node = predecessors[node]
-
-    path_ids.reverse()
-    return path_ids
+        following = defaultdict(list)
+        for (config, space), routes in frontier.items():
+            for target, converter in converters.get(config, ()):
+                input_space = converter.get_input_merge_spaces().args[0]
+                if target is None or space not in input_space:
+                    continue
+                signature = converter.get_signature()
+                if any(p.kind == p.KEYWORD_ONLY and p.default is p.empty for p in signature.parameters.values()):
+                    continue
+                result_space = signature.return_annotation.data.merge_space
+                if isinstance(result_space, MergeSpaceSymbol):
+                    if result_space is not input_space:
+                        continue
+                    result_space = space
+                state = (target, result_space)
+                if state in visited:
+                    continue
+                paths = following[state]
+                for route in routes:
+                    path = (*route, converter)
+                    if len(paths) < 2 and path not in paths:
+                        paths.append(path)
+        visited.update(following)
+        frontier = following
+    return ()

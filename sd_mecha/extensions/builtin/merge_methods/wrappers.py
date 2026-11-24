@@ -1,5 +1,5 @@
 import torch
-from typing import Optional, Dict
+from typing import Optional
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import value_to_node, RecipeNodeOrValue, Parameter
 from sd_mecha import recipe_nodes
@@ -26,11 +26,11 @@ def add_difference(
         alpha=alpha,
     )
 
-    if a.merge_space == original_b.merge_space:
-        b = original_b
-
     if clamp_to_ab:
-        if a.merge_space != b.merge_space:
+        a_space = getattr(a.merge_space, "identifier", None)
+        if a_space == getattr(original_b.merge_space, "identifier", None):
+            b = original_b
+        if a_space != getattr(b.merge_space, "identifier", None):
             raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clamp the merge.")
         res = limiting.clamp(
             res, a, b,
@@ -175,9 +175,7 @@ tensor_sum = copy_region
 
 def rotate(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
-    alignment: Parameter(float) = 1.0,
     alpha: Parameter(float) = 0.0,
-    cache: Optional[Dict[str, torch.Tensor]] = None,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -194,9 +192,8 @@ def rotate(
 
     res = svd.rotate(
         a, b,
-        alignment=alignment,
         alpha=alpha,
-    ).set_cache(cache)
+    )
 
     if c is not None:
         res = linear.add_difference(

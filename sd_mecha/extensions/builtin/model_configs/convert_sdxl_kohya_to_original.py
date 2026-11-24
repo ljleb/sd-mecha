@@ -1,7 +1,7 @@
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, StateDict, Return, Parameter
 from sd_mecha.extensions import model_configs
-from .convert_n_to_1 import convert_n_to_1, convert_1_to_n
+from .convert_n_to_1 import convert_n_to_1, convert_1_to_n, pack_key_requirements
 from .convert_sdxl_diffusers_unet_to_original import convert_unet_key
 from .convert_sdxl_diffusers_clip_g_to_original import convert_clip_g_key
 
@@ -31,8 +31,9 @@ class convert_sdxl_kohya_to_original:
                 input_keys = output_key
             else:
                 input_keys = output_key
+            input_keys = (input_keys,) if isinstance(input_keys, str) else input_keys
             try:
-                b[output_key] = b.keys[input_keys] @ needs_transpose
+                b[output_key] = pack_key_requirements(b, input_keys) @ (input_keys, needs_transpose)
             except ValueError:
                 pass
 
@@ -42,7 +43,8 @@ class convert_sdxl_kohya_to_original:
         **kwargs,
     ) -> Return(Tensor, model_config=sdxl_sgm_config):
         relation = kwargs["key_relation"]
-        return convert_n_to_1(kohya_sd, relation.inputs["kohya_sd"], relation.meta)
+        source_keys, transpose = relation.meta
+        return convert_n_to_1(kohya_sd, relation.inputs["kohya_sd"], transpose, source_keys=source_keys)
 
 
 @merge_method(
@@ -53,8 +55,8 @@ class convert_sdxl_kohya_to_original:
 class convert_sdxl_kohya_but_diffusers_to_original:
     @staticmethod
     def map_keys(b):
-        needs_transpose = False
         for output_key in sdxl_sgm_config.keys():
+            needs_transpose = False
             if output_key.startswith("model.diffusion_model."):
                 input_keys = convert_unet_key(output_key, prefix="unet.")
             elif output_key.startswith("conditioner.embedders.0."):
@@ -65,8 +67,9 @@ class convert_sdxl_kohya_but_diffusers_to_original:
                 input_keys = output_key
             else:
                 input_keys = output_key
+            input_keys = (input_keys,) if isinstance(input_keys, str) else input_keys
             try:
-                b[output_key] = b.keys[input_keys] @ needs_transpose
+                b[output_key] = pack_key_requirements(b, input_keys) @ (input_keys, needs_transpose)
             except ValueError:
                 pass
 
@@ -76,7 +79,8 @@ class convert_sdxl_kohya_but_diffusers_to_original:
         **kwargs,
     ) -> Return(Tensor, model_config=sdxl_sgm_config):
         relation = kwargs["key_relation"]
-        return convert_n_to_1(kohya_sd, relation.inputs["kohya_sd"], relation.meta)
+        source_keys, transpose = relation.meta
+        return convert_n_to_1(kohya_sd, relation.inputs["kohya_sd"], transpose, source_keys=source_keys)
 
 
 @merge_method(
@@ -122,8 +126,8 @@ class convert_sdxl_original_to_kohya:
 class convert_sdxl_original_to_kohya_but_diffusers:
     @staticmethod
     def map_keys(b):
-        needs_transpose = False
         for output_key in sdxl_sgm_config.keys():
+            needs_transpose = False
             if output_key.startswith("model.diffusion_model."):
                 input_keys = convert_unet_key(output_key, prefix="unet.")
             elif output_key.startswith("conditioner.embedders.0."):

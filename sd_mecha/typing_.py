@@ -48,7 +48,7 @@ def is_union(typ3) -> bool:
     return issubclass(typ3, UnionType)
 
 
-class ClassObject(type):
+class ClassObject(abc.ABCMeta):
     _type_cache = {}
 
     def __new__(mcls, name, bases, namespace, **kwargs):
@@ -120,3 +120,23 @@ class ClassObject(type):
         if hook is not None:
             return hook(other)
         return NotImplemented
+
+
+def subclasses(cls):
+    seen = set()
+    result = ()
+
+    def walk(base):
+        nonlocal result
+        for sub in base.__subclasses__():
+            if sub in seen:
+                continue
+            seen.add(sub)
+
+            if not inspect.isabstract(sub):
+                result += (sub,)
+
+            walk(sub)
+
+    walk(cls)
+    return result

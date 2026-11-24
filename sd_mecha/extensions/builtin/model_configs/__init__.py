@@ -12,6 +12,7 @@ def _register_configs():
 
 
 _register_configs()
+from . import convert_moss_image
 from .convert_sdxl_kohya_to_original import convert_sdxl_kohya_to_original
 from .convert_sdxl_diffusers_unet_to_original import convert_sdxl_diffusers_unet_to_original
 from .convert_sd1_kohya_to_original import convert_sd1_kohya_to_original
