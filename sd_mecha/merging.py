@@ -11,7 +11,7 @@ import torch
 import sd_mecha
 from .extensions import merge_spaces, model_dirs
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
-from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT
+from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT, _string_literal_choices, _validate_literal_choice
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, KeyMetadata
 from .graph_finalization import open_graph
@@ -486,10 +486,11 @@ class KeyMergeVisitor(RecipeVisitor):
             parent_port = (node, self.output_key, index)
             input_name = input_names[index]
             input_type = input_types[index]
+            literal_choices = _string_literal_choices(input_type)
             input_node = node.bound_args.args[index] if isinstance(index, int) else node.bound_args.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_port=parent_port)
             input_keys = key_relation.inputs.get(input_name, ())
-            if is_subclass(input_type, StateDict):
+            if literal_choices is None and is_subclass(input_type, StateDict):
                 expected_type = next(iter(typing.get_args(input_type) or (MergeMethodT,)))
                 merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, input_keys, self.validate_mm_contract)
             else:
@@ -503,12 +504,18 @@ class KeyMergeVisitor(RecipeVisitor):
                     )
                 if input_keys:
                     input_visitor.output_key = input_keys[0]
-                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_type)
+                if literal_choices is None:
+                    merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_type)
+                else:
+                    merged[index] = error_holder.intercept(input_visitor._visit_literal_argument, input_node, literal_choices, input_name)
 
         merged_args = tuple(merged.get(index) for index in range(len(node.bound_args.args)))
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
         error_holder.try_raise()
         return merged_args, merged_kwargs
+
+    def _visit_literal_argument(self, node, choices, param_name):
+        return _validate_literal_choice(node.accept(self), choices, param_name)
 
 
 @dataclasses.dataclass

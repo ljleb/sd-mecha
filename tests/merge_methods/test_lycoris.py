@@ -1,14 +1,17 @@
 import warnings
 from types import SimpleNamespace
+from typing import get_args
 from unittest.mock import patch
 
 import pytest
 import torch
-from safetensors.torch import save_file
+from lycoris.modules.boft import ButterflyOFTModule
+from safetensors.torch import load_file, save_file
 
 import sd_mecha
 from sd_mecha.extensions import merge_methods
 from sd_mecha.extensions.builtin.lycoris import _common
+from sd_mecha.extensions.builtin.lycoris.boft import _cayley_blocks
 from sd_mecha.extensions.builtin.merge_methods.kronecker import lokr_dims, lokr_dims_lycoris, truncate_kronecker
 from sd_mecha.graph_finalization import PropagatableKeyVisitor
 from sd_mecha.keys_map import RealizedKeyRelation
@@ -120,6 +123,108 @@ def test_loha_applies_a_scaled_hadamard_update(tucker):
     torch.testing.assert_close(merge(sd_mecha.apply_lycoris(base, adapter))[WEIGHT], 1 + delta)
     with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
         torch.testing.assert_close(merge(sd_mecha.convert(adapter, CONFIG), "delta")[WEIGHT], delta)
+
+
+@pytest.mark.parametrize("rescaled", [False, True])
+@pytest.mark.parametrize("constraint", [None, 0.05])
+def test_boft_applies_the_upstream_weight_transform(rescaled, constraint):
+    layer = torch.nn.Conv2d(4, 4, 1)
+    upstream = ButterflyOFTModule(
+        "lora_vae_post_quant_conv", layer, lora_dim=2, constraint=constraint or 0, rescaled=rescaled,
+    )
+    with torch.no_grad():
+        layer.weight.copy_(torch.arange(16.0).reshape_as(layer.weight) / 16)
+        upstream.oft_blocks[:, :, 0, 1] = torch.tensor([[0.2, -0.3], [0.4, 0.1]])
+        if rescaled:
+            upstream.rescale.copy_(torch.tensor([0.8, 1.1, 0.7, 1.2]).reshape_as(upstream.rescale))
+        expected, _ = upstream.get_merged_weight()
+
+    weights = upstream.state_dict()
+    if constraint is None:
+        del weights["alpha"]
+    adapter = sd_mecha.model({f"lora_vae_post_quant_conv.{key}": value for key, value in weights.items()})
+    base = sd_mecha.model({WEIGHT: layer.weight.detach(), BIAS: layer.bias.detach()}, CONFIG)
+    result = merge(sd_mecha.apply_lycoris(base, adapter))
+
+    torch.testing.assert_close(result[WEIGHT], expected)
+    torch.testing.assert_close(result[BIAS], layer.bias.detach())
+
+
+def test_boft_distinguishes_diag_oft_blocks():
+    base = sd_mecha.model({WEIGHT: torch.ones(4, 4, 1, 1)}, CONFIG)
+    adapter = sd_mecha.model({"lycoris_vae_post_quant_conv.oft_blocks": torch.zeros(2, 2, 2)})
+    with pytest.raises(ValueError, match="BOFT expects 4-D oft_blocks.*Diag-OFT adapters use 3-D"):
+        merge(sd_mecha.apply_lycoris(base, adapter))
+
+
+@pytest.mark.parametrize("solver", ["svd_sweeps", "lbfgs"])
+def test_boft_extraction_round_trips_and_uses_only_shared_weights(tmp_path, solver):
+    layer = torch.nn.Conv2d(4, 4, 1)
+    reference = ButterflyOFTModule("lora_vae_post_quant_conv", layer, lora_dim=2, rescaled=True)
+    weights = torch.eye(4).reshape(4, 4, 1, 1)
+    with torch.no_grad():
+        layer.weight.copy_(weights)
+        reference.oft_blocks[:, :, 0, 1] = torch.tensor([[0.09, -0.05], [0.06, 0.04]])
+        reference.rescale.copy_(torch.tensor([1.02, 0.99, 1.04, 0.98]).reshape_as(reference.rescale))
+        target_weights, _ = reference.get_merged_weight()
+
+    base_path = tmp_path / "base.safetensors"
+    target_path = tmp_path / "target.safetensors"
+    # 320 output channels cannot use a two-channel block with a power-of-two block count.
+    skipped = {"unet.conv_in.weight": torch.zeros(320, 4, 3, 3)}
+    save_file({WEIGHT: weights, BIAS: torch.zeros(4), "vae.quant_conv.weight": torch.zeros(8, 8, 1, 1), **skipped}, base_path)
+    save_file({
+        WEIGHT: target_weights, BIAS: torch.ones(4), "vae.encoder.conv_in.weight": torch.zeros(128, 3, 3, 3), **skipped,
+    }, target_path)
+    base = sd_mecha.model(base_path, CONFIG)
+    target = sd_mecha.model(target_path, CONFIG)
+    extract = sd_mecha.lycoris.resolve("boft")
+    assert extract is merge_methods.resolve("extract_boft")
+    assert get_args(extract.get_input_types().args[-1]) == ("svd_sweeps", "lbfgs")
+    solver_kwargs = {} if solver == "svd_sweeps" else {"solver": solver}
+    serialized = sd_mecha.serialize(extract(base, target, block_size=2, **solver_kwargs))
+    assert f'merge "extract_boft_{solver}_{CONFIG}_lycoris_lora"' in serialized
+    other_solver = "lbfgs" if solver == "svd_sweeps" else "svd_sweeps"
+    with pytest.raises(ValueError, match=f"Invalid value '{other_solver}' for parameter 'solver'"):
+        sd_mecha.deserialize(serialized.replace(f'"{solver}"', f'"{other_solver}"'))
+    recipe = sd_mecha.deserialize(serialized)
+    adapter_path = tmp_path / "adapter.safetensors"
+    sd_mecha.merge(recipe, output=adapter_path, threads=0, output_dtype=torch.float32)
+    adapter = load_file(adapter_path)
+
+    prefix = "lycoris_vae_post_quant_conv"
+    assert set(adapter) == {
+        f"{prefix}.oft_blocks", f"{prefix}.rescale", f"{prefix}.alpha",
+    }
+    assert adapter[f"{prefix}.oft_blocks"].shape == (2, 2, 2, 2)
+    assert adapter[f"{prefix}.rescale"].shape == (4, 1, 1, 1)
+    assert adapter[f"{prefix}.alpha"].item() == 0
+    merged = merge(sd_mecha.apply_lycoris(base, sd_mecha.model(adapter_path)))
+    torch.testing.assert_close(merged[WEIGHT], target_weights, atol=2e-3, rtol=0)
+    torch.testing.assert_close(merged[BIAS], torch.zeros(4))
+
+
+def test_boft_extraction_can_start_from_zero_channel_gains():
+    base_weights = torch.eye(4).reshape(4, 4, 1, 1)
+    quarter_turn = torch.tensor([[0., -1.], [1., 0.]])
+    target_weights = torch.block_diag(quarter_turn, quarter_turn).reshape_as(base_weights)
+    base = sd_mecha.model({WEIGHT: base_weights}, CONFIG)
+    target = sd_mecha.model({WEIGHT: target_weights}, CONFIG)
+    extract = sd_mecha.lycoris.resolve("boft")
+    adapter = merge(extract(base, target, block_size=2, stages=1))
+    assert adapter["lycoris_vae_post_quant_conv.oft_blocks"].shape[0] == 1
+    merged = merge(sd_mecha.apply_lycoris(base, sd_mecha.model(adapter, f"{CONFIG}_lycoris_lora")))
+    torch.testing.assert_close(merged[WEIGHT], target_weights)
+
+
+def test_boft_extraction_keeps_half_turn_generator_finite():
+    identity = torch.eye(4)
+    half_turn = torch.diag(torch.tensor([-1., -1., 1., 1.]))
+    blocks = _cayley_blocks(half_turn[None, None])[0, 0]
+    assert blocks.isfinite().all()
+    generator = blocks - blocks.mT
+    applied = torch.linalg.solve(identity - generator, identity + generator)
+    torch.testing.assert_close(applied, half_turn, atol=4e-3, rtol=0)
 
 
 def test_full_delta_applies_to_weights_and_biases():

@@ -21,6 +21,7 @@ from .lokr import lokr
 from .norm import norm
 from .loha import loha
 from .full import full
+from .boft import boft
 
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "norm",
     "loha",
     "full",
+    "boft",
     "apply",
     "to_base",
     "to_lycoris",
@@ -219,10 +221,11 @@ def resolve(identifier: str) -> MergeMethod:
     """Look up the extraction method for an adapter algorithm.
 
     Args:
-        identifier: The name of an algorithm with an extractor, such as `lora`, `lokr`, or `norm`.
+        identifier: The algorithm name, such as `lora`, `lokr`, `norm`, or `boft`.
 
     Returns:
-        The merge method that builds an extraction recipe from a weight difference.
+        The merge method that builds an extraction recipe. BOFT takes the base and target weights.
+        LoRA, LoKr, and Norm take a weight difference.
 
     Raises:
         KeyError: If the algorithm has no registered extraction method.

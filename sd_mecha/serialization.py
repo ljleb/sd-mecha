@@ -1,8 +1,12 @@
 import logging
 import pathlib
+import warnings
+from collections.abc import Mapping
+from types import EllipsisType
 from typing import List, Optional, Hashable
 
 from ._recipe_compat import deserialize_merge_call
+from .extensions.merge_methods import _unwrap_scalar_literal
 from .recipe_nodes import (
     ClosedModelRecipeNode, RecipeNode, ModelRecipeNode, RecipeVisitor, LiteralRecipeNode,
     MergeRecipeNode,
@@ -13,28 +17,44 @@ from .graph_finalization import open_graph, is_finalized
 MECHA_FORMAT_VERSION = "0.1.0"
 
 
-def deserialize_path(recipe: pathlib.Path) -> RecipeNode:
+def deserialize_path(
+    recipe: pathlib.Path, *, remap_devices: str | Mapping[str, str] | None | EllipsisType = ...,
+) -> RecipeNode:
+    """Load a .mecha file, with the same device override as deserialize()."""
     if not recipe.exists():
         raise ValueError(f"unable to deserialize '{recipe}': no such file")
 
     if recipe.suffix == ".mecha":
         with open(recipe, "r") as recipe_file:
-            return deserialize(recipe_file.read())
+            return deserialize(recipe_file.read(), remap_devices=remap_devices)
     else:
         raise ValueError(f"unable to deserialize '{recipe}': unknown extension")
 
 
-def deserialize(recipe: str | List[str]) -> RecipeNode:
+def deserialize(
+    recipe: str | List[str], *, remap_devices: str | Mapping[str, str] | None | EllipsisType = ...,
+) -> RecipeNode:
     """
     Recreate a recipe graph from its serialized `.mecha` format.
 
     Args:
         recipe (str or List[str]):
             The textual representation (as a string or list of lines) of the recipe.
+        remap_devices (str, mapping or None, optional):
+            Remap cast() devices before validating them. A string replaces every explicit
+            device. A mapping replaces matching saved device names, including per-key
+            literals. Unlisted names and computed device expressions are used as written.
+            Pass None to remove device-only casts and clear the device on casts with a dtype.
+            If omitted, load each device as written.
 
     Returns:
         A `RecipeNode` that can be further merged or manipulated.
     """
+    if isinstance(remap_devices, Mapping) and not all(
+        isinstance(source, str) and isinstance(target, str) for source, target in remap_devices.items()
+    ):
+        raise TypeError("remap_devices must map device name strings to device name strings.")
+
     if not isinstance(recipe, list):
         recipe = recipe.split("\n")
 
@@ -64,7 +84,19 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
             results.append(ClosedModelRecipeNode(path, *positional_args[1:], **keyword_args))
         elif command == "merge":
             identifier, *positional_args = positional_args
-            results.append(deserialize_merge_call(identifier, positional_args, keyword_args))
+            device_overridden = False
+            if identifier == "cast" and remap_devices is not ...:
+                if len(positional_args) > 1:
+                    if _unwrap_scalar_literal(positional_args[1]) is not None:
+                        positional_args[1] = _remap_cast_device(positional_args[1], remap_devices)
+                        device_overridden = True
+                elif _unwrap_scalar_literal(keyword_args.get("device")) is not None:
+                    keyword_args["device"] = _remap_cast_device(keyword_args["device"], remap_devices)
+                    device_overridden = True
+            node = deserialize_merge_call(identifier, positional_args, keyword_args)
+            if device_overridden and remap_devices is None and _unwrap_scalar_literal(node.bound_args.arguments["dtype"]) is None:
+                node = node.bound_args.arguments["a"]
+            results.append(node)
         else:
             raise ValueError(f"unknown command: {command}")
 
@@ -140,6 +172,21 @@ def deserialize(recipe: str | List[str]) -> RecipeNode:
     return results[-1]
 
 
+def _remap_cast_device(value, remap_devices):
+    if not isinstance(remap_devices, Mapping):
+        return remap_devices
+
+    literal = _unwrap_scalar_literal(value)
+    if isinstance(literal, str):
+        return remap_devices.get(literal, value)
+    if isinstance(value, LiteralRecipeNode):
+        remapped = _remap_cast_device(value.value_dict, remap_devices)
+        return LiteralRecipeNode(remapped, value.model_config, value.merge_space)
+    if isinstance(value, dict):
+        return {key: _remap_cast_device(item, remap_devices) for key, item in value.items()}
+    return value
+
+
 def serialize(recipe: RecipeNode, *, finalize: Optional[bool] = None, output: Optional[pathlib.Path | str] = None) -> str:
     """
     Convert a recipe graph into a string that captures its merge instructions.
@@ -167,6 +214,13 @@ def serialize(recipe: RecipeNode, *, finalize: Optional[bool] = None, output: Op
     recipe.accept(serializer)
     version_header = get_version_header(MECHA_FORMAT_VERSION)
     serialized = "\n".join([version_header] + serializer.instructions)
+    if serializer.has_device_cast:
+        warnings.warn(
+            "This recipe contains explicit device casts and may require different devices on another machine. "
+            "Use deserialize(..., remap_devices=None) to clear them, or pass a device name or mapping to remap them.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     if isinstance(output, str):
         output = pathlib.Path(output)
@@ -185,6 +239,7 @@ def get_version_header(version: str):
 class SerializerVisitor(RecipeVisitor):
     def __init__(self, instructions: Optional[List[str]] = None):
         self.instructions = instructions if instructions is not None else []
+        self.has_device_cast = False
 
     def visit_literal(self, node: LiteralRecipeNode):
         value = self.__serialize_value(node.value_dict)
@@ -204,7 +259,10 @@ class SerializerVisitor(RecipeVisitor):
         return self.__add_instruction(line)
 
     def visit_merge(self, node: MergeRecipeNode) -> str:
-        identifier = self.__serialize_value(node.merge_method.get_identifier())
+        method_id = node.merge_method.get_identifier()
+        if method_id == "cast" and _unwrap_scalar_literal(node.bound_args.arguments.get("device")) is not None:
+            self.has_device_cast = True
+        identifier = self.__serialize_value(method_id)
         parts = ["merge", identifier] + [
             self.__serialize_value(v)
             for v in node.bound_args.args

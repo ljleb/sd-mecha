@@ -1,4 +1,5 @@
 import math
+import warnings
 
 import pytest
 import torch
@@ -6,6 +7,89 @@ from safetensors.torch import save_file
 
 import sd_mecha
 from sd_mecha.extensions import merge_methods
+
+
+def test_serializing_device_casts_warns_once_and_preserves_them(tmp_path):
+    base = sd_mecha.model(tmp_path / "model.safetensors", "sd1-kohya")
+    recipe = base.to(device="cpu").to(device=torch.device("cpu"), dtype="float64")
+    path = tmp_path / "recipe.mecha"
+
+    with pytest.warns(UserWarning, match="contains explicit device casts.*remap_devices=None") as caught:
+        saved = sd_mecha.serialize(recipe, finalize=False, output=path)
+
+    assert len(caught) == 1
+    assert path.read_text() == saved
+    assert '"cpu"' in saved
+    assert '"float64"' in saved
+    with pytest.warns(UserWarning, match="contains explicit device casts"):
+        assert sd_mecha.serialize(sd_mecha.deserialize_path(path), finalize=False) == saved
+
+
+@pytest.mark.parametrize("device_argument", ['"remote:9"', 'device="remote:9"', "&2"])
+def test_deserialize_can_override_devices_before_validation(tmp_path, device_argument):
+    saved = "\n".join((
+        "version 0.1.0",
+        'model "base.safetensors" model_config="sd1-kohya" merge_space="weight"',
+        'dict key="remote:9"',
+        'literal &1 model_config="singleton-mecha" merge_space="param"',
+        f'merge "cast" &0 {device_argument} dtype="float64"',
+        'merge "cast" &3 device="remote:8"',
+    ))
+    with pytest.raises(ValueError, match="Invalid value 'remote:9' for parameter 'device'"):
+        sd_mecha.deserialize(saved)
+
+    path = tmp_path / "device-casts.mecha"
+    path.write_text(saved)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cleared = sd_mecha.serialize(sd_mecha.deserialize_path(path, remap_devices=None), finalize=False)
+    with pytest.warns(UserWarning, match="contains explicit device casts"):
+        replaced = sd_mecha.serialize(sd_mecha.deserialize(saved, remap_devices="cpu"), finalize=False)
+    assert '"remote:' not in cleared + replaced
+    assert '"float64"' in cleared and '"float64"' in replaced
+    assert '"cpu"' not in cleared and '"cpu"' in replaced
+    assert cleared.count('merge "cast"') == 1
+    assert replaced.count('merge "cast"') == 2
+
+    with pytest.raises(ValueError, match="Invalid value 'remote:7' for parameter 'device'"):
+        sd_mecha.deserialize(saved, remap_devices="remote:7")
+
+    with pytest.raises(ValueError, match="Invalid value 'remote:8' for parameter 'device'"):
+        sd_mecha.deserialize(saved, remap_devices={"remote:9": "cpu"})
+    remapped = sd_mecha.deserialize_path(path, remap_devices={"remote:9": "cpu", "remote:8": "cpu:0"})
+    with pytest.warns(UserWarning, match="contains explicit device casts"):
+        remapped_saved = sd_mecha.serialize(remapped, finalize=False)
+    assert '"remote:' not in remapped_saved
+    assert all(f'"{value}"' in remapped_saved for value in ("cpu", "cpu:0", "float64"))
+
+
+def test_remap_devices_rewrites_per_key_literals_without_chaining():
+    saved = "\n".join((
+        "version 0.1.0",
+        'model "base.safetensors" model_config="sdxl-supermerger_blocks" merge_space="weight"',
+        'dict IN00="remote:9" IN01="cpu" IN02="cpu:0"',
+        'literal &1 model_config="sdxl-supermerger_blocks" merge_space="param"',
+        'merge "cast" &0 device=&2',
+    ))
+    recipe = sd_mecha.deserialize(saved, remap_devices={"remote:9": "cpu", "cpu": "cpu:0"})
+    devices = recipe.bound_args.arguments["device"]
+    assert devices.value_dict == {"IN00": "cpu", "IN01": "cpu:0", "IN02": "cpu:0"}
+    assert devices.model_config.identifier == "sdxl-supermerger_blocks"
+    assert devices.merge_space == "param"
+
+
+def test_remap_devices_requires_string_pairs():
+    with pytest.raises(TypeError, match="remap_devices must map device name strings to device name strings"):
+        sd_mecha.deserialize("version 0.1.0", remap_devices={"cpu": None})
+
+
+def test_device_override_leaves_dtype_only_casts_alone(tmp_path):
+    base = sd_mecha.model(tmp_path / "base.safetensors", "sd1-kohya")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        saved = sd_mecha.serialize(base.to(dtype="float64"), finalize=False)
+        restored = sd_mecha.deserialize(saved, remap_devices="cpu")
+        assert sd_mecha.serialize(restored, finalize=False) == saved
 
 
 def test_rotate_recipe_with_default_legacy_alignment_is_migrated():

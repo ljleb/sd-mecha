@@ -21,13 +21,13 @@ class ParameterInfo:
         return None
 
 
-ConfigMapping = Callable[[ParameterInfo], ModelConfig | str | Iterable[ModelConfig | str]]
+ParameterMapping = Callable[[ParameterInfo], ModelConfig | str | Iterable[ModelConfig | str] | type]
 
 
 @dataclass(frozen=True)
 class ModelConfigRef:
     parameter: str
-    mapping: ConfigMapping | None = None
+    mapping: ParameterMapping | None = None
 
     def resolve(self, config: ModelConfig, spaces: frozenset[merge_spaces.MergeSpace]) -> tuple[ModelConfig, ...]:
         """Resolve the reference to model config objects.
@@ -55,17 +55,18 @@ class ParameterRef:
         """Reference the argument's model config after any implicit input conversion."""
         return ModelConfigRef(self.parameter)
 
-    def map(self, mapping: ConfigMapping) -> ModelConfigRef:
-        """Derive model configs from another argument's metadata.
+    def map(self, mapping: ParameterMapping) -> ModelConfigRef:
+        """Derive a model config or a string Literal type from another argument's metadata.
 
         Args:
-            mapping: A function that receives a ParameterInfo. It can return a model config,
-                a registered config identifier, or an iterable of either. An empty iterable
-                means the argument has no compatible configs. For Return, the result must
-                identify exactly one config.
+            mapping: A function that receives a ParameterInfo. When used as model_config,
+                return a model config, a registered identifier, or an iterable of either.
+                An empty iterable means there are no compatible configs. For Return, the
+                result must identify exactly one config. In the Parameter type slot, return
+                a string Literal type such as Literal["a", "b"].
 
         Returns:
-            A model config reference that applies the mapping when the recipe is built.
+            A reference that applies the mapping when the referenced config is known.
         """
         return ModelConfigRef(self.parameter, mapping)
 
@@ -76,20 +77,21 @@ def param_ref(parameter: str) -> ParameterRef:
 
     Use param_ref("base").model_config in Parameter to constrain another input, or in
     Return to set the output config. Use param_ref("base").map(fn) to read the
-    argument's model config and possible merge spaces and derive related configs.
+    argument's model config and possible merge spaces and derive related configs or a
+    string Literal parameter type.
 
     Args:
         parameter (str):
             The name of a non-variadic parameter in the method signature.
 
     Returns:
-        ParameterRef: A reference whose model_config the method resolves when it builds a recipe.
+        ParameterRef: A reference the method resolves from the argument's metadata.
     """
     return ParameterRef(parameter)
 
 
 def validate_config_arguments(signature) -> bool:
-    """Validate config references and implicit conversion options on a merge method.
+    """Validate parameter references and implicit conversion options on a merge method.
 
     Args:
         signature (inspect.Signature): The signature with resolved Parameter and Return annotations.
@@ -113,10 +115,20 @@ def validate_config_arguments(signature) -> bool:
         for data in (*parameter_data.values(), signature.return_annotation.data)
         if isinstance(data.model_config, ModelConfigRef)
     ]
-    for ref in refs:
+    type_refs = [
+        (name, data.interface) for name, data in parameter_data.items()
+        if isinstance(data.interface, ModelConfigRef)
+    ]
+    for ref in (*refs, *(ref for _, ref in type_refs)):
         parameter = signature.parameters.get(ref.parameter)
         if parameter is None or parameter.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
             raise TypeError(f"param_ref({ref.parameter!r}) must name a non-variadic parameter.")
+
+    for name, ref in type_refs:
+        if signature.parameters[name].kind == Parameter.VAR_POSITIONAL:
+            raise TypeError(f"A mapped parameter type requires a non-variadic parameter, got {name!r}.")
+        if ref.parameter == name:
+            raise TypeError(f"Parameter {name!r} cannot use a reference to itself as its type.")
 
     for name, data in parameter_data.items():
         if not (data.allow_conversion or isinstance(data.model_config, ModelConfigRef)):

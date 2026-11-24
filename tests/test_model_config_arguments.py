@@ -1,3 +1,5 @@
+from typing import Literal, get_args
+
 import pytest
 import torch
 from safetensors.torch import save_file
@@ -46,6 +48,70 @@ def model_file(tmp_path, config, value, space="weight", infer=False):
     path = tmp_path / f"{config.identifier}-{space}.safetensors"
     save_file({key: torch.tensor([value], dtype=torch.float32)}, path)
     return sd_mecha.model(path, None if infer else config, space)
+
+
+@pytest.mark.parametrize(
+    "selector, expected_key",
+    [(sd_mecha.pick_component, "custom.input"), (sd_mecha.omit_component, "custom.output")],
+)
+def test_component_selectors_use_literal_choices_from_the_model_config(configs, tmp_path, selector, expected_key):
+    config = model_configs.ModelConfigImpl(
+        "custom_components-mecha",
+        {
+            "custom_in": {"custom.input": model_configs.KeyMetadata([1], torch.float32)},
+            "custom_out": {"custom.output": model_configs.KeyMetadata([1], torch.float32)},
+        },
+    )
+    model_configs.register(config)
+    path = tmp_path / "custom.safetensors"
+    save_file({key: torch.ones(1) for key in config.keys()}, path)
+
+    explicit = sd_mecha.model(path, config)
+    recipe = selector(explicit, "custom_in")
+    assert get_args(recipe.merge_method.get_input_types().args[1]) == ("custom_in", "custom_out")
+    restored = sd_mecha.deserialize(sd_mecha.serialize(recipe))
+    output = sd_mecha.merge(restored, threads=0)
+    assert set(output) - {"__metadata__"} == {expected_key}
+
+    per_key = selector(explicit, {"custom.input": "custom_in", "custom.output": "custom_out"})
+    output = sd_mecha.merge(per_key, threads=0)
+    expected_keys = set(config.keys()) if selector is sd_mecha.pick_component else set()
+    assert set(output) - {"__metadata__"} == expected_keys
+
+    invalid_component = r"Invalid value 'unknown' for parameter 'component'.*custom_in.*custom_out"
+    with pytest.raises(ValueError, match=invalid_component):
+        selector(explicit, "unknown")
+
+    @merge_method(register=False)
+    def compute_component(a: Parameter(Tensor, "weight")) -> Return(str, "param"):
+        return "unknown"
+
+    with pytest.raises(ValueError, match=invalid_component):
+        sd_mecha.merge(selector(explicit, compute_component(explicit)), threads=0)
+
+    inferred = sd_mecha.model(path)
+    assert expected_key in sd_mecha.merge(selector(inferred, "custom_in"), threads=0)
+    invalid_recipe = selector(inferred, "unknown")
+    with pytest.raises(ValueError, match=invalid_component):
+        sd_mecha.merge(invalid_recipe, threads=0)
+
+
+def test_mapped_literal_type_uses_referenced_argument_metadata(configs, tmp_path):
+    def type_for(info):
+        assert info.model_config == configs["base"]
+        return Literal["gain"] if info.merge_space == "weight" else Literal["difference"]
+
+    @merge_method(register=False)
+    def choose_mode(
+        a: Parameter(Tensor, {"weight", "delta"}),
+        mode: Parameter(param_ref("a").map(type_for)),
+    ) -> Return(Tensor, "weight"):
+        return a
+
+    source = model_file(tmp_path, configs["base"], 1, "delta")
+    assert get_args(choose_mode(source, "difference").merge_method.get_input_types().args[1]) == ("difference",)
+    with pytest.raises(ValueError, match="Invalid value 'gain' for parameter 'mode'"):
+        choose_mode(source, "gain")
 
 
 def test_implicit_conversion_skips_incompatible_route(configs, tmp_path):

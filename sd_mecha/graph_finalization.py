@@ -1116,7 +1116,8 @@ class FinalizeVisitor(RecipeVisitor):
 
         cfg, ms = self._solve_info(node)
 
-        res = MergeRecipeNode(node.merge_method, bound_args, cfg, ms)
+        method, bound_args = node.merge_method._resolve_parameter_types(bound_args)
+        res = MergeRecipeNode(method, bound_args, cfg, ms)
         self.node_map[node] = res
         return res
 
