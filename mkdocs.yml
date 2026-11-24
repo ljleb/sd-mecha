@@ -3,33 +3,25 @@ theme:
   name: material
   features:
     - content.code.copy
+nav:
+  - Home: index.md
+  - Guide:
+      - Overview: guide/README.md
+      - Introduction: guide/0-introduction.md
+      - Typical use cases: guide/1-typical-use-cases.md
+      - User-defined merge methods: guide/2-user-defined-merge-methods.md
+      - Merge method reference: guide/3-merge-methods-listing.md
 extra_css:
   - style.css
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js
   - javascripts/mathjax_config.js
-plugins:
-  - mkdocstrings:
-      default_handler: python
-      handlers:
-        python:
-          setup_commands:
-            - import sys
-            - sys.path.append('sd_mecha')
 markdown_extensions:
-  - extra
-  - tables
-  - mdx_math:
-      enable_dollar_delimiter: True
-      use_gitlab_delimiters: True
-  - fenced_code
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
   - pymdownx.superfences
   - pymdownx.arithmatex:
-      inline_syntax: [true]
       generic: true

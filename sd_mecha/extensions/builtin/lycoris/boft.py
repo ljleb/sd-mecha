@@ -14,6 +14,9 @@ from sd_mecha.streaming import StateDictKeyError
 from ._common import BaseToLycoris, LycorisAlgorithm, LycorisModelConfig, StateDictKeyHelper, extraction_implementation_name, run_weight_function
 
 
+_BoftSolver = Literal["svd_sweeps", "lbfgs"]
+
+
 def _rotate_rows(blocks, matrix, order, inverse_order):
     return (blocks @ matrix[:, order, :]).flatten(1, 2)[:, inverse_order, :]
 
@@ -224,7 +227,7 @@ class boft(LycorisAlgorithm):
         target: Parameter(torch.Tensor, "weight"),
         block_size: Parameter(int, "param") = 10,
         stages: Parameter(int, "param") = 5,
-        solver: Parameter(Literal["svd_sweeps", "lbfgs"], "param") = "svd_sweeps",
+        solver: Parameter(_BoftSolver, "param") = "svd_sweeps",
     ) -> Return(torch.Tensor, "weight"):
         """Fit a rescaled BOFT adapter that transforms base weights toward target weights.
 
@@ -247,15 +250,8 @@ class boft(LycorisAlgorithm):
 
     @classmethod
     def implement_extract_method(cls, lyco_config: LycorisModelConfig, base_config: ModelConfig):
-        cls._register_extractor(lyco_config, base_config, "svd_sweeps", _fit_boft)
-        cls._register_extractor(lyco_config, base_config, "lbfgs", _fit_boft_lbfgs)
-
-    @classmethod
-    def _register_extractor(cls, lyco_config, base_config, solver_name, fit):
-        solver_type = Literal[solver_name]
-
         @merge_method(
-            identifier=extraction_implementation_name(f"boft_{solver_name}", lyco_config),
+            identifier=extraction_implementation_name("boft", lyco_config),
             implements=cls.extract_method,
             globals=globals(),
             locals=locals(),
@@ -274,7 +270,7 @@ class boft(LycorisAlgorithm):
                 target: Parameter(torch.Tensor, "weight", base_config),
                 block_size: Parameter(int, "param", base_config),
                 stages: Parameter(int, "param", base_config),
-                solver: Parameter(solver_type, "param", base_config),
+                solver: Parameter(_BoftSolver, "param", base_config),
                 **kwargs,
             ) -> Return(StateDict[torch.Tensor], "weight", lyco_config):
                 block_key, rescale_key, alpha_key = kwargs["key_relation"].outputs
@@ -282,5 +278,6 @@ class boft(LycorisAlgorithm):
                 if block_count == 0:
                     raise StateDictKeyError(block_key)
                 stages = min(max(1, stages), block_count.bit_length())
+                fit = _fit_boft_lbfgs if solver == "lbfgs" else _fit_boft
                 blocks, gains = fit(base, target, block_size, stages)
                 return {block_key: blocks, rescale_key: gains, alpha_key: blocks.new_zeros(())}

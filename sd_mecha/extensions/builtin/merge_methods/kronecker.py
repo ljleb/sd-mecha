@@ -1,14 +1,16 @@
 import math
 import torch
-from collections import defaultdict
 from lycoris.functional import factorization as lycoris_factorization
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return
 from sd_mecha.extensions.builtin.merge_methods.svd import svd_lowrank
 from typing import Optional, Tuple
+from ._tensor_cache import (
+    DEFAULT_CACHE_DEVICE, DEFAULT_CACHE_DTYPE, create_tensor_cache, matches_cache_storage, tensor_cache_for_key,
+)
 
 
-@merge_method(cache_factory=lambda: defaultdict(dict))
+@merge_method(cache_factory=create_tensor_cache)
 def truncate_kronecker(
     a: Parameter(Tensor, "delta"),
     dims: Parameter(Tensor, "param") = None,
@@ -20,9 +22,7 @@ def truncate_kronecker(
     if a.dim() < 2 or a.numel() == 0:
         return a
 
-    cache = kwargs.get("cache")
-    if cache is not None:
-        cache = cache[kwargs["key"]]
+    cache, cache_device, cache_dtype = tensor_cache_for_key(kwargs.get("cache"), kwargs.get("key"))
 
     w1, w2 = extract_lokr(
         a,
@@ -31,6 +31,8 @@ def truncate_kronecker(
         approximate_basis_iters,
         approximate_basis_seed,
         cache,
+        cache_device=cache_device,
+        cache_dtype=cache_dtype,
     )
 
     while w1.ndim < w2.ndim:
@@ -46,6 +48,9 @@ def extract_lokr(
     approximate_basis_iters: int = 0,
     approximate_basis_seed: Optional[int] = None,
     cache: Optional[dict] = None,
+    *,
+    cache_device: torch.device = DEFAULT_CACHE_DEVICE,
+    cache_dtype: torch.dtype = DEFAULT_CACHE_DTYPE,
 ):
     shape_original = a.shape
     if a.ndim < 2 or a.numel() == 0:
@@ -59,8 +64,7 @@ def extract_lokr(
         cache is not None
         and cache.get("lokr_dims") == factor_dims
         and cache.get("svd_options") == svd_options
-        and "w1" in cache
-        and "w2" in cache
+        and all(name in cache and matches_cache_storage(cache[name], cache_device, cache_dtype) for name in ("w1", "w2"))
     ):
         w1 = cache["w1"].to(a)
         w2 = cache["w2"].to(a)
@@ -87,10 +91,11 @@ def extract_lokr(
         w2 = w2.reshape(shape_w2)
 
         if cache is not None:
-            cache["lokr_dims"] = factor_dims
-            cache["svd_options"] = svd_options
-            cache["w1"] = w1.to(device="cpu", dtype=torch.float16)
-            cache["w2"] = w2.to(device="cpu", dtype=torch.float16)
+            cache.update(
+                lokr_dims=factor_dims, svd_options=svd_options,
+                w1=w1.to(device=cache_device, dtype=cache_dtype),
+                w2=w2.to(device=cache_device, dtype=cache_dtype),
+            )
 
     return w1, w2
 

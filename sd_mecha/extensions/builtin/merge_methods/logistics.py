@@ -91,8 +91,8 @@ CastDevice = Literal[_cast_device_choices()]
 @merge_method(reuse_outputs=False)
 def cast(
     a: Parameter(Tensor),
-    device: Parameter(Optional[CastDevice], allow_dynamic=True) = None,
-    dtype: Parameter(Optional[CastDtype], allow_dynamic=True) = None,
+    device: Parameter(Optional[CastDevice]) = None,
+    dtype: Parameter(Optional[CastDtype]) = None,
 ) -> Return(Tensor):
     """Move or cast weights to a device or dtype.
 
@@ -113,15 +113,15 @@ def cast(
 
 @merge_method(reuse_outputs=False)
 def get_dtype(
-    a: Parameter(Tensor),
-) -> Return(str, "param"):
+    a: Parameter(Tensor, ("weight", "delta", "param")),
+) -> Return(CastDtype):
     return cast_dtype_map_reversed[a.dtype]
 
 
 @merge_method(reuse_outputs=False)
 def get_device(
-    a: Parameter(Tensor),
-) -> Return(str, "param"):
+    a: Parameter(Tensor, ("weight", "delta", "param")),
+) -> Return(CastDevice):
     return str(a.device)
 
 
@@ -132,7 +132,7 @@ def _component_type(info: ParameterInfo):
 @merge_method(reuse_outputs=False)
 def pick_component(
     a: Parameter(StateDict[T]),
-    component: Parameter(param_ref("a").map(_component_type), "param", allow_dynamic=True),
+    component: Parameter(param_ref("a").map(_component_type), "param"),
     **kwargs,
 ) -> Return(T):
     key = kwargs["key"]
@@ -145,7 +145,7 @@ def pick_component(
 @merge_method(reuse_outputs=False)
 def omit_component(
     a: Parameter(StateDict[T]),
-    component: Parameter(param_ref("a").map(_component_type), "param", allow_dynamic=True),
+    component: Parameter(param_ref("a").map(_component_type), "param"),
     **kwargs,
 ) -> Return(T):
     key = kwargs["key"]

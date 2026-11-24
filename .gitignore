@@ -11,3 +11,4 @@ __pycache__
 /site
 
 /examples/*_test.py
+/examples/merge_mask_study

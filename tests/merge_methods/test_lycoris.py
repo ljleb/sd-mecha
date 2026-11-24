@@ -9,10 +9,10 @@ from lycoris.modules.boft import ButterflyOFTModule
 from safetensors.torch import load_file, save_file
 
 import sd_mecha
+from sd_mecha import lokr_dims, lokr_dims_lycoris, truncate_kronecker
 from sd_mecha.extensions import merge_methods
 from sd_mecha.extensions.builtin.lycoris import _common
 from sd_mecha.extensions.builtin.lycoris.boft import _cayley_blocks
-from sd_mecha.extensions.builtin.merge_methods.kronecker import lokr_dims, lokr_dims_lycoris, truncate_kronecker
 from sd_mecha.graph_finalization import PropagatableKeyVisitor
 from sd_mecha.keys_map import RealizedKeyRelation
 
@@ -106,15 +106,15 @@ def test_sparse_lora_merge_plans_only_the_available_weight():
     torch.testing.assert_close(up.flatten(1) @ down.flatten(1), weight.flatten(1))
 
 
-def test_norm_extraction_and_deprecated_conversion():
+@pytest.mark.filterwarnings("error::UserWarning")
+def test_norm_extraction_and_delta_conversion():
     bias = torch.arange(4.)
     delta = sd_mecha.model({BIAS: bias}, CONFIG, "delta")
     adapter = sd_mecha.lycoris.resolve("norm")(delta)
     result = merge(adapter)
     torch.testing.assert_close(result["lycoris_vae_post_quant_conv.b_norm"], bias)
 
-    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
-        converted = merge(sd_mecha.convert(adapter, CONFIG), "delta")
+    converted = merge(sd_mecha.convert(adapter, CONFIG), "delta")
     torch.testing.assert_close(converted[BIAS], bias)
 
 
@@ -139,8 +139,7 @@ def test_loha_applies_a_scaled_hadamard_update(tucker):
     adapter = sd_mecha.model(weights, f"{CONFIG}_lycoris_lora")
 
     torch.testing.assert_close(merge(sd_mecha.apply_lycoris(base, adapter))[WEIGHT], 1 + delta)
-    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
-        torch.testing.assert_close(merge(sd_mecha.convert(adapter, CONFIG), "delta")[WEIGHT], delta)
+    torch.testing.assert_close(merge(sd_mecha.convert(adapter, CONFIG), "delta")[WEIGHT], delta)
 
 
 @pytest.mark.parametrize("rescaled", [False, True])
@@ -201,10 +200,13 @@ def test_boft_extraction_round_trips_and_uses_only_shared_weights(tmp_path, solv
     assert get_args(extract.get_input_types().args[-1]) == ("svd_sweeps", "lbfgs")
     solver_kwargs = {} if solver == "svd_sweeps" else {"solver": solver}
     serialized = sd_mecha.serialize(extract(base, target, block_size=2, **solver_kwargs))
-    assert f'merge "extract_boft_{solver}_{CONFIG}_lycoris_lora"' in serialized
-    other_solver = "lbfgs" if solver == "svd_sweeps" else "svd_sweeps"
-    with pytest.raises(ValueError, match=f"Invalid value '{other_solver}' for parameter 'solver'"):
-        sd_mecha.deserialize(serialized.replace(f'"{solver}"', f'"{other_solver}"'))
+    method_id = f"extract_boft_{CONFIG}_lycoris_lora"
+    assert f'merge "{method_id}"' in serialized
+    with pytest.raises(ValueError, match="Invalid value 'typo' for parameter 'solver'"):
+        sd_mecha.deserialize(serialized.replace(f'"{solver}"', '"typo"'))
+    legacy = serialized.replace(f'"{method_id}"', f'"extract_boft_{solver}_{CONFIG}_lycoris_lora"')
+    with pytest.warns(FutureWarning, match="Recipe merge method .* is deprecated"):
+        assert sd_mecha.serialize(sd_mecha.deserialize(legacy)) == serialized
     recipe = sd_mecha.deserialize(serialized)
     adapter_path = tmp_path / "adapter.safetensors"
     sd_mecha.merge(recipe, output=adapter_path, threads=0, output_dtype=torch.float32)
@@ -220,6 +222,29 @@ def test_boft_extraction_round_trips_and_uses_only_shared_weights(tmp_path, solv
     merged = merge(sd_mecha.apply_lycoris(base, sd_mecha.model(adapter_path)))
     torch.testing.assert_close(merged[WEIGHT], target_weights, atol=2e-3, rtol=0)
     torch.testing.assert_close(merged[BIAS], torch.zeros(4))
+
+
+def test_boft_selects_the_solver_per_key():
+    other_key = "vae.quant_conv.weight"
+    base_weights = {key: torch.eye(4).reshape(4, 4, 1, 1) for key in (WEIGHT, other_key)}
+    base = sd_mecha.model(base_weights, CONFIG)
+    target = sd_mecha.model({key: value * 2 for key, value in base_weights.items()}, CONFIG)
+    recipe = sd_mecha.lycoris.resolve("boft")(
+        base, target, block_size=2, solver={WEIGHT: "svd_sweeps", other_key: "lbfgs"},
+    )
+
+    blocks = torch.zeros(1, 2, 2, 2)
+    gains = torch.ones(4, 1, 1, 1)
+    with (
+        patch("sd_mecha.extensions.builtin.lycoris.boft._fit_boft", return_value=(blocks, gains)) as svd,
+        patch("sd_mecha.extensions.builtin.lycoris.boft._fit_boft_lbfgs", return_value=(blocks, 2 * gains)) as lbfgs,
+    ):
+        result = merge(recipe)
+
+    svd.assert_called_once()
+    lbfgs.assert_called_once()
+    torch.testing.assert_close(result["lycoris_vae_post_quant_conv.rescale"], gains)
+    torch.testing.assert_close(result["lycoris_vae_quant_conv.rescale"], 2 * gains)
 
 
 def test_boft_extraction_can_start_from_zero_channel_gains():
@@ -406,11 +431,9 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_openmoss(tmp_path, entry_poi
     else:
         recipe = (base + sd_mecha.convert(adapter, base)) | base
 
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", "converting lycoris to base is deprecated")
-        result = sd_mecha.merge(
-            recipe, output_dtype=torch.float32, threads=0, check_finite_output=False, omit_non_finite_inputs=False,
-        )
+    result = sd_mecha.merge(
+        recipe, output_dtype=torch.float32, threads=0, check_finite_output=False, omit_non_finite_inputs=False,
+    )
 
     for projection, expected in zip(result[key].chunk(3), (11.0, 2.0, 23.0), strict=True):
         sample = projection[:, :4]
@@ -430,8 +453,7 @@ def test_sdxl_clip_g_packing_preserves_sparse_projection_deltas(config):
         for part in ("q", "v")
     }, f"{config}_lycoris_lora")
 
-    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
-        result = merge(sd_mecha.convert(adapter, "sdxl-sgm"), "delta")
+    result = merge(sd_mecha.convert(adapter, "sdxl-sgm"), "delta")
     for projection, expected in zip(result[key].chunk(3), (2., 0., 3.), strict=True):
         torch.testing.assert_close(projection[:, :4], torch.full_like(projection[:, :4], expected))
 
@@ -469,12 +491,11 @@ def test_adapter_key_aliases_merge_to_canonical_keys():
     key = "lora_vae_post_quant_conv.lora_up.weight"
     tensor = torch.arange(4.0).reshape(4, 1, 1, 1)
     adapter = sd_mecha.model({key: tensor}, f"{CONFIG}_lycoris_lora")
-    lycoris = sd_mecha.to_lycoris(adapter)
     lycoris_key = "lycoris_vae_post_quant_conv.lora_up.weight"
-    torch.testing.assert_close(merge(lycoris)[lycoris_key], tensor)
-    assert lycoris is adapter
+    torch.testing.assert_close(merge(adapter)[lycoris_key], tensor)
 
 
+@pytest.mark.filterwarnings("error::UserWarning")
 def test_to_base_expands_the_conversion_from_lycoris(tmp_path):
     tensor = torch.arange(16.0).reshape(4, 4, 1, 1)
     checkpoint = tmp_path / "adapter.safetensors"
@@ -486,13 +507,14 @@ def test_to_base_expands_the_conversion_from_lycoris(tmp_path):
     assert recipe.bound_args.args[0] is adapter
     assert sd_mecha.to_base(recipe) is recipe
 
-    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
-        result = merge(sd_mecha.deserialize(sd_mecha.serialize(recipe)), "delta")
+    result = merge(sd_mecha.deserialize(sd_mecha.serialize(recipe)), "delta")
     torch.testing.assert_close(result[WEIGHT], tensor)
 
 
 @pytest.mark.parametrize("adapter_config", [None, "anima-diffusion_pipe_lycoris_lora"])
-def test_add_difference_converts_an_adapter_to_a_delta(tmp_path, adapter_config):
+@pytest.mark.parametrize("fallback_to_a", [True, False])
+@pytest.mark.filterwarnings("error::UserWarning")
+def test_add_difference_converts_an_adapter_to_a_delta(tmp_path, adapter_config, fallback_to_a):
     key = "net.final_layer.linear.weight"
     other_key = "net.pos_embedder.seq"
     other = torch.arange(256.0)
@@ -503,11 +525,74 @@ def test_add_difference_converts_an_adapter_to_a_delta(tmp_path, adapter_config)
     }, checkpoint)
     base = sd_mecha.model({key: torch.ones(64, 2048), other_key: other}, "anima-diffusion_pipe")
 
-    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
-        result = merge(sd_mecha.add_difference(base, sd_mecha.model(checkpoint, adapter_config)))
+    fallback = {} if fallback_to_a else {"fallback_to_a": False}
+    result = merge(sd_mecha.add_difference(base, sd_mecha.model(checkpoint, adapter_config), **fallback))
 
     torch.testing.assert_close(result[key], torch.full((64, 2048), 3.0))
-    torch.testing.assert_close(result[other_key], other)
+    if fallback_to_a:
+        torch.testing.assert_close(result[other_key], other)
+    else:
+        assert other_key not in result
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_delta_conversion_warns_when_it_skips_boft_updates(tmp_path, mixed):
+    weight = torch.arange(16.).reshape(4, 4, 1, 1) / 16
+    bias = torch.zeros(4)
+    base = sd_mecha.model({WEIGHT: weight, BIAS: bias}, CONFIG)
+    blocks = torch.zeros(2, 2, 2, 2)
+    blocks[0, 0, 0, 1] = 0.2
+    weights = {"lora_vae_post_quant_conv.oft_blocks": blocks}
+    if mixed:
+        weights["lora_vae_post_quant_conv.diff_b"] = torch.ones(4)
+    checkpoint = tmp_path / "adapter.safetensors"
+    save_file(weights, checkpoint)
+    adapter = sd_mecha.model(checkpoint, f"{CONFIG}_lycoris_lora")
+
+    expected_bias = torch.ones(4) if mixed else bias
+    with pytest.warns(UserWarning, match="conversion skipped BOFT updates") as emitted:
+        result = merge(sd_mecha.add_difference(base, adapter))
+    assert len(emitted) == 1
+    torch.testing.assert_close(result[WEIGHT], weight)
+    torch.testing.assert_close(result[BIAS], expected_bias)
+
+    if mixed:
+        with pytest.warns(UserWarning, match="conversion skipped BOFT updates"):
+            delta = merge(sd_mecha.to_base(adapter), "delta")
+        assert WEIGHT not in delta
+        torch.testing.assert_close(delta[BIAS], expected_bias)
+    else:
+        with pytest.warns(UserWarning, match="conversion skipped BOFT updates"):
+            with pytest.raises(RuntimeError, match="produces no output keys"):
+                merge(sd_mecha.to_base(adapter), "delta")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        applied = merge(sd_mecha.apply_lycoris(base, adapter))
+    assert not torch.equal(applied[WEIGHT], weight)
+    torch.testing.assert_close(applied[BIAS], expected_bias)
+
+
+@pytest.mark.filterwarnings("error::UserWarning")
+def test_delta_conversion_ignores_boft_keys_filtered_by_an_input_recipe():
+    key = "lycoris_vae_post_quant_conv.diff_b"
+
+    @sd_mecha.merge_method(register=False)
+    class keep_bias:
+        @staticmethod
+        def map_keys(builder):
+            builder[key] = builder.keys[key]
+
+        def __call__(self, value: sd_mecha.Parameter(torch.Tensor)) -> sd_mecha.Return(torch.Tensor):
+            return value
+
+    bias = torch.ones(4)
+    source = sd_mecha.model({
+        key: bias,
+        "lycoris_vae_post_quant_conv.oft_blocks": torch.zeros(2, 2, 2, 2),
+    }, f"{CONFIG}_lycoris_lora")
+    delta = merge(sd_mecha.to_base(keep_bias(source)), "delta")
+    torch.testing.assert_close(delta[BIAS], bias)
 
 
 def test_add_difference_keeps_structural_inputs():
@@ -547,6 +632,34 @@ def test_truncate_kronecker_dimensions_and_bias_passthrough(select_dims):
 def test_truncate_kronecker_requires_a_dimension_matrix():
     with pytest.raises(ValueError, match="expected 2x2 preference"):
         truncate_kronecker.__wrapped__(torch.eye(4), torch.tensor(0.5))
+
+
+@pytest.mark.parametrize("method", ["truncate_kronecker", "lora", "lokr"])
+def test_kronecker_and_adapter_caches_honor_storage_settings(method):
+    weight = torch.eye(4).reshape(4, 4, 1, 1)
+    delta = sd_mecha.model({WEIGHT: weight}, CONFIG, "delta")
+    if method == "truncate_kronecker":
+        recipe = sd_mecha.truncate_kronecker(delta, use_approximate_basis=False)
+        space, entry_key, factor = "delta", WEIGHT, "w1"
+    elif method == "lora":
+        recipe = sd_mecha.lycoris.resolve("lora")(delta, rank=1, use_approximate_basis=False)
+        space, entry_key, factor = "weight", "lycoris_vae_post_quant_conv.lora_up.weight", "u"
+    else:
+        recipe = sd_mecha.lycoris.resolve("lokr")(delta)
+        space, entry_key, factor = "weight", "lycoris_vae_post_quant_conv.lokr_w1", "w1"
+
+    cache = recipe.merge_method.create_cache(dtype=torch.float64)
+    options = dict(cache={recipe: cache}, strict_merge_space=space, output_dtype=torch.float32, threads=0)
+    sd_mecha.merge(recipe, **options)
+    cached = cache[entry_key][factor]
+    assert cached.dtype == torch.float64
+    sd_mecha.merge(recipe, **options)
+    assert cache[entry_key][factor] is cached
+
+    cache["dtype"] = torch.float32
+    sd_mecha.merge(recipe, **options)
+    assert cache[entry_key][factor].dtype == torch.float32
+    assert cache["dtype"] == torch.float32
 
 
 def test_lokr_recipe_format_version(tmp_path):

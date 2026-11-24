@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Optional
 
 import torch
@@ -10,6 +9,7 @@ from sd_mecha.extensions.merge_methods import Parameter, Return, StateDict, merg
 from sd_mecha.extensions.model_configs import ModelConfig
 from sd_mecha.keys_map import ComposeObject, KeysAccessor, ReqExpr
 
+from ..merge_methods._tensor_cache import create_tensor_cache, tensor_cache_for_key
 from ..merge_methods.kronecker import extract_lokr
 from ._common import (
     BaseToLycoris, LycorisAlgorithm, LycorisModelConfig, StateDictKeyHelper,
@@ -124,7 +124,7 @@ class lokr(LycorisAlgorithm):
         @merge_method(
             identifier=extraction_implementation_name(cls.__name__, lyco_config),
             implements=cls.extract_method,
-            cache_factory=lambda: defaultdict(dict),
+            cache_factory=create_tensor_cache,
             globals=globals(),
             locals=locals(),
         )
@@ -145,14 +145,14 @@ class lokr(LycorisAlgorithm):
             ) -> Return(StateDict[torch.Tensor], "weight", lyco_config):
                 w1_key, w2_key, alpha_key = kwargs["key_relation"].outputs
 
-                cache = kwargs.get("cache")
-                if cache is not None:
-                    cache = cache[w1_key]
+                cache, cache_device, cache_dtype = tensor_cache_for_key(kwargs.get("cache"), w1_key)
 
                 w1, w2 = extract_lokr(
                     base,
                     dims,
                     cache=cache,
+                    cache_device=cache_device,
+                    cache_dtype=cache_dtype,
                 )
 
                 return {

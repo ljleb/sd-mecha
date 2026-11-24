@@ -1,4 +1,4 @@
-# Mecha Guide
+# sd-mecha Guide
 
 Welcome to a guide about how to use sd-mecha!
 The focus of this guide is to understand how to use the library and decide whether it is for you or not.
@@ -13,9 +13,9 @@ To access the guide for a different version of sd-mecha, please refer to the sou
 
 The guide is separated into the following sections:
 
-- **Introduction**: Overview of sd-mecha.
-- **Section 1**: Typical use cases.
-- **Section 2**: user-defined merge methods.
-- **Section 3**: builtin merge methods.
+- [Introduction](0-introduction.md)
+- [Section 1: Typical use cases](1-typical-use-cases.md)
+- [Section 2: User-defined merge methods](2-user-defined-merge-methods.md)
+- [Section 3: Built-in merge methods](3-merge-methods-listing.md)
 
 Next: [Introduction](0-introduction.md)

@@ -33,11 +33,51 @@ There are 2 public modules that user code can import and use:
 - `sd_mecha.extensions`: for extending the features of sd-mecha like model configs and merge methods
 
 
+## Model configs
+
+A model config describes the keys and tensor shapes of a state dict. It can also define aliases and optional keys. A component groups related keys, for example the `vae` in an SDXL checkpoint.
+
+sd-mecha infers the model config from the input keys by default. If several key formats share those keys, pass a config explicitly. This is common with small adapters.
+
+```python
+import sd_mecha
+
+base = sd_mecha.model("base.safetensors", config="sdxl-sgm")
+```
+
+List the available configs with `sd_mecha.extensions.model_configs.get_all()`. Call `model_configs.resolve(identifier).components()` to inspect the components in one config.
+
+## Built-in checkpoint key formats
+
+| Model | Config IDs |
+| --- | --- |
+| Stable Diffusion 1.5 | `sd1-ldm`, `sd1-kohya` |
+| Stable Diffusion XL | `sdxl-sgm`, `sdxl-kohya`, `sdxl-kohya_but_diffusers`, `sdxl-diffusers_unet_only` |
+| Stable Diffusion 3 | `sd3-comfyui` |
+| FLUX Schnell and Dev | `flux-flux` |
+| Anima | `anima-diffusion_pipe` |
+| MOSS-Image | `moss_image-openmoss`, `moss_image-comfyui` |
+| Kolors UNet | `kolors-diffusers` |
+
+For Kolors, load the UNet Safetensors file directly. The config covers the standalone UNet and its LyCORIS adapters. See [Blocks Merging (MBW)](1-typical-use-cases.md#blocks-merging-mbw) for the separate block configs.
+
+## Merge spaces
+
+A merge space describes what the values in a recipe represent. The built-in spaces are:
+
+| Space | Values |
+| --- | --- |
+| `weight` | Model weights or stored adapter factors |
+| `delta` | Differences between model weights or between adapter factors, such as `target - base` |
+| `param` | Inputs that control an operation, such as block weights or a rank |
+
+`merge()` expects a `weight` result by default. To save a delta, pass `strict_merge_space="delta"`.
+
 ## Is sd-mecha for you?
 
 You might find value in using sd-mecha for state dict tasks if you need to:
 
-- operate on a very large checkpoints with minimal memory usage
+- operate on very large checkpoints with minimal memory usage
 - merge a large number of checkpoints together
 - merge multiple variations of a recipe for an ablation study
 - experiment with new merge methods
@@ -54,7 +94,7 @@ While sd-mecha is a python library without a graphical user interface, there is 
 ## Usage and design principles
 
 In sd-mecha, every task revolves around *recipe graphs*.
-A recipe graph is a graph of instructions that explain methodically how to derive a state dict result.
+A recipe is a declarative graph that describes how to produce a state dict. `weighted_sum(a, b)` returns a new recipe node that references `a` and `b`.
 
 For example, you can:
 
@@ -64,10 +104,10 @@ For example, you can:
 
 Recipe graphs have a lifecycle that goes something like this:
 
-1. create or deserialize a recipe graph
-2. merge and/or serialize the recipe graph
+1. Create or deserialize a recipe graph.
+2. Run it with `merge()` or save it with `serialize()`.
 
 The library uses recipe graphs as the planning tool for all state dict operations.
-Planning state dict operations in advance allows to pick the best timing to load tensors from disk and to reuse already loaded tensors.
+Before loading tensor data, sd-mecha plans which output keys it can compute from the available input keys and each method's key map. This helps it load tensors when needed and release cached intermediate results after their last consumer runs.
 
 Next: [Typical use cases](1-typical-use-cases.md)

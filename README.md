@@ -20,16 +20,15 @@ sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
 ## Features
 
 - Memory efficient model merging: merge a very large number of models in one execution
+- Per-key merge control: set a different blend weight or use a different merge method for each parameter tensor
 - Human-readable serialization format (.mecha)
 - Extensible library interface:
   - user-defined models
   - user-defined merge methods and architecture conversions
-- Builtin support for popular diffusion models:
-  - Stable Diffusion 1.5
-  - Stable Diffusion XL
-  - FLUX Schnell/Dev
-- Merge LyCORIS networks together and to checkpoints (no extraction yet)
-- Kohya's Merge Block Weighted (MBW) for SD1 and SDXL
+- Built-in support for [popular diffusion models and their checkpoint key formats](docs/guide/0-introduction.md#built-in-checkpoint-key-formats)
+- Merge LyCORIS networks together and apply them to checkpoints
+- Extract LoRA, LoKr, Norm, and BOFT adapters
+- [Merge Block Weighted (MBW)](docs/guide/1-typical-use-cases.md#blocks-merging-mbw)
 
 ## Install
 
@@ -41,13 +40,13 @@ Make sure to install the appropriate release of [`torch`](https://pytorch.org/ge
 
 ## Usage
 
-See the [mecha guide](docs/guide) for an in-depth exploration of the library.
+See the [sd-mecha guide](docs/guide) for an in-depth exploration of the library.
 
 ## Examples
 
 ### Merge models
 
-Here's an example script that merges three models:
+Here's an example script that merges two models:
 
 ```python
 import sd_mecha
@@ -75,7 +74,7 @@ from sd_mecha.extensions import model_configs
 all_configs = model_configs.get_all()
 
 print([config.identifier for config in all_configs])
-# ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
+# Includes "sd1-ldm", "sdxl-sgm", "sd3-comfyui", ...
 ```
 
 A component of a model config is a subset of keys of the config that belong to the same logical group.
@@ -88,13 +87,15 @@ from sd_mecha.extensions import model_configs
 
 config = model_configs.resolve("sd1-ldm")
 for component_id, component in config.components().items():
-      # component.keys contains the state dict keys that the component owns
+      # component.keys() returns the state dict keys and their metadata
       print(f"{component_id}")
 
 # this prints:
 #   clip_l
 #   vae
 #   diffuser
+#   ema
+#   scheduler
 ```
 
 ## Motivation

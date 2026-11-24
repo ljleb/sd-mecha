@@ -1202,6 +1202,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
     realized_key_maps: Dict[MergeRecipeNode, ActiveKeyMap[RealizedKeyRelation]] = dataclasses.field(default_factory=dict)
     _candidate_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=dict)
     _planned_key_maps: Dict[MergeRecipeNode, KeyMap[KeyRelation]] = dataclasses.field(default_factory=dict)
+    _check_inputs: bool = True
 
     # Exact-key memo for literal/model nodes only
     _key_memo: Dict[Tuple[RecipeNode, str], bool] = dataclasses.field(default_factory=dict)
@@ -1378,6 +1379,8 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
         keys = self.node_to_key_domain.get(node, set())
         if isinstance(node, MergeRecipeNode):
+            if self._check_inputs:
+                self._check_first_input_keys(node)
             if node.merge_method._can_map_first_input_keys:
                 source = node.bound_args.args[0]
                 key_map = node._plan_key_map(first_input_keys=self._possible_keys(source))
@@ -1396,6 +1399,19 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
         self._candidate_keys[node] = keys
         return keys
+
+    def _check_first_input_keys(self, node: MergeRecipeNode):
+        check = getattr(node.merge_method.__wrapped__, "_check_first_input_keys", None)
+        if check is None:
+            return
+        source = node.bound_args.args[0]
+
+        def reachable_keys(keys):
+            # Keep diagnostics out of the execution plan and its reachability memo.
+            probe = PropagatableKeyVisitor(self.node_to_key_domain, _check_inputs=False)
+            yield from (key for key in keys if source.accept(probe, key))
+
+        check(self._possible_keys(source), reachable_keys)
 
     @staticmethod
     def _possible_leaf_keys(

@@ -78,6 +78,9 @@ def _deserialize_legacy_merge_call(identifier, args, kwargs):
     if replacement := _DEPRECATED_MOSS_METHOD_IDS.get(identifier):
         return merge_methods.resolve(replacement)(*args, **kwargs)
 
+    if match := re.fullmatch(r"extract_boft_(?:svd_sweeps|lbfgs)_(.+_lycoris_lora)", identifier):
+        return merge_methods.resolve(f"extract_boft_{match[1]}")(*args, **kwargs)
+
     if match := re.fullmatch(r"convert_'([^']+)'_to_'([^']+)'", identifier):
         source, target = match.groups()
         if source != target and (source.endswith("_kohya_lora") or target.endswith("_kohya_lora")):

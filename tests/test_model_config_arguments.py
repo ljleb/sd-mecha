@@ -83,17 +83,20 @@ def test_component_selectors_use_literal_choices_from_the_model_config(configs, 
         selector(explicit, "unknown")
 
     @merge_method(register=False)
-    def compute_component(a: Parameter(Tensor, "weight")) -> Return(str, "param"):
+    def compute_component(a: Parameter(Tensor, "weight")) -> Return(Literal["unknown"]):
         return "unknown"
 
-    with pytest.raises(ValueError, match=invalid_component):
-        sd_mecha.merge(selector(explicit, compute_component(explicit)), threads=0)
+    incompatible = r"Parameter 'component' accepts .*custom_in.*custom_out.*'compute_component' can return .*unknown"
+    with pytest.raises(TypeError, match=incompatible):
+        selector(explicit, compute_component(explicit))
 
     inferred = sd_mecha.model(path)
     assert expected_key in sd_mecha.merge(selector(inferred, "custom_in"), threads=0)
     invalid_recipe = selector(inferred, "unknown")
     with pytest.raises(ValueError, match=invalid_component):
         sd_mecha.merge(invalid_recipe, threads=0)
+    with pytest.raises(TypeError, match=incompatible):
+        sd_mecha.merge(selector(inferred, compute_component(inferred)), threads=0)
 
 
 def test_mapped_literal_type_uses_referenced_argument_metadata(configs, tmp_path):
@@ -112,6 +115,29 @@ def test_mapped_literal_type_uses_referenced_argument_metadata(configs, tmp_path
     assert get_args(choose_mode(source, "difference").merge_method.get_input_types().args[1]) == ("difference",)
     with pytest.raises(ValueError, match="Invalid value 'gain' for parameter 'mode'"):
         choose_mode(source, "gain")
+
+
+def test_literal_input_checks_the_output_of_implicit_conversion(configs):
+    source, target = configs["source"], configs["base"]
+
+    @merge_method(is_conversion=True)
+    class untyped_conversion:
+        @staticmethod
+        def map_keys(builder):
+            builder["base"] = builder.keys["source"]
+
+        def __call__(self, mode: Parameter(Literal["gain"], "param", source)) -> Return(str, "param", target):
+            return mode
+
+    @merge_method(register=False)
+    def select_mode(
+        mode: Parameter(Literal["gain"], "param", target, allow_conversion=True),
+    ) -> Return(Literal["gain"], "param", target):
+        return mode
+
+    value = sd_mecha.literal({"source": "gain"}, config=source, merge_space="param")
+    with pytest.raises(TypeError, match="Parameter 'mode' requires a string Literal return type.*'untyped_conversion'"):
+        select_mode(value)
 
 
 def test_implicit_conversion_skips_incompatible_route(configs, tmp_path):

@@ -1,6 +1,6 @@
 from .extensions.builtin import model_configs as _builtin_model_configs
 from .extensions.builtin import lycoris
-from .extensions.builtin.lycoris import apply as apply_lycoris, to_base, to_lycoris
+from .extensions.builtin.lycoris import apply as apply_lycoris, to_base
 from .recipe_nodes import RecipeNodeOrValue, RecipeNode
 from .merging import merge
 from .graph_finalization import open_graph
@@ -40,6 +40,9 @@ from sd_mecha.extensions.builtin.merge_methods import (
     top_k_tensor_sum,
     truncate_rank,
     get_rank_from_ratio,
+    truncate_kronecker,
+    lokr_dims,
+    lokr_dims_lycoris,
     ties_sum_with_dropout,
     ties_sum,
     ties_sum_extended,

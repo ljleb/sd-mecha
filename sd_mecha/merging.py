@@ -100,8 +100,8 @@ def merge(
             and do not read other inputs than those reported by `map_keys`. Defaults to True.
             Raises RuntimeError for keys
         cache (optional):
-            Dictionary of caches for any recipe nodes in `recipe`.
-            Items should be created like this: `node: node.create_cache()`.
+            Dictionary of caches keyed by merge nodes in `recipe`.
+            Use `node.merge_method.create_cache()` to construct a cache for a node.
             This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
@@ -232,6 +232,7 @@ def merge(
                 graph_metadata,
                 original_recipe,
                 buffer_size_per_file_per_thread,
+                output_dtype=output_dtype,
             ) as output_dict,
         ):
             _fix_torch_threading()
@@ -271,6 +272,8 @@ def _get_output_dict(
     merged_header: Mapping[str, KeyMetadata],
     recipe: RecipeNode,
     buffer_size_per_thread: int,
+    *,
+    output_dtype: Optional[torch.dtype],
 ):
     try:
         serialized_recipe = serialization.serialize(recipe, finalize=False)  # already finalized
@@ -289,7 +292,10 @@ def _get_output_dict(
 
         streamed_output = OutSafetensorsDict(
             output,
-            OrderedDict((k, TensorMetadata(v.shape, v.dtype)) for k, v in merged_header.items()),
+            OrderedDict(
+                (key, TensorMetadata(meta.shape, output_dtype if output_dtype is not None else meta.dtype))
+                for key, meta in merged_header.items()
+            ),
             serialized_recipe,
             buffer_size_per_thread,
         )
@@ -610,6 +616,7 @@ class MergeNodeWrapperStateDict(StateDict):
     ):
         self.node = node
         self.expected_type = expected_type
+        self.literal_choices = _string_literal_choices(expected_type)
         self.original_merge_visitor = original_merge_visitor
         self.inputs = inputs
         self.validate_mm_contract = validate_mm_contract
@@ -623,8 +630,9 @@ class MergeNodeWrapperStateDict(StateDict):
 
         key_merger = dataclasses.replace(self.original_merge_visitor, output_key=key)
         res_raw = self.node.accept(key_merger)
-        res = cast_node_value(res_raw, self.expected_type)
-        return res
+        if self.literal_choices is not None:
+            return _validate_literal_choice(res_raw, self.literal_choices, key, subject=f"input key {key!r}")
+        return cast_node_value(res_raw, self.expected_type)
 
     def __len__(self):
         return len(self.inputs)
