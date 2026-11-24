@@ -27,8 +27,8 @@ class lora(LycorisAlgorithm):
         "alpha",
     )
     suffix_aliases = {
-        "lora_up.weight": ("lora_B.weight", "lora_B.default.weight", "lora_B"),
-        "lora_down.weight": ("lora_A.weight", "lora_A.default.weight", "lora_A"),
+        "lora_up.weight": ("lora_B.weight", "lora_B.default.weight", "lora_B", "lora.up.weight"),
+        "lora_down.weight": ("lora_A.weight", "lora_A.default.weight", "lora_A", "lora.down.weight"),
     }
     supports_delta_conversion = True
 

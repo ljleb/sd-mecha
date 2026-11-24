@@ -59,6 +59,24 @@ def test_lora_extraction_caps_rank_and_keeps_convolution_shape():
     torch.testing.assert_close(adapter["up"].flatten(1) @ adapter["down"].flatten(1), weight.flatten(1))
 
 
+def test_kolors_applies_diffusers_lora_with_inferred_adapter_config(tmp_path):
+    module = "down_blocks.1.attentions.0.transformer_blocks.0.attn1.to_k"
+    key = f"{module}.weight"
+    weight = torch.ones(640, 640)
+    down = torch.full((2, 640), 0.5)
+    up = torch.ones(640, 2)
+    base = sd_mecha.model({key: weight}, "kolors-diffusers")
+    adapter_path = tmp_path / "kolors-lora.safetensors"
+    save_file({
+        f"unet.{module}.lora.down.weight": down,
+        f"unet.{module}.lora.up.weight": up,
+    }, adapter_path)
+
+    recipe = sd_mecha.apply_lycoris(base, sd_mecha.model(adapter_path))
+    assert recipe.merge_method.identifier == "apply_lycoris_kolors-diffusers_lycoris_lora"
+    torch.testing.assert_close(merge(recipe)[key], weight + up @ down)
+
+
 def test_sparse_lora_merge_plans_only_the_available_weight():
     weight = torch.eye(4).reshape(4, 4, 1, 1)
     delta = sd_mecha.model({WEIGHT: weight}, CONFIG, "delta")

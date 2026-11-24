@@ -44,6 +44,7 @@ def _register_all_lycoris_configs():
         "sdxl-kohya_but_diffusers",
         "sd1-kohya",
         "anima-diffusion_pipe",
+        "kolors-diffusers",
         "moss_image-openmoss",
     ):
         base_config = model_configs.resolve(base_config_id)
