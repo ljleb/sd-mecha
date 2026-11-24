@@ -1,4 +1,5 @@
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -7,6 +8,7 @@ from safetensors.torch import save_file
 
 import sd_mecha
 from sd_mecha.extensions import merge_methods
+from sd_mecha.extensions.builtin.lycoris import _common
 from sd_mecha.extensions.builtin.merge_methods.kronecker import lokr_dims, lokr_dims_lycoris, truncate_kronecker
 from sd_mecha.graph_finalization import PropagatableKeyVisitor
 from sd_mecha.keys_map import RealizedKeyRelation
@@ -21,6 +23,26 @@ def merge(recipe, space="weight"):
     output = {}
     sd_mecha.merge(recipe, output=output, output_dtype=torch.float32, strict_merge_space=space, threads=0)
     return output
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError("missing backend dependency"), RuntimeError("Failed to find C compiler.")])
+def test_missing_lycoris_backend_dependency_only_affects_its_device(monkeypatch, error):
+    monkeypatch.setattr(_common, "_unavailable_acceleration", set())
+    first = SimpleNamespace(device=torch.device("cuda:0"), dtype=torch.float32, is_cuda=True)
+    second = SimpleNamespace(device=torch.device("cuda:1"), dtype=torch.float32, is_cuda=True)
+    calls = []
+
+    def rebuild(weight, *, backend):
+        calls.append((weight.device, backend))
+        if weight is first and backend is None:
+            raise error
+        return weight
+
+    with pytest.warns(UserWarning, match="could not start its accelerated backend on cuda:0"):
+        assert _common.run_weight_function(rebuild, first) is first
+    assert _common.run_weight_function(rebuild, first) is first
+    assert _common.run_weight_function(rebuild, second) is second
+    assert calls == [(first.device, None), (first.device, "torch"), (first.device, "torch"), (second.device, None)]
 
 
 def test_lora_extraction_caps_rank_and_keeps_convolution_shape():
@@ -115,6 +137,86 @@ def test_full_delta_applies_to_weights_and_biases():
     torch.testing.assert_close(result[BIAS], 2 * bias + 2)
 
 
+@pytest.mark.parametrize("tucker", [False, True])
+def test_factorized_lokr_keeps_convolution_axes_and_alpha(tucker):
+    key = "unet.conv_in.weight"
+    prefix = "lycoris_unet_conv_in"
+    w1 = torch.arange(1., 41.).reshape(20, 2)
+    left = torch.arange(1., 33.).reshape(16, 2)
+    if tucker:
+        right = torch.eye(2)
+        core = torch.arange(1., 37.).reshape(2, 2, 3, 3)
+        w2 = torch.einsum("ijxy,oi,jp->opxy", core, left, right)
+        factors = {"lokr_w2_a": left.T.contiguous(), "lokr_w2_b": right, "lokr_t2": core}
+    else:
+        right = torch.arange(1., 37.).reshape(2, 2, 3, 3)
+        w2 = (left @ right.flatten(1)).reshape(16, 2, 3, 3)
+        factors = {"lokr_w2_a": left, "lokr_w2_b": right}
+    delta = torch.kron(w1[..., None, None], w2.contiguous()) * 0.5
+    base = sd_mecha.model({key: torch.ones_like(delta)}, CONFIG)
+    adapter = sd_mecha.model({
+        f"{prefix}.lokr_w1": w1,
+        f"{prefix}.alpha": torch.tensor(1.),
+        **{f"{prefix}.{suffix}": tensor for suffix, tensor in factors.items()},
+    }, f"{CONFIG}_lycoris_lora")
+
+    torch.testing.assert_close(merge(sd_mecha.apply_lycoris(base, adapter))[key], 1 + delta)
+
+
+def test_lora_tucker_convolution_preserves_alpha_and_factor_order():
+    key = "vae.decoder.conv_out.weight"
+    prefix = "lycoris_vae_decoder_conv_out"
+    up = torch.arange(1., 7.).reshape(3, 2, 1, 1)
+    mid = torch.arange(1., 37.).reshape(2, 2, 3, 3)
+    down = torch.arange(1., 257.).reshape(2, 128, 1, 1)
+    delta = torch.einsum("oi,ijxy,jp->opxy", up.flatten(1), mid, down.flatten(1)) * 0.5
+    base = sd_mecha.model({key: torch.ones_like(delta)}, CONFIG)
+    adapter = sd_mecha.model({
+        f"{prefix}.lora_up.weight": up,
+        f"{prefix}.lora_mid.weight": mid,
+        f"{prefix}.lora_down.weight": down,
+        f"{prefix}.alpha": torch.tensor(1.),
+    }, f"{CONFIG}_lycoris_lora")
+
+    torch.testing.assert_close(merge(sd_mecha.apply_lycoris(base, adapter))[key], 1 + delta)
+
+
+def test_rank_one_lora_accepts_a_squeezed_up_factor():
+    prefix = "lycoris_vae_post_quant_conv"
+    up = torch.arange(1., 5.)
+    down = torch.arange(2., 6.).reshape(1, 4, 1, 1)
+    delta = (up[:, None] @ down.flatten(1)).reshape(4, 4, 1, 1)
+    base = sd_mecha.model({WEIGHT: torch.ones_like(delta)}, CONFIG)
+    adapter = sd_mecha.model({
+        f"{prefix}.lora_up.weight": up,
+        f"{prefix}.lora_down.weight": down,
+    }, f"{CONFIG}_lycoris_lora")
+
+    torch.testing.assert_close(merge(sd_mecha.apply_lycoris(base, adapter))[WEIGHT], 1 + delta)
+
+
+def test_loha_tucker_accepts_broadcastable_spatial_cores():
+    key = "vae.decoder.conv_out.weight"
+    prefix = "lycoris_vae_decoder_conv_out"
+    up = torch.ones(1, 3)
+    down = torch.ones(1, 128)
+    spatial = torch.arange(1., 10.).reshape(1, 1, 3, 3)
+    delta = spatial.expand(3, 128, 3, 3)
+    base = sd_mecha.model({key: torch.ones_like(delta)}, CONFIG)
+    adapter = sd_mecha.model({
+        f"{prefix}.hada_w1_a": up,
+        f"{prefix}.hada_w1_b": down,
+        f"{prefix}.hada_w2_a": up,
+        f"{prefix}.hada_w2_b": down,
+        f"{prefix}.hada_t1": torch.ones(1, 1, 1, 1),
+        f"{prefix}.hada_t2": spatial,
+    }, f"{CONFIG}_lycoris_lora")
+
+    with pytest.warns(UserWarning, match="LoHa factors with different output shapes"):
+        result = merge(sd_mecha.apply_lycoris(base, adapter))
+    torch.testing.assert_close(result[key], 1 + delta)
+
+
 @pytest.mark.parametrize(
     "up_key, down_key",
     [
@@ -170,8 +272,8 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path):
     rope = torch.arange(16.0)
     base = sd_mecha.model({key: qkv, "rope.bands": rope}, "moss_image-comfyui")
 
-    split = sd_mecha.convert(base, "moss_image-diffusers")
-    applied = sd_mecha.apply_lycoris(split, sd_mecha.model(checkpoint))
+    applied = sd_mecha.apply_lycoris(base, sd_mecha.model(checkpoint))
+    assert applied.bound_args.arguments["base"].merge_method.identifier == "convert_moss_image_comfyui_to_diffusers"
     result = sd_mecha.merge(
         sd_mecha.convert(applied, "moss_image-comfyui"),
         output_dtype=torch.float32,
@@ -184,6 +286,59 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path):
         sample = projection[:, :4]
         torch.testing.assert_close(sample, torch.full_like(sample, expected))
     torch.testing.assert_close(result["rope.bands"], rope)
+
+
+def test_adapter_key_aliases_merge_to_canonical_keys():
+    key = "lora_vae_post_quant_conv.lora_up.weight"
+    tensor = torch.arange(4.0).reshape(4, 1, 1, 1)
+    adapter = sd_mecha.model({key: tensor}, f"{CONFIG}_lycoris_lora")
+    lycoris = sd_mecha.to_lycoris(adapter)
+    lycoris_key = "lycoris_vae_post_quant_conv.lora_up.weight"
+    torch.testing.assert_close(merge(lycoris)[lycoris_key], tensor)
+    assert lycoris is adapter
+
+
+def test_to_base_expands_the_conversion_from_lycoris(tmp_path):
+    tensor = torch.arange(16.0).reshape(4, 4, 1, 1)
+    checkpoint = tmp_path / "adapter.safetensors"
+    save_file({"lora_vae_post_quant_conv.diff": tensor}, checkpoint)
+    adapter = sd_mecha.model(checkpoint, f"{CONFIG}_lycoris_lora")
+
+    recipe = sd_mecha.to_base(adapter)
+    assert recipe.merge_method.identifier == f"convert_'{CONFIG}_lycoris_lora'_to_base"
+    assert recipe.bound_args.args[0] is adapter
+    assert sd_mecha.to_base(recipe) is recipe
+
+    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
+        result = merge(sd_mecha.deserialize(sd_mecha.serialize(recipe)), "delta")
+    torch.testing.assert_close(result[WEIGHT], tensor)
+
+
+@pytest.mark.parametrize("adapter_config", [None, "anima-diffusion_pipe_lycoris_lora"])
+def test_add_difference_converts_an_adapter_to_a_delta(tmp_path, adapter_config):
+    key = "net.final_layer.linear.weight"
+    other_key = "net.pos_embedder.seq"
+    other = torch.arange(256.0)
+    checkpoint = tmp_path / "anima-adapter.safetensors"
+    save_file({
+        "lora_unet_final_layer_linear.lora_up.weight": torch.full((64, 1), 2.0),
+        "lora_unet_final_layer_linear.lora_down.weight": torch.ones((1, 2048)),
+    }, checkpoint)
+    base = sd_mecha.model({key: torch.ones(64, 2048), other_key: other}, "anima-diffusion_pipe")
+
+    with pytest.warns(UserWarning, match="converting lycoris to base is deprecated"):
+        result = merge(sd_mecha.add_difference(base, sd_mecha.model(checkpoint, adapter_config)))
+
+    torch.testing.assert_close(result[key], torch.full((64, 2048), 3.0))
+    torch.testing.assert_close(result[other_key], other)
+
+
+def test_add_difference_keeps_structural_inputs():
+    key = "user.weight"
+    base = sd_mecha.model({key: torch.ones(1)})
+    delta = sd_mecha.model({key: torch.full((1,), 2.0)}, merge_space="delta")
+
+    torch.testing.assert_close(merge(base + delta)[key], torch.full((1,), 3.0))
 
 
 def test_lokr_extraction_default_round_trips_through_application():
@@ -226,17 +381,18 @@ def test_lokr_recipe_format_version(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "old_name, arguments, algorithm, adapter_format, ratio",
+    "old_name, arguments, algorithm, ratio",
     [
-        ("extract_lycoris_lora", "", "lora", "lycoris", None),
-        ("extract_kohya_lora", " rank=2", "lora", "kohya", None),
-        ("extract_lora_'sd1-kohya_lycoris_lora'", " 2 false 2 null", "lora", "lycoris", None),
-        ("extract_lycoris_lokr", "", "lokr", "lycoris", 0.5),
-        ("extract_kohya_lokr", " kronecker_ratio=0.25", "lokr", "kohya", 0.25),
-        ("extract_lokr_'sd1-kohya_kohya_lora'", " 0.75", "lokr", "kohya", 0.75),
+        ("extract_lycoris_lora", "", "lora", None),
+        ("extract_kohya_lora", " rank=2", "lora", None),
+        ("extract_lora_'sd1-kohya_lycoris_lora'", " 2 false 2 null", "lora", None),
+        ("extract_lycoris_lokr", "", "lokr", 0.5),
+        ("extract_kohya_lokr", " kronecker_ratio=0.25", "lokr", 0.25),
+        ("extract_lokr_'sd1-kohya_kohya_lora'", " 0.75", "lokr", 0.75),
+        ("extract_lora_sd1-kohya_kohya_lora", " 2 false 2 null", "lora", None),
     ],
 )
-def test_deserialize_deprecated_extraction_method(tmp_path, old_name, arguments, algorithm, adapter_format, ratio):
+def test_deserialize_deprecated_extraction_method(tmp_path, old_name, arguments, algorithm, ratio):
     checkpoint = tmp_path / "delta.safetensors"
     save_file({WEIGHT: torch.ones((4, 4, 1, 1))}, checkpoint)
     source = (
@@ -244,7 +400,7 @@ def test_deserialize_deprecated_extraction_method(tmp_path, old_name, arguments,
         f'model "{checkpoint}" model_config="{CONFIG}" merge_space="delta"\n'
         f'merge "{old_name}" &0{arguments}'
     )
-    replacement = f"extract_{algorithm}_{CONFIG}_{adapter_format}_lora"
+    replacement = f"extract_{algorithm}_{CONFIG}_lycoris_lora"
     with pytest.warns(FutureWarning, match=r"removed in sd-mecha 1\.3\.0") as caught:
         recipe = sd_mecha.deserialize(source)
 
@@ -259,3 +415,6 @@ def test_deserialize_deprecated_extraction_method(tmp_path, old_name, arguments,
     serialized = sd_mecha.serialize(recipe)
     assert old_name not in serialized
     assert replacement in serialized
+    if old_name.startswith("extract_kohya_"):
+        tensor_keys = [key for key, value in merge(recipe).items() if isinstance(value, torch.Tensor)]
+        assert tensor_keys and all(key.startswith("lycoris_") for key in tensor_keys)

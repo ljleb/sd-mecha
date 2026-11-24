@@ -26,11 +26,11 @@ def add_difference(
         alpha=alpha,
     )
 
-    if a.merge_space == original_b.merge_space:
-        b = original_b
-
     if clamp_to_ab:
-        if a.merge_space != b.merge_space:
+        a_space = getattr(a.merge_space, "identifier", None)
+        if a_space == getattr(original_b.merge_space, "identifier", None):
+            b = original_b
+        if a_space != getattr(b.merge_space, "identifier", None):
             raise TypeError(f"Merge space of A {a.merge_space} and B {b.merge_space} must be the same to clamp the merge.")
         res = limiting.clamp(
             res, a, b,

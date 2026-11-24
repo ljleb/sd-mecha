@@ -1,12 +1,12 @@
 from .extensions.builtin import model_configs as _builtin_model_configs
 from .extensions.builtin import lycoris
-from .extensions.builtin.lycoris import apply as apply_lycoris
+from .extensions.builtin.lycoris import apply as apply_lycoris, to_base, to_lycoris
 from .recipe_nodes import RecipeNodeOrValue, RecipeNode
 from .merging import merge
 from .graph_finalization import open_graph
 from .serialization import serialize, deserialize, deserialize_path
 from .streaming import StateDictKeyError
-from .extensions.merge_methods import merge_method, value_to_node, Parameter, Return, StateDict, model_ref
+from .extensions.merge_methods import merge_method, value_to_node, Parameter, ParameterInfo, Return, StateDict, param_ref
 from .extensions import model_dirs
 from .conversion import convert
 from sd_mecha.extensions.builtin.merge_methods import (

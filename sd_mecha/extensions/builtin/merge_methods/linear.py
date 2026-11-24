@@ -1,7 +1,7 @@
 import math
 import torch
 from torch import Tensor
-from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict
+from sd_mecha.extensions.merge_methods import merge_method, Parameter, Return, StateDict, param_ref
 
 
 @merge_method
@@ -64,10 +64,10 @@ def slerp(
 @merge_method
 def add_difference(
     a: Parameter(StateDict[Tensor]),
-    b: Parameter(StateDict[Tensor], "delta"),
+    b: Parameter(StateDict[Tensor], "delta", param_ref("a").model_config, allow_conversion=True),
     alpha: Parameter(Tensor) = 1.0,
     **kwargs,
-) -> Return(Tensor):
+) -> Return(Tensor, model_config=param_ref("a").model_config):
     key = kwargs["key"]
     if alpha.numel() == 1 and math.isclose(alpha.item(), 0.0):
         return a[key]

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from inspect import Parameter
 from typing import Callable, Iterable
 
@@ -6,7 +6,22 @@ from . import merge_spaces, model_configs
 from .model_configs import ModelConfig
 
 
-ConfigMapping = Callable[[ModelConfig], ModelConfig | str | Iterable[ModelConfig | str]]
+@dataclass(frozen=True)
+class ParameterInfo:
+    """Model config and possible merge spaces of an argument during recipe construction."""
+
+    model_config: ModelConfig
+    merge_spaces: frozenset[merge_spaces.MergeSpace]
+
+    @property
+    def merge_space(self) -> merge_spaces.MergeSpace | None:
+        """The argument's merge space if exactly one space is possible."""
+        if len(self.merge_spaces) == 1:
+            return next(iter(self.merge_spaces))
+        return None
+
+
+ConfigMapping = Callable[[ParameterInfo], ModelConfig | str | Iterable[ModelConfig | str]]
 
 
 @dataclass(frozen=True)
@@ -14,53 +29,63 @@ class ModelConfigRef:
     parameter: str
     mapping: ConfigMapping | None = None
 
-    def map(self, mapping: ConfigMapping) -> "ModelConfigRef":
-        """Derive the allowed model configs from the referenced argument's config.
-
-        Args:
-            mapping: A function that receives one resolved ModelConfig. It can return a model
-                config, a registered config identifier, or an iterable of either. An empty
-                iterable means that the referenced config has no compatible configs.
-
-        Returns:
-            ModelConfigRef: A reference to the same parameter with the supplied mapping.
-        """
-        return replace(self, mapping=mapping)
-
-    def resolve(self, config: ModelConfig) -> tuple[ModelConfig, ...]:
+    def resolve(self, config: ModelConfig, spaces: frozenset[merge_spaces.MergeSpace]) -> tuple[ModelConfig, ...]:
         """Resolve the reference to model config objects.
 
         Args:
-            config (ModelConfig): The resolved config of the referenced argument.
+            config (ModelConfig): The model config to pass to the mapping.
+            spaces: The possible merge spaces of the referenced argument.
 
         Returns:
             The distinct configs returned by the mapping. If there is no mapping,
             return a tuple containing the supplied config.
         """
-        mapped = self.mapping(config) if self.mapping is not None else config
+        mapped = self.mapping(ParameterInfo(config, spaces)) if self.mapping is not None else config
         if isinstance(mapped, (str, ModelConfig)):
             mapped = (mapped,)
         return tuple(dict.fromkeys(model_configs.resolve(cfg) if isinstance(cfg, str) else cfg for cfg in mapped))
 
 
-def model_ref(parameter: str) -> ModelConfigRef:
-    """
-    Refer to the resolved model config of a named argument in the same merge method.
+@dataclass(frozen=True)
+class ParameterRef:
+    parameter: str
 
-    Use the reference in the model_config argument of Parameter or Return. For example,
-    model_ref("base") gives a delta parameter the config of the base. Use map() when
-    the parameter accepts related configs, such as the adapter configs for that base.
-    If the referenced argument converts, the reference uses its config after conversion.
+    @property
+    def model_config(self) -> ModelConfigRef:
+        """Reference the argument's model config after any implicit input conversion."""
+        return ModelConfigRef(self.parameter)
+
+    def map(self, mapping: ConfigMapping) -> ModelConfigRef:
+        """Derive model configs from another argument's metadata.
+
+        Args:
+            mapping: A function that receives a ParameterInfo. It can return a model config,
+                a registered config identifier, or an iterable of either. An empty iterable
+                means the argument has no compatible configs. For Return, the result must
+                identify exactly one config.
+
+        Returns:
+            A model config reference that applies the mapping when the recipe is built.
+        """
+        return ModelConfigRef(self.parameter, mapping)
+
+
+def param_ref(parameter: str) -> ParameterRef:
+    """
+    Refer to a named parameter in the same merge method.
+
+    Use param_ref("base").model_config in Parameter to constrain another input, or in
+    Return to set the output config. Use param_ref("base").map(fn) to read the
+    argument's model config and possible merge spaces and derive related configs.
 
     Args:
         parameter (str):
-            The name of the parameter whose model config supplies the reference.
-            This name must refer to a fixed parameter in the method signature.
+            The name of a non-variadic parameter in the method signature.
 
     Returns:
-        ModelConfigRef: A reference that the merge method resolves at recipe construction.
+        ParameterRef: A reference whose model_config the method resolves when it builds a recipe.
     """
-    return ModelConfigRef(parameter)
+    return ParameterRef(parameter)
 
 
 def validate_config_arguments(signature) -> bool:
@@ -91,23 +116,21 @@ def validate_config_arguments(signature) -> bool:
     for ref in refs:
         parameter = signature.parameters.get(ref.parameter)
         if parameter is None or parameter.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD):
-            raise TypeError(f"model_ref({ref.parameter!r}) must name a non-variadic parameter.")
+            raise TypeError(f"param_ref({ref.parameter!r}) must name a non-variadic parameter.")
 
     for name, data in parameter_data.items():
         if not (data.allow_conversion or isinstance(data.model_config, ModelConfigRef)):
             continue
         if signature.parameters[name].kind == Parameter.VAR_POSITIONAL:
             raise TypeError(f"Config references and implicit conversion require a non-variadic parameter, got {name!r}.")
+        if isinstance(data.model_config, ModelConfigRef) and data.model_config.parameter == name:
+            raise TypeError(f"Parameter {name!r} cannot reference its own model config. Use Return to derive an output config.")
         if data.allow_conversion and data.model_config is None:
             raise TypeError(f"Parameter {name!r} must declare a model config to enable implicit conversion.")
-        if data.allow_conversion and isinstance(data.model_config, ModelConfigRef):
-            ref = data.model_config
-            if ref.parameter == name and ref.mapping is not None:
-                raise TypeError(f"A convertible parameter cannot map its own model config: {name!r}.")
     return bool(refs or convertible)
 
 
-def resolve_config_arguments(signature, bound_args, input_spaces):
+def resolve_config_arguments(signature, bound_args, input_spaces, *, is_interface=False):
     """Resolve the method's config references and any requested input conversion.
 
     Read the referenced argument's config before checking a dependent argument. If the
@@ -118,6 +141,7 @@ def resolve_config_arguments(signature, bound_args, input_spaces):
         signature (inspect.Signature): The method signature with its config references.
         bound_args (inspect.BoundArguments): The input nodes, indexed by their parameter names.
         input_spaces: A mapping from each parameter name to its merge space constraint.
+        is_interface (bool): Whether a concrete implementation can resolve tied input configs.
 
     Returns:
         The arguments after conversion, the resolved configs by parameter name, and the return config.
@@ -144,27 +168,35 @@ def resolve_config_arguments(signature, bound_args, input_spaces):
                 stats = candidates.model_config.stats or {}
                 best = min((stat.state_dict_misses for stat in stats.values()), default=None)
                 configs = tuple(
-                    cfg for cfg in candidates.model_config if stats[cfg.identifier].state_dict_misses == best
+                    cfg for cfg in candidates.model_config
+                    if cfg.identifier != "structural" and stats[cfg.identifier].state_dict_misses == best
                 )
                 spaces = candidates.merge_space.allowed or merge_spaces.get_all()
                 inferred[argument] = configs, spaces
         return inferred[argument]
 
     configs = {}
+    deferred = set()
+
+    def resolve_for_config(ref, config):
+        if ref.mapping is None:
+            return (config,)
+        _, spaces = infer(arguments[ref.parameter])
+        return ref.resolve(config, frozenset(spaces).intersection(input_spaces[ref.parameter]))
 
     def resolve(ref):
-        if ref.parameter == convertible and ref.parameter in configs:
-            return ref.resolve(configs[ref.parameter])
+        if configs.get(ref.parameter) is not None:
+            return resolve_for_config(ref, configs[ref.parameter])
         native, _ = infer(arguments[ref.parameter])
         if len(native) != 1:
             options = tuple(config.identifier for config in native)
             raise TypeError(
-                f"Cannot resolve model_ref({ref.parameter!r}) from candidate configs {options}. "
+                f"Cannot resolve param_ref({ref.parameter!r}) from candidate configs {options}. "
                 "Specify the referenced argument's model config explicitly."
             )
         config, = native
         configs[ref.parameter] = config
-        return ref.resolve(config)
+        return resolve_for_config(ref, config)
 
     # Bind the opted-in argument first so references to it see the effective config on reload.
     names = list(parameters)
@@ -173,16 +205,11 @@ def resolve_config_arguments(signature, bound_args, input_spaces):
         names.insert(0, convertible)
     for name in names:
         data = parameters[name]
-        if isinstance(data.model_config, ModelConfigRef):
-            allowed = resolve(data.model_config)
-        elif data.allow_conversion:
-            allowed = (data.model_config,)
-        else:
+        ref = data.model_config
+        if not data.allow_conversion and not isinstance(ref, ModelConfigRef):
             continue
 
         actual, spaces = infer(arguments[name])
-        expected_ids = {cfg.identifier for cfg in allowed}
-        direct = tuple(cfg for cfg in actual if cfg.identifier in expected_ids)
         if data.allow_conversion:
             target_space = input_spaces[name]
             target_spaces = set(target_space)
@@ -196,36 +223,65 @@ def resolve_config_arguments(signature, bound_args, input_spaces):
                         for value in values:
                             _, candidate_spaces = infer(value)
                             target_spaces.intersection_update(candidate_spaces)
-            if not target_spaces.intersection(spaces):
-                direct = ()
+
+        source_configs_by_target = {}
+        if isinstance(ref, ModelConfigRef):
+            native, _ = infer(arguments[ref.parameter])
+            if data.allow_conversion and ref.mapping is None and target_spaces.intersection(spaces):
+                # Ordinary additions can still share and infer a config in the graph.
+                if not native or not actual or (len(native) > 1 and set(native).intersection(actual)):
+                    configs[name] = None
+                    deferred.add(ref.parameter)
+                    continue
+            if data.allow_conversion and is_interface and ref.mapping is not None and len(native) > 1:
+                for source in native:
+                    for target in resolve_for_config(ref, source):
+                        source_configs_by_target.setdefault(target, []).append(source)
+                allowed = tuple(source_configs_by_target)
+            else:
+                allowed = resolve(ref)
+        else:
+            allowed = (ref,)
+
+        expected_ids = {cfg.identifier for cfg in allowed}
+        direct = tuple(cfg for cfg in actual if cfg.identifier in expected_ids)
+        if data.allow_conversion and not target_spaces.intersection(spaces):
+            direct = ()
         if len(direct) == 1:
-            configs[name], = direct
-            continue
-        if len(direct) > 1:
+            config, = direct
+        elif len(direct) > 1:
             raise TypeError(f"Ambiguous model config for parameter {name!r}. Specify its model config explicitly.")
-
-        if not data.allow_conversion:
+        elif not data.allow_conversion:
             raise TypeError(f"Parameter {name!r} requires one of the model configs {tuple(sorted(expected_ids))}.")
-
-        routes = _find_conversion_routes(actual, spaces, allowed, target_spaces)
-        if len(routes) != 1 or not routes[0]:
-            problem = "Ambiguous" if routes else "No compatible"
-            actual_ids = tuple(config.identifier for config in actual)
-            raise TypeError(
-                f"{problem} implicit conversion for parameter {name!r} from configs {actual_ids} "
-                f"in merge spaces {tuple(sorted(str(space) for space in spaces))} to configs "
-                f"{tuple(sorted(expected_ids))} in merge spaces {tuple(sorted(str(space) for space in target_spaces))}. "
-                "Use an explicit convert() or specify the input config and merge space."
-            )
-        route, = routes
-        arguments[name] = _apply_conversion_route(arguments[name], route)
-        configs[name] = route[-1].get_signature().return_annotation.data.model_config
+        else:
+            routes = _find_conversion_routes(actual, spaces, allowed, target_spaces)
+            if len(routes) != 1 or not routes[0]:
+                problem = "Ambiguous" if routes else "No compatible"
+                actual_ids = tuple(config.identifier for config in actual)
+                raise TypeError(
+                    f"{problem} implicit conversion for parameter {name!r} from configs {actual_ids} "
+                    f"in merge spaces {tuple(sorted(str(space) for space in spaces))} to configs "
+                    f"{tuple(sorted(expected_ids))} in merge spaces {tuple(sorted(str(space) for space in target_spaces))}. "
+                    "Use an explicit convert() or specify the input config and merge space."
+                )
+            route, = routes
+            arguments[name] = _apply_conversion_route(arguments[name], route)
+            config = route[-1].get_signature().return_annotation.data.model_config
+        configs[name] = config
+        if source_configs_by_target:
+            choices = tuple(source_configs_by_target[config])
+            if len(choices) != 1:
+                raise TypeError(f"Ambiguous model config for parameter {ref.parameter!r}. Specify its model config explicitly.")
+            configs[ref.parameter], = choices
 
     return_config = signature.return_annotation.data.model_config
     if isinstance(return_config, ModelConfigRef):
-        options = resolve(return_config)
-        if len(options) != 1:
-            raise TypeError("A return model config reference must resolve to exactly one config.")
-        return_config, = options
+        if return_config.mapping is None and return_config.parameter in deferred:
+            return_config = None
+        else:
+            options = resolve(return_config)
+            if len(options) != 1:
+                raise TypeError("A return model config reference must resolve to exactly one config.")
+            return_config, = options
 
     return arguments, configs, return_config

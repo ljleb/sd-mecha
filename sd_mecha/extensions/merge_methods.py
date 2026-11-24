@@ -15,7 +15,7 @@ from sd_mecha.recipe_nodes import ClosedModelRecipeNode, RecipeNode, MergeRecipe
 from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
-from ._model_config_arguments import ModelConfigRef, model_ref, resolve_config_arguments, validate_config_arguments
+from ._model_config_arguments import ModelConfigRef, ParameterInfo, param_ref, resolve_config_arguments, validate_config_arguments
 from types import MappingProxyType, SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Sequence
 from ..keys_map import Clause, KeyMapBuilder, KeyMap, KeyRelation, RealizedKeyRelation
@@ -74,8 +74,9 @@ def Parameter(
             The allowed merge space or spaces. For example, "weight" selects checkpoint
             weights and "delta" selects weight differences. If omitted, use the method's default.
         model_config (ModelConfig, ModelConfigRef or str, optional):
-            The required model config or its registered identifier. Use model_ref() to take
-            the config from another argument, or model_ref().map() to derive accepted configs.
+            The required model config or its registered identifier. Use param_ref("name").model_config
+            to read another input's config. Use param_ref("name").map(fn) to derive configs from
+            that input's model config and possible merge spaces.
         allow_conversion (bool):
             If True, use a direct match first, then search for a unique shortest route to the
             required config and merge space. A route can change the input's merge space.
@@ -131,8 +132,9 @@ def Return(
         merge_space (MergeSpace, str or MergeSpaceSymbol, optional):
             The output merge space. Use a shared symbol to tie the output space to an input.
         model_config (ModelConfig, ModelConfigRef or str, optional):
-            The output model config or its registered identifier. A model_ref() must resolve
-            to exactly one config. If the referenced argument converts, use its converted config.
+            The output model config or its registered identifier. Use param_ref("name").model_config
+            to read an input's config after any implicit conversion. The reference must resolve to
+            exactly one config, including when you use param_ref("name").map(fn) to derive it.
 
     Returns:
         A type annotation object used by `@merge_method` for the return signature.
@@ -400,7 +402,9 @@ class MergeMethod:
             spaces = dict(zip(names.args, input_spaces.args)) | input_spaces.kwargs
             if names.has_varargs():
                 spaces[names.vararg] = input_spaces.vararg
-            arguments, configs, return_config = resolve_config_arguments(self.__f_signature, bound_args, spaces)
+            arguments, configs, return_config = resolve_config_arguments(
+                self.__f_signature, bound_args, spaces, is_interface=self.interface is not None,
+            )
             bound_args = inspect.BoundArguments(self.__f_signature, arguments)
             if self.interface is not None:
                 return self.interface._dispatch(bound_args.args, bound_args.kwargs, configs, return_config)
@@ -433,14 +437,16 @@ class MergeMethod:
 
         method = copy(self)
         signature = self.__f_signature
+        return_annotation = signature.return_annotation
+        if return_config is not None or isinstance(return_annotation.data.model_config, ModelConfigRef):
+            return_annotation = specialize(return_annotation, return_config, "Return value")
         method.__f_signature = signature.replace(
             parameters=[
                 param.replace(annotation=specialize(param.annotation, configs[name], f"Parameter {name!r}"))
                 if name in configs else param
                 for name, param in signature.parameters.items()
             ],
-            return_annotation=(specialize(signature.return_annotation, return_config, "Return value")
-                               if return_config is not None else signature.return_annotation),
+            return_annotation=return_annotation,
         )
         method._has_config_arguments = False
         method.__validate()

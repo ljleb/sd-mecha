@@ -2,23 +2,30 @@
 
 import re
 import warnings
-from copy import copy
 
 from .extensions import merge_methods
 
 
-_ANIMA_KOHYA_CONFIG_ID = "anima-diffusion_pipe_kohya_lora"
+_ANIMA_ADAPTER_CONFIG_ID = "anima-diffusion_pipe_lycoris_lora"
 _DEPRECATED_MODEL_CONFIG_IDS = {
     "anima-diffuser": "anima-diffusion_pipe",
-    "anima-diffuser_kohya_lora": _ANIMA_KOHYA_CONFIG_ID,
-    "anima-diffuser_kohya_lokr": _ANIMA_KOHYA_CONFIG_ID,
-    "anima-diffuser_kohya_loha": _ANIMA_KOHYA_CONFIG_ID,
+    "anima-diffuser_kohya_lora": _ANIMA_ADAPTER_CONFIG_ID,
+    "anima-diffuser_kohya_lokr": _ANIMA_ADAPTER_CONFIG_ID,
+    "anima-diffuser_kohya_loha": _ANIMA_ADAPTER_CONFIG_ID,
 }
 
 
+def _canonical_config(identifier: str) -> str:
+    if identifier in _DEPRECATED_MODEL_CONFIG_IDS:
+        return _DEPRECATED_MODEL_CONFIG_IDS[identifier]
+    if identifier.endswith("_kohya_lora"):
+        return identifier.removesuffix("_kohya_lora") + "_lycoris_lora"
+    return identifier
+
+
 def deprecated_model_config_alias(identifier: str) -> str | None:
-    replacement = _DEPRECATED_MODEL_CONFIG_IDS.get(identifier)
-    if replacement is None:
+    replacement = _canonical_config(identifier)
+    if replacement == identifier:
         return None
 
     warnings.warn(
@@ -37,10 +44,12 @@ def deserialize_merge_call(identifier, args, kwargs):
         recipe = _deserialize_legacy_merge_call(identifier, args, kwargs)
         if recipe is None:
             raise
-        replacement = recipe.merge_method.get_identifier()
+        method = getattr(recipe, "merge_method", None)
+        update = "Save the loaded recipe to update it."
+        if method is not None:
+            update = f"Save the loaded recipe to update it to {method.get_identifier()!r}."
         warnings.warn(
-            f"Recipe merge method {identifier!r} is deprecated and will be removed in sd-mecha 1.3.0. "
-            f"Save the loaded recipe to update it to {replacement!r}.",
+            f"Recipe merge method {identifier!r} is deprecated and will be removed in sd-mecha 1.3.0. {update}",
             FutureWarning,
             stacklevel=4,
         )
@@ -49,35 +58,47 @@ def deserialize_merge_call(identifier, args, kwargs):
 
 
 def _deserialize_legacy_merge_call(identifier, args, kwargs):
-    if match := re.fullmatch(r"convert_'([^']+)'_to_base", identifier):
-        config = _DEPRECATED_MODEL_CONFIG_IDS.get(match[1])
-        if config != _ANIMA_KOHYA_CONFIG_ID:
-            return None
+    if match := re.fullmatch(r"convert_'([^']+)'_to_'([^']+)'", identifier):
+        source, target = match.groups()
+        if source != target and (source.endswith("_kohya_lora") or target.endswith("_kohya_lora")):
+            if _canonical_config(source) == _canonical_config(target):
+                return _identity(*args, **kwargs)
 
-        method = merge_methods.resolve(f"convert_'{config}'_to_base")
+    if match := re.fullmatch(r"convert_'([^']+)'_to_base", identifier):
+        config = _canonical_config(match[1])
+        if config == match[1]:
+            return None
         if "lora" in kwargs and "lyco" not in kwargs:
             kwargs = dict(kwargs)
             kwargs["lyco"] = kwargs.pop("lora")
-        return method(*args, **kwargs)
+        return merge_methods.resolve(f"convert_'{config}'_to_base")(*args, **kwargs)
 
+    if match := re.fullmatch(r"apply_lycoris_(.+_kohya_lora)", identifier):
+        config = _canonical_config(match[1])
+        return merge_methods.resolve(f"apply_lycoris_{config}")(*args, **kwargs)
+
+    legacy_lokr = False
     if match := re.fullmatch(r"extract_(lora|lokr)_'([^']+)'", identifier):
         algorithm, config = match.groups()
-        method = merge_methods.resolve(f"extract_{algorithm}_{config}")
-    elif match := re.fullmatch(r"extract_(lycoris|kohya)_(lora|lokr)", identifier):
-        adapter_format, algorithm = match.groups()
-        method = copy(merge_methods.resolve(f"extract_{algorithm}"))
-        method.interface = copy(method.interface)
-        method.interface.candidates = [
-            (candidate, signature)
-            for candidate, signature in method.interface.candidates
-            if getattr(signature.return_annotation.data.model_config, "lycoris_identifier", None) == adapter_format
-        ]
+        method = merge_methods.resolve(f"extract_{algorithm}_{_canonical_config(config)}")
+        legacy_lokr = algorithm == "lokr"
+    elif match := re.fullmatch(r"extract_(?:lycoris|kohya)_(lora|lokr)", identifier):
+        algorithm = match[1]
+        legacy_lokr = algorithm == "lokr"
+        method = merge_methods.resolve(f"extract_{algorithm}")
+    elif match := re.fullmatch(r"(extract_.+)_kohya_lora", identifier):
+        try:
+            method = merge_methods.resolve(f"{match[1]}_lycoris_lora")
+        except KeyError:
+            return None
     else:
         return None
 
-    if algorithm == "lokr":
-        return _deserialize_legacy_lokr(method, *args, **kwargs)
-    return method(*args, **kwargs)
+    return _deserialize_legacy_lokr(method, *args, **kwargs) if legacy_lokr else method(*args, **kwargs)
+
+
+def _identity(adapter):
+    return adapter
 
 
 def _deserialize_legacy_lokr(method, base, kronecker_ratio=0.5):

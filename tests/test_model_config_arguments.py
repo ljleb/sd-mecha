@@ -4,7 +4,7 @@ from safetensors.torch import save_file
 from torch import Tensor
 
 import sd_mecha
-from sd_mecha import Parameter, Return, StateDict, merge_method, model_ref
+from sd_mecha import Parameter, ParameterInfo, Return, StateDict, merge_method, param_ref
 from sd_mecha.extensions import merge_methods, model_configs
 
 
@@ -57,8 +57,8 @@ def test_implicit_conversion_skips_incompatible_route(configs, tmp_path):
     @merge_method
     def ref_add(
         base: Parameter(Tensor, "weight"),
-        diff: Parameter(Tensor, "delta", model_ref("base"), allow_conversion=True),
-    ) -> Return(Tensor, "weight", model_ref("base")):
+        diff: Parameter(Tensor, "delta", param_ref("base").model_config, allow_conversion=True),
+    ) -> Return(Tensor, "weight", param_ref("base").model_config):
         return base + diff
 
     base = model_file(tmp_path, base_config, 3, infer=True)
@@ -88,7 +88,7 @@ def test_direct_match_beats_conversion_and_ambiguity_requires_explicit_route(con
     @merge_method(register=False)
     def add(
         base: Parameter(Tensor, "weight"),
-        diff: Parameter(Tensor, "delta", model_ref("base"), allow_conversion=True),
+        diff: Parameter(Tensor, "delta", param_ref("base").model_config, allow_conversion=True),
     ) -> Return(Tensor, "weight"):
         return base + diff
 
@@ -104,15 +104,18 @@ def test_reference_mapping_on_interface_uses_named_argument_and_converts_one_inp
     converter = register_converter("ref_convert_base", source_config, base_config, "weight", "weight")
     resolved = []
 
-    def working_config(config):
-        resolved.append(config.identifier)
+    def working_config(info: ParameterInfo):
+        assert info.merge_space == "weight"
+        resolved.append(info.model_config.identifier)
         return (base_config.identifier,)
 
     @merge_method(is_interface=True)
     def ref_apply(
-        base: Parameter(Tensor, "weight", model_ref("adapter").map(working_config), allow_conversion=True),
+        base: Parameter(
+            Tensor, "weight", param_ref("adapter").map(working_config), allow_conversion=True,
+        ),
         adapter: Parameter(Tensor, "weight"),
-    ) -> Return(Tensor, "weight", model_ref("base")):
+    ) -> Return(Tensor, "weight", param_ref("base").model_config):
         ...
 
     @merge_method(implements=ref_apply)
@@ -144,9 +147,9 @@ def test_reference_mapping_on_interface_uses_named_argument_and_converts_one_inp
 
 def test_registration_checks_reference_and_opt_in(configs):
     config = configs["base"]
-    with pytest.raises(TypeError, match=r"model_ref\('missing'\).*parameter"):
+    with pytest.raises(TypeError, match=r"param_ref\('missing'\).*parameter"):
         @merge_method(register=False)
-        def bad_reference(a: Parameter(Tensor, model_config=model_ref("missing"))) -> Return(Tensor):
+        def bad_reference(a: Parameter(Tensor, model_config=param_ref("missing").model_config)) -> Return(Tensor):
             return a
 
     with pytest.raises(TypeError, match="Only one parameter"):
@@ -158,15 +161,29 @@ def test_registration_checks_reference_and_opt_in(configs):
             return a + b
 
 
+@pytest.mark.parametrize("allow_conversion", (False, True))
+def test_parameter_cannot_reference_its_own_config(allow_conversion):
+    with pytest.raises(TypeError, match=r"Parameter 'a' cannot reference its own model config"):
+        @merge_method(register=False)
+        def self_reference(
+            a: Parameter(Tensor, model_config=param_ref("a").model_config, allow_conversion=allow_conversion),
+        ) -> Return(Tensor):
+            return a
+
+
 def test_same_config_conversion_obeys_shared_merge_space(configs, tmp_path):
     config = configs["base"]
     converter = register_converter("ref_same_config", config, config, "weight", "delta")
 
+    def output_config(info: ParameterInfo):
+        assert info.merge_spaces == {"delta"}
+        return (info.model_config,)
+
     @merge_method
     def ref_add_shared_space(
         base: Parameter(Tensor),
-        diff: Parameter(Tensor, model_config=model_ref("base"), allow_conversion=True),
-    ) -> Return(Tensor, model_config=model_ref("diff")):
+        diff: Parameter(Tensor, model_config=param_ref("base").model_config, allow_conversion=True),
+    ) -> Return(Tensor, model_config=param_ref("diff").map(output_config)):
         return base + diff
 
     base = model_file(tmp_path, config, 3, "delta")
@@ -187,7 +204,7 @@ def test_model_reference_requires_opt_in_before_converting(configs, tmp_path):
     @merge_method(register=False)
     def add(
         base: Parameter(Tensor, "weight"),
-        diff: Parameter(Tensor, "delta", model_ref("base")),
+        diff: Parameter(Tensor, "delta", param_ref("base").model_config),
     ) -> Return(Tensor, "weight"):
         return base + diff
 
