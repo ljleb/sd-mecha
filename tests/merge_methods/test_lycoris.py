@@ -367,6 +367,11 @@ def test_truncate_kronecker_dimensions_and_bias_passthrough(select_dims):
     torch.testing.assert_close(result[BIAS], bias)
 
 
+def test_truncate_kronecker_requires_a_dimension_matrix():
+    with pytest.raises(ValueError, match="expected 2x2 preference"):
+        truncate_kronecker.__wrapped__(torch.eye(4), torch.tensor(0.5))
+
+
 def test_lokr_recipe_format_version(tmp_path):
     checkpoint = tmp_path / "delta.safetensors"
     save_file({WEIGHT: torch.ones((4, 4, 1, 1))}, checkpoint)

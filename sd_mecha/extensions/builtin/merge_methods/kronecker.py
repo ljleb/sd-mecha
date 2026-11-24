@@ -52,9 +52,6 @@ def extract_lokr(
         raise ValueError(f"LoKr extraction requires a nonempty tensor with at least two dimensions, got {tuple(a.shape)}")
     if dims is None:
         dims = a.new_ones((2, 2), dtype=torch.int64)
-    elif dims.ndim == 0:
-        # Old recipes supplied the factor ratio as the second positional argument.
-        dims = lokr_dims.__wrapped__(a, dims.item())
     factor_dims = solve_lokr_dims(shape_original, dims.to(a.device))
     svd_options = (use_approximate_basis, approximate_basis_iters, approximate_basis_seed)
 

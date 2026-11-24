@@ -85,6 +85,14 @@ def truncate_rank(
     approximate_basis_seed: Parameter(int) = None,
     **kwargs,
 ) -> Return(Tensor, merge_space="delta"):
+    """Approximate a weight difference using at most the requested rank.
+
+    When the cache contains enough singular components, a lower rank reuses their prefix.
+    Exact factors can serve any basis request. Approximate factors require matching iteration
+    and seed settings. Changing `use_approximate_basis` alone does not invalidate the cache.
+    The cache stores the factors on the CPU in float16 to limit memory use. Reuse casts them
+    back to the input dtype and device.
+    """
     if a.dim() < 2:
         return a
 
@@ -110,11 +118,11 @@ def truncate_rank(
 
 
 def _truncated_svd(a: Tensor, rank: int, approximate: bool, iters: int, seed: Optional[int], cache: Optional[dict]):
-    options = (approximate, iters, seed)
     if (
         cache is not None and
         "s" in cache and cache["s"].numel() >= rank and
-        cache.get("svd_options") == options
+        cache.get("iters", iters) == iters and
+        cache.get("seed", seed) == seed
     ):
         return cache["u"][..., :rank].to(a), cache["s"][..., :rank].to(a), cache["vh"][..., :rank, :].to(a)
 
@@ -127,7 +135,12 @@ def _truncated_svd(a: Tensor, rank: int, approximate: bool, iters: int, seed: Op
         cache["u"] = u.to(device="cpu", dtype=torch.float16)
         cache["s"] = s.to(device="cpu", dtype=torch.float16)
         cache["vh"] = vh.to(device="cpu", dtype=torch.float16)
-        cache["svd_options"] = options
+        if approximate:
+            cache["iters"] = iters
+            cache["seed"] = seed
+        else:
+            cache.pop("iters", None)
+            cache.pop("seed", None)
 
     return u[..., :rank], s[..., :rank], vh[..., :rank, :]
 
