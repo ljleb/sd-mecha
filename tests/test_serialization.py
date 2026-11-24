@@ -5,6 +5,7 @@ import torch
 from safetensors.torch import save_file
 
 import sd_mecha
+from sd_mecha.extensions import merge_methods
 
 
 def test_rotate_recipe_with_default_legacy_alignment_is_migrated():
@@ -61,10 +62,13 @@ def test_model_path_round_trips_through_recipe_file(tmp_path, filename):
         ("anima-diffuser_kohya_lora", "anima-diffusion_pipe_lycoris_lora"),
         ("anima-diffuser_kohya_lokr", "anima-diffusion_pipe_lycoris_lora"),
         ("anima-diffuser_kohya_loha", "anima-diffusion_pipe_lycoris_lora"),
+        ("moss_image-diffusers", "moss_image-openmoss"),
+        ("moss_image-diffusers_lycoris_lora", "moss_image-openmoss_lycoris_lora"),
+        ("moss_image-diffusers_kohya_lora", "moss_image-openmoss_lycoris_lora"),
     ],
 )
-def test_deprecated_anima_config_alias_round_trips_as_canonical(tmp_path, old_config, new_config):
-    checkpoint = tmp_path / "anima.safetensors"
+def test_deprecated_config_alias_round_trips_as_canonical(tmp_path, old_config, new_config):
+    checkpoint = tmp_path / "model.safetensors"
     canonical = sd_mecha.serialize(sd_mecha.model(checkpoint, new_config))
     legacy = canonical.replace(f'model_config="{new_config}"', f'model_config="{old_config}"')
 
@@ -73,6 +77,39 @@ def test_deprecated_anima_config_alias_round_trips_as_canonical(tmp_path, old_co
 
     assert restored.model_config.identifier == new_config
     assert sd_mecha.serialize(restored) == canonical
+
+
+@pytest.mark.parametrize(
+    "method, sources, extra_args",
+    [
+        ("convert_moss_image_openmoss_to_comfyui", (("openmoss", "weight"),), ()),
+        ("convert_moss_image_comfyui_to_openmoss", (("comfyui", "weight"),), ()),
+        ("convert_moss_image_blocks_to_openmoss", (("blocks", "param"),), ()),
+        ("convert_'moss_image-openmoss_lycoris_lora'_to_base", (("openmoss_lycoris_lora", "weight"),), ()),
+        ("apply_lycoris_moss_image-openmoss_lycoris_lora", (("openmoss", "weight"), ("openmoss_lycoris_lora", "weight")), ()),
+        ("extract_lora_moss_image-openmoss_lycoris_lora", (("openmoss", "delta"),), (1, False, 1, 0)),
+        ("extract_lokr_moss_image-openmoss_lycoris_lora", (("openmoss", "delta"),), ()),
+        ("extract_norm_moss_image-openmoss_lycoris_lora", (("openmoss", "delta"),), ()),
+    ],
+)
+def test_deprecated_moss_method_round_trips_as_canonical(tmp_path, method, sources, extra_args):
+    inputs = [
+        sd_mecha.model(tmp_path / f"{layout}.safetensors", f"moss_image-{layout}", merge_space)
+        for layout, merge_space in sources
+    ]
+    if method.startswith("extract_lokr_"):
+        extra_args = (merge_methods.resolve("lokr_dims")(inputs[0]),)
+    recipe = merge_methods.resolve(method)(*inputs, *extra_args)
+    canonical = sd_mecha.serialize(recipe, finalize=False)
+    legacy_method = method.replace("openmoss", "diffusers")
+    legacy = canonical.replace(f'merge "{method}"', f'merge "{legacy_method}"')
+
+    with pytest.warns(FutureWarning, match=r"Recipe merge method .* will be removed in sd-mecha 1\.3\.0") as caught:
+        restored = sd_mecha.deserialize(legacy)
+
+    assert legacy_method in str(caught[0].message)
+    assert method in str(caught[0].message)
+    assert sd_mecha.serialize(restored, finalize=False) == canonical
 
 
 @pytest.mark.parametrize("algorithm", ["lora", "lokr", "loha"])

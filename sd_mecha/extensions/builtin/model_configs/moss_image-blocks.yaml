@@ -1,0 +1,134 @@
+# MOSS-Image block weights for both the OpenMOSS and ComfyUI checkpoint layouts.
+identifier: moss_image-blocks
+components:
+  blocks:
+    # Diffuser input projection and shared conditioning.
+    # video_embedder, time_embedding, rope, and shared_block_modulation.
+    DIFFUSER_IN: {shape: [], dtype: float32}
+    # layers.<index>. Each block processes image and text tokens together.
+    DIFFUSER00: {shape: [], dtype: float32}
+    DIFFUSER01: {shape: [], dtype: float32}
+    DIFFUSER02: {shape: [], dtype: float32}
+    DIFFUSER03: {shape: [], dtype: float32}
+    DIFFUSER04: {shape: [], dtype: float32}
+    DIFFUSER05: {shape: [], dtype: float32}
+    DIFFUSER06: {shape: [], dtype: float32}
+    DIFFUSER07: {shape: [], dtype: float32}
+    DIFFUSER08: {shape: [], dtype: float32}
+    DIFFUSER09: {shape: [], dtype: float32}
+    DIFFUSER10: {shape: [], dtype: float32}
+    DIFFUSER11: {shape: [], dtype: float32}
+    DIFFUSER12: {shape: [], dtype: float32}
+    DIFFUSER13: {shape: [], dtype: float32}
+    DIFFUSER14: {shape: [], dtype: float32}
+    DIFFUSER15: {shape: [], dtype: float32}
+    DIFFUSER16: {shape: [], dtype: float32}
+    DIFFUSER17: {shape: [], dtype: float32}
+    DIFFUSER18: {shape: [], dtype: float32}
+    DIFFUSER19: {shape: [], dtype: float32}
+    DIFFUSER20: {shape: [], dtype: float32}
+    DIFFUSER21: {shape: [], dtype: float32}
+    DIFFUSER22: {shape: [], dtype: float32}
+    DIFFUSER23: {shape: [], dtype: float32}
+    DIFFUSER24: {shape: [], dtype: float32}
+    DIFFUSER25: {shape: [], dtype: float32}
+    DIFFUSER26: {shape: [], dtype: float32}
+    DIFFUSER27: {shape: [], dtype: float32}
+    DIFFUSER28: {shape: [], dtype: float32}
+    DIFFUSER29: {shape: [], dtype: float32}
+    DIFFUSER30: {shape: [], dtype: float32}
+    DIFFUSER31: {shape: [], dtype: float32}
+    DIFFUSER32: {shape: [], dtype: float32}
+    DIFFUSER33: {shape: [], dtype: float32}
+    DIFFUSER34: {shape: [], dtype: float32}
+    DIFFUSER35: {shape: [], dtype: float32}
+    DIFFUSER36: {shape: [], dtype: float32}
+    DIFFUSER37: {shape: [], dtype: float32}
+    DIFFUSER38: {shape: [], dtype: float32}
+    DIFFUSER39: {shape: [], dtype: float32}
+    DIFFUSER40: {shape: [], dtype: float32}
+    DIFFUSER41: {shape: [], dtype: float32}
+    # Diffuser latent output head. video_head_modulation, final_norm_video, final_linear_video.
+    DIFFUSER_OUT: {shape: [], dtype: float32}
+
+    # Diffuser text embedder. Projects Qwen features and refines them before the joint blocks.
+    # text_embedder.proj and text_embedder.blocks.<index>.
+    TEXT_EMBEDDER_IN: {shape: [], dtype: float32}
+    TEXT_EMBEDDER00: {shape: [], dtype: float32}
+    TEXT_EMBEDDER01: {shape: [], dtype: float32}
+
+    # Optional Qwen3.5-9B language model. Token embeddings, model.language_model.layers.<index>,
+    # and the final language norm and lm_head.
+    QWEN_TEXT_IN: {shape: [], dtype: float32}
+    QWEN_TEXT00: {shape: [], dtype: float32}
+    QWEN_TEXT01: {shape: [], dtype: float32}
+    QWEN_TEXT02: {shape: [], dtype: float32}
+    QWEN_TEXT03: {shape: [], dtype: float32}
+    QWEN_TEXT04: {shape: [], dtype: float32}
+    QWEN_TEXT05: {shape: [], dtype: float32}
+    QWEN_TEXT06: {shape: [], dtype: float32}
+    QWEN_TEXT07: {shape: [], dtype: float32}
+    QWEN_TEXT08: {shape: [], dtype: float32}
+    QWEN_TEXT09: {shape: [], dtype: float32}
+    QWEN_TEXT10: {shape: [], dtype: float32}
+    QWEN_TEXT11: {shape: [], dtype: float32}
+    QWEN_TEXT12: {shape: [], dtype: float32}
+    QWEN_TEXT13: {shape: [], dtype: float32}
+    QWEN_TEXT14: {shape: [], dtype: float32}
+    QWEN_TEXT15: {shape: [], dtype: float32}
+    QWEN_TEXT16: {shape: [], dtype: float32}
+    QWEN_TEXT17: {shape: [], dtype: float32}
+    QWEN_TEXT18: {shape: [], dtype: float32}
+    QWEN_TEXT19: {shape: [], dtype: float32}
+    QWEN_TEXT20: {shape: [], dtype: float32}
+    QWEN_TEXT21: {shape: [], dtype: float32}
+    QWEN_TEXT22: {shape: [], dtype: float32}
+    QWEN_TEXT23: {shape: [], dtype: float32}
+    QWEN_TEXT24: {shape: [], dtype: float32}
+    QWEN_TEXT25: {shape: [], dtype: float32}
+    QWEN_TEXT26: {shape: [], dtype: float32}
+    QWEN_TEXT27: {shape: [], dtype: float32}
+    QWEN_TEXT28: {shape: [], dtype: float32}
+    QWEN_TEXT29: {shape: [], dtype: float32}
+    QWEN_TEXT30: {shape: [], dtype: float32}
+    QWEN_TEXT31: {shape: [], dtype: float32}
+    QWEN_TEXT_OUT: {shape: [], dtype: float32}
+
+    # Optional Qwen3.5-9B vision encoder under model.visual. Converts image patches into Qwen tokens.
+    # Patch and position embeddings, blocks.<index>, then the merger that projects to Qwen's text width.
+    QWEN_VISION_IN: {shape: [], dtype: float32}
+    QWEN_VISION00: {shape: [], dtype: float32}
+    QWEN_VISION01: {shape: [], dtype: float32}
+    QWEN_VISION02: {shape: [], dtype: float32}
+    QWEN_VISION03: {shape: [], dtype: float32}
+    QWEN_VISION04: {shape: [], dtype: float32}
+    QWEN_VISION05: {shape: [], dtype: float32}
+    QWEN_VISION06: {shape: [], dtype: float32}
+    QWEN_VISION07: {shape: [], dtype: float32}
+    QWEN_VISION08: {shape: [], dtype: float32}
+    QWEN_VISION09: {shape: [], dtype: float32}
+    QWEN_VISION10: {shape: [], dtype: float32}
+    QWEN_VISION11: {shape: [], dtype: float32}
+    QWEN_VISION12: {shape: [], dtype: float32}
+    QWEN_VISION13: {shape: [], dtype: float32}
+    QWEN_VISION14: {shape: [], dtype: float32}
+    QWEN_VISION15: {shape: [], dtype: float32}
+    QWEN_VISION16: {shape: [], dtype: float32}
+    QWEN_VISION17: {shape: [], dtype: float32}
+    QWEN_VISION18: {shape: [], dtype: float32}
+    QWEN_VISION19: {shape: [], dtype: float32}
+    QWEN_VISION20: {shape: [], dtype: float32}
+    QWEN_VISION21: {shape: [], dtype: float32}
+    QWEN_VISION22: {shape: [], dtype: float32}
+    QWEN_VISION23: {shape: [], dtype: float32}
+    QWEN_VISION24: {shape: [], dtype: float32}
+    QWEN_VISION25: {shape: [], dtype: float32}
+    QWEN_VISION26: {shape: [], dtype: float32}
+    QWEN_VISION_OUT: {shape: [], dtype: float32}
+
+    # Qwen's multi-token prediction module. All mtp.* tensors share one weight.
+    QWEN_MTP: {shape: [], dtype: float32}
+
+    # Optional FLUX.2 VAE. One weight covers encoder.*, decoder.*, quant_conv.*,
+    # post_quant_conv.*, and the latent normalization buffers in bn.*.
+    VAE: {shape: [], dtype: float32}

@@ -118,3 +118,7 @@ sd-mecha doesn't have this problem as it saves keys as soon as it can:
 ![image of sd-mecha merge graph](/media/did-you-see-something.PNG)
 
 This allows to merge a very large number of models simultaneously on low-end hardware.
+
+## Special mentions
+
+Thanks to blue-pen5805 for their work that helped bring Anima support to sd-mecha. [Original comfy-mecha extension](https://github.com/blue-pen5805/comfy-mecha-extensions-anima)

@@ -260,7 +260,7 @@ def test_anima_qwen_lora_resolves_dotted_and_flattened_stems(tmp_path, stem, up,
 
 
 @pytest.mark.parametrize("entry_point", ["apply_lycoris", "add_difference", "convert"])
-def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path, entry_point):
+def test_moss_image_lora_applies_to_comfyui_qkv_via_openmoss(tmp_path, entry_point):
     checkpoint = tmp_path / "moss-image-edit-lora.safetensors"
     save_file({
         "layers.0.proj.q.lora_A": torch.ones((1, 3072)),
@@ -276,7 +276,7 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_diffusers(tmp_path, entry_po
     adapter = sd_mecha.model(checkpoint)
     if entry_point == "apply_lycoris":
         applied = sd_mecha.apply_lycoris(base, adapter)
-        assert applied.bound_args.arguments["base"].merge_method.identifier == "convert_moss_image_comfyui_to_diffusers"
+        assert applied.bound_args.arguments["base"].merge_method.identifier == "convert_moss_image_comfyui_to_openmoss"
         recipe = sd_mecha.convert(applied, base)
     elif entry_point == "add_difference":
         recipe = sd_mecha.add_difference(base, adapter)

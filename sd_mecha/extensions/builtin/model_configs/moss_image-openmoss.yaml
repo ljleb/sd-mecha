@@ -2,7 +2,7 @@
 # https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base/tree/5f40f07/transformer
 # Optional Qwen3.5 text encoder and FLUX.2 small VAE from the Comfy-Org package.
 # https://huggingface.co/Comfy-Org/MOSS-Image/tree/2929efe
-identifier: moss_image-diffusers
+identifier: moss_image-openmoss
 components:
   diffuser:
     final_linear_video.weight: {shape: [128, 3072], dtype: bfloat16, aliases: [diffusion_model.final_linear_video.weight, model.diffusion_model.final_linear_video.weight, unet.final_linear_video.weight, transformer.final_linear_video.weight]}
