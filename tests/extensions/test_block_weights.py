@@ -41,7 +41,6 @@ def test_moss_image_block_weights(layout, projections):
     merge_with_block_weights(config, "moss_image-blocks", {
         **{f"layers.0.proj.{projection}.weight": "DIFFUSER00" for projection in projections},
         "layers.41.norm1.weight": "DIFFUSER41",
-        "rope.bands": "DIFFUSER_IN",
         "shared_block_modulation.weight": "DIFFUSER_IN",
         "final_linear_video.weight": "DIFFUSER_OUT",
         "video_head_modulation.weight": "DIFFUSER_OUT",

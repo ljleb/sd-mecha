@@ -90,33 +90,60 @@ def test_merge_uses_missing_key_handler_for_key_absent_from_the_plan():
 
 
 @pytest.mark.parametrize("config_id", ["sdxl-sgm", "sdxl-kohya", "sdxl-kohya_but_diffusers"])
-def test_merge_fills_missing_sdxl_final_clip_layers(config_id):
+def test_merge_fills_missing_sdxl_final_clip_l_layer(config_id):
     if config_id == "sdxl-sgm":
-        clip_l = "conditioner.embedders.0.transformer.text_model.encoder.layers"
-        clip_g = "conditioner.embedders.1.model.transformer.resblocks.31."
-        clip_g_key_count = 12
+        clip_l = "conditioner.embedders.0.transformer.text_model"
+        clip_g_final_layer = "conditioner.embedders.1.model.transformer.resblocks.31."
+        clip_g_existing = f"{clip_g_final_layer}ln_1.bias"
     else:
-        clip_l = "te1.text_model.encoder.layers"
-        clip_g = "te2.text_model.encoder.layers.31."
-        clip_g_key_count = 16
+        clip_l = "te1.text_model"
+        clip_g_final_layer = "te2.text_model.encoder.layers.31."
+        clip_g_existing = f"{clip_g_final_layer}layer_norm1.bias"
 
     config = model_configs.resolve(config_id)
     keys = config.keys()
-    existing = f"{clip_l}.11.layer_norm1.bias"
-    recipe = sd_mecha.model({existing: torch.ones(keys[existing].shape)}, config)
+    clip_l_final_layer = f"{clip_l}.encoder.layers.11."
+    clip_l_existing = f"{clip_l_final_layer}layer_norm1.bias"
+    positions = f"{clip_l}.embeddings.position_ids"
+    recipe = sd_mecha.model({
+        clip_l_existing: torch.ones(keys[clip_l_existing].shape),
+        clip_g_existing: torch.ones(keys[clip_g_existing].shape),
+        positions: torch.full((1, 77), -1, dtype=torch.int64),
+    }, config)
     output = sd_mecha.merge(recipe, threads=0, output_dtype=torch.float16)
 
-    for prefix, key_count in ((f"{clip_l}.11.", 16), (clip_g, clip_g_key_count)):
-        layer_keys = [key for key in keys if key.startswith(prefix)]
-        assert len(layer_keys) == key_count
-        for key in layer_keys:
-            assert output[key].shape == keys[key].shape
-            assert output[key].dtype == torch.float16
-            if key != existing:
-                assert torch.count_nonzero(output[key]).item() == 0
+    layer_keys = [key for key in keys if key.startswith(clip_l_final_layer)]
+    assert len(layer_keys) == 16
+    for key in layer_keys:
+        expected = torch.full(keys[key].shape, float(key == clip_l_existing), dtype=torch.float16)
+        torch.testing.assert_close(output[key], expected)
 
-    torch.testing.assert_close(output[existing], torch.ones(keys[existing].shape, dtype=torch.float16))
-    assert f"{clip_l}.10.layer_norm1.bias" not in output
+    assert {key for key in output if key.startswith(clip_g_final_layer)} == {clip_g_existing}
+    torch.testing.assert_close(output[clip_g_existing], torch.ones(keys[clip_g_existing].shape, dtype=torch.float16))
+    torch.testing.assert_close(output[positions], torch.arange(77, dtype=torch.int64)[None, :])
+    assert f"{clip_l}.encoder.layers.10.layer_norm1.bias" not in output
+
+
+def test_merge_regenerates_sd1_position_ids_from_aliased_input():
+    alias = "cond_stage_model.transformer.embeddings.position_ids"
+    key = "cond_stage_model.transformer.text_model.embeddings.position_ids"
+    recipe = sd_mecha.model({alias: torch.full((1, 77), -1, dtype=torch.int64)}, "sd1-ldm")
+    output = sd_mecha.merge(recipe, threads=0, output_dtype=torch.float16)
+
+    torch.testing.assert_close(output[key], torch.arange(77, dtype=torch.int64)[None, :])
+    assert alias not in output
+
+
+@pytest.mark.parametrize("config_id", ["moss_image-openmoss", "moss_image-comfyui"])
+def test_merge_regenerates_moss_image_rope_bands_in_float32(config_id):
+    key = "rope.bands"
+    alias = "transformer.rope.bands"
+    recipe = sd_mecha.model({alias: torch.zeros(16)}, config_id)
+    output = sd_mecha.merge(recipe, threads=0, output_dtype=torch.float16)
+
+    expected = 1 / (10000.0 ** (torch.arange(16, dtype=torch.float32) / 16))
+    torch.testing.assert_close(output[key], expected, atol=0, rtol=0)
+    assert alias not in output
 
 
 @pytest.mark.parametrize("include_positions", [False, True])

@@ -252,7 +252,7 @@ components:
     first_stage_model.quant_conv.weight: {shape: [8, 8, 1, 1], dtype: float32}
   clip_l:
     te1.text_model.embeddings.position_embedding.weight: {shape: [77, 768], dtype: float32}
-    te1.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64, optional: true}
+    te1.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64, generated: true}
     te1.text_model.embeddings.token_embedding.weight: {shape: [49408, 768], dtype: float32}
     te1.text_model.encoder.layers.0.layer_norm1.bias: {shape: [768], dtype: float32}
     te1.text_model.encoder.layers.0.layer_norm1.weight: {shape: [768], dtype: float32}

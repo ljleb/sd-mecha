@@ -1,8 +1,9 @@
 identifier: sd1-ldm
+missing_key_handler: sd_mecha.extensions.builtin.model_configs.clip_missing_keys.clip_position_ids
 components:
   clip_l:
     cond_stage_model.transformer.text_model.embeddings.position_embedding.weight: {shape: [77, 768], dtype: float32, aliases: [cond_stage_model.transformer.embeddings.position_embedding.weight]}
-    cond_stage_model.transformer.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64, aliases: [cond_stage_model.transformer.embeddings.position_ids], optional: true}
+    cond_stage_model.transformer.text_model.embeddings.position_ids: {shape: [1, 77], dtype: int64, aliases: [cond_stage_model.transformer.embeddings.position_ids], generated: true}
     cond_stage_model.transformer.text_model.embeddings.token_embedding.weight: {shape: [49408, 768], dtype: float32, aliases: [cond_stage_model.transformer.embeddings.token_embedding.weight]}
     cond_stage_model.transformer.text_model.encoder.layers.0.layer_norm1.bias: {shape: [768], dtype: float32, aliases: [cond_stage_model.transformer.encoder.layers.0.layer_norm1.bias]}
     cond_stage_model.transformer.text_model.encoder.layers.0.layer_norm1.weight: {shape: [768], dtype: float32, aliases: [cond_stage_model.transformer.encoder.layers.0.layer_norm1.weight]}

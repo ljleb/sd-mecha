@@ -36,7 +36,11 @@ def _build_comfyui_config():
             source_keys[key] = sources
         components[component_name] = model_configs.ModelComponent(comfyui_keys)
 
-    return model_configs.ModelConfigImpl("moss_image-comfyui", components), source_keys
+    return model_configs.ModelConfigImpl(
+        "moss_image-comfyui",
+        components,
+        missing_key_handler="sd_mecha.extensions.builtin.model_configs.moss_image_missing_keys.moss_image_missing_key_handler",
+    ), source_keys
 
 
 # The ComfyUI checkpoint packs the OpenMOSS projections along the output dimension in Q, K, V order.

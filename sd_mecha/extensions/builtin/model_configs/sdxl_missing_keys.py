@@ -1,27 +1,22 @@
 import torch
 
+from .clip_missing_keys import clip_position_ids
+
 
 def sdxl_sgm_missing_key_handler(config, key, device, dtype):
-    if key == "conditioner.embedders.0.transformer.text_model.embeddings.position_ids":
-        meta = config.keys().get(key)
-        if meta is not None:
-            return torch.arange(meta.shape[1], device=device, dtype=meta.dtype).reshape(meta.shape)
-
-    return _zero_missing_last_layer(config, key, device, dtype, (
-        "conditioner.embedders.0.transformer.text_model.encoder.layers.11.",
-        "conditioner.embedders.1.model.transformer.resblocks.31.",
-    ))
+    return _sdxl_missing_key_handler(
+        config, key, device, dtype, "conditioner.embedders.0.transformer.text_model",
+    )
 
 
 def sdxl_kohya_missing_key_handler(config, key, device, dtype):
-    return _zero_missing_last_layer(config, key, device, dtype, (
-        "te1.text_model.encoder.layers.11.",
-        "te2.text_model.encoder.layers.31.",
-    ))
+    return _sdxl_missing_key_handler(config, key, device, dtype, "te1.text_model")
 
 
-def _zero_missing_last_layer(config, key, device, dtype, prefixes):
-    if key.startswith(prefixes):
+def _sdxl_missing_key_handler(config, key, device, dtype, clip_l_prefix):
+    if key == f"{clip_l_prefix}.embeddings.position_ids":
+        return clip_position_ids(config, key, device, dtype)
+    if key.startswith(f"{clip_l_prefix}.encoder.layers.11."):
         meta = config.keys().get(key)
         if meta is not None:
             return torch.zeros(meta.shape, device=device, dtype=dtype or meta.dtype)

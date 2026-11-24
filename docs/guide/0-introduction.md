@@ -37,7 +37,7 @@ There are 2 public modules that user code can import and use:
 
 A model config describes the keys and tensor shapes of a state dict. It can also define aliases and optional keys. A component groups related keys, for example the `vae` in an SDXL checkpoint.
 
-A model config can mark a key as `generated: true`. sd-mecha discards its input values and asks the config's missing-key handler to generate it for the output using the configured dtype. At most one of `generated` and `optional` can be `true` for a key. The handler can also supply other missing keys. For example, SDXL generates its position IDs and can fill missing final CLIP layers.
+A model config can mark a key as `generated: true`. sd-mecha discards its input values and asks the config's missing-key handler to generate it for the output using the configured dtype. At most one of `generated` and `optional` can be `true` for a key. The handler can also supply other missing keys. For example, SDXL generates its CLIP-L position IDs and fills missing tensors in the final CLIP-L block with zeros.
 
 sd-mecha infers the model config from the input keys by default. If several key formats share those keys, pass a config explicitly. This is common with small adapters.
 

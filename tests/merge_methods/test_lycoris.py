@@ -418,8 +418,7 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_openmoss(tmp_path, entry_poi
     }, checkpoint)
     key = "layers.0.proj.qkv.weight"
     qkv = torch.arange(1.0, 4.0).repeat_interleave(3072).unsqueeze(1).expand(-1, 3072)
-    rope = torch.arange(16.0)
-    base = sd_mecha.model({key: qkv, "rope.bands": rope}, "moss_image-comfyui")
+    base = sd_mecha.model({key: qkv}, "moss_image-comfyui")
 
     adapter = sd_mecha.model(checkpoint)
     if entry_point == "apply_lycoris":
@@ -438,7 +437,8 @@ def test_moss_image_lora_applies_to_comfyui_qkv_via_openmoss(tmp_path, entry_poi
     for projection, expected in zip(result[key].chunk(3), (11.0, 2.0, 23.0), strict=True):
         sample = projection[:, :4]
         torch.testing.assert_close(sample, torch.full_like(sample, expected))
-    torch.testing.assert_close(result["rope.bands"], rope)
+    rope = 1 / (10000.0 ** (torch.arange(16, dtype=torch.float32) / 16))
+    torch.testing.assert_close(result["rope.bands"], rope, atol=0, rtol=0)
 
 
 @pytest.mark.parametrize("config", ["sdxl-kohya", "sdxl-kohya_but_diffusers"])
