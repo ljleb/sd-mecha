@@ -10,10 +10,12 @@ import torch
 import typing
 import textwrap
 import ast
+from copy import copy
 from sd_mecha.recipe_nodes import ClosedModelRecipeNode, RecipeNode, MergeRecipeNode, LiteralRecipeNode, NonDictLiteralValue, RecipeNodeOrValue, PythonLiteralValue
 from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
+from ._model_config_arguments import ModelConfigRef, model_ref, resolve_config_arguments, validate_config_arguments
 from types import MappingProxyType, SimpleNamespace
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Sequence
 from ..keys_map import Clause, KeyMapBuilder, KeyMap, KeyRelation, RealizedKeyRelation
@@ -42,7 +44,8 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
 class ParameterData:
     interface: type | TypeVar
     merge_space: Optional[MergeSpace | AnyMergeSpace]
-    model_config: Optional[ModelConfig]
+    model_config: Optional[ModelConfig | ModelConfigRef]
+    allow_conversion: bool = False
 
 
 @dataclasses.dataclass
@@ -53,25 +56,33 @@ class ParameterType:
 def Parameter(
     annotation: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
-    model_config: Optional[ModelConfig | str] = None,
+    model_config: Optional[ModelConfig | ModelConfigRef | str] = None,
+    *,
+    allow_conversion: bool = False,
 ) -> type[Any]:
     """
-    Describe a parameter to a merge method with its type, optional merge space, and optional model config.
+    Describe the value, merge space, and model config that a merge method accepts.
 
-    `Parameter` is used in function type hints to specify how `@merge_method` should handle each
-    argument. For example, `Parameter(Tensor, "weight")` means "this argument is a tensor
-    in weight space."
+    Use Parameter in the signature of a function or class decorated with @merge_method.
+    For example, Parameter(Tensor, "weight") accepts a tensor in weight space.
 
     Args:
         annotation (type):
-            The Python or Torch type of this parameter.
-        merge_space (str or Iterable[str], optional):
-            Which merge space(s) are valid for this parameter (e.g., "weight", "delta").
-        model_config (str or ModelConfig, optional):
-            A specific model config or config identifier if it must match a certain architecture.
+            The Python or Torch type passed to the method for each output key. Use Tensor
+            for a single tensor or StateDict[Tensor] to read the input's mapped keys by name.
+        merge_space (str, MergeSpace, iterable or MergeSpaceSymbol, optional):
+            The allowed merge space or spaces. For example, "weight" selects checkpoint
+            weights and "delta" selects weight differences. If omitted, use the method's default.
+        model_config (ModelConfig, ModelConfigRef or str, optional):
+            The required model config or its registered identifier. Use model_ref() to take
+            the config from another argument, or model_ref().map() to derive accepted configs.
+        allow_conversion (bool):
+            If True, use a direct match first, then search for a unique shortest route to the
+            required config and merge space. A route can change the input's merge space.
+            When True, model_config is required. At most one parameter per method can enable this.
 
     Returns:
-        A special type annotation object used by `@merge_method` to interpret function arguments.
+        A type annotation that @merge_method uses to build the recipe and plan its input keys.
     """
     if type(None) in (typing.get_args(annotation) or ()):
         annotation = typing.get_args(annotation)[0]
@@ -97,7 +108,7 @@ def Parameter(
         raise ValueError("merge methods cannot convert 'structural' model configs")
 
     return type(Parameter.__name__, (ParameterType,), {
-        "data": ParameterData(annotation, merge_space, model_config)
+        "data": ParameterData(annotation, merge_space, model_config, allow_conversion)
     })
 
 
@@ -109,7 +120,7 @@ class ReturnType:
 def Return(
     annotation: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
     merge_space: Optional[MergeSpace | str | MergeSpaceSymbol] = None,
-    model_config: Optional[ModelConfig | str] = None,
+    model_config: Optional[ModelConfig | ModelConfigRef | str] = None,
 ) -> type[Any]:
     """
     Describe the return type of a merge method, optionally including its merge space and model config.
@@ -118,9 +129,10 @@ def Return(
         annotation (type):
             The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
         merge_space (MergeSpace, str or MergeSpaceSymbol, optional):
-            The single merge space valid for the return, or a symbol that depends on the input spaces.
-        model_config (ModelConfig or str, optional):
-            The model config that the returned tensor or dictionary should belong to.
+            The output merge space. Use a shared symbol to tie the output space to an input.
+        model_config (ModelConfig, ModelConfigRef or str, optional):
+            The output model config or its registered identifier. A model_ref() must resolve
+            to exactly one config. If the referenced argument converts, use its converted config.
 
     Returns:
         A type annotation object used by `@merge_method` for the return signature.
@@ -222,6 +234,7 @@ class MergeMethod:
         self.has_varkwargs = any(p.kind == p.VAR_KEYWORD for p in self.__f_signature.parameters.values())
         self.reuse_outputs = reuse_outputs
         self.cache_factory = cache_factory
+        self._has_config_arguments = validate_config_arguments(self.__f_signature)
 
         self.__validate()
 
@@ -380,10 +393,58 @@ class MergeMethod:
             for k, arg in bound_args.kwargs.items()
         }
 
+        bound_args = self.__f_signature.bind(*args, **kwargs)
+        if self._has_config_arguments:
+            names = self.get_param_names()
+            input_spaces = self.get_input_merge_spaces()
+            spaces = dict(zip(names.args, input_spaces.args)) | input_spaces.kwargs
+            if names.has_varargs():
+                spaces[names.vararg] = input_spaces.vararg
+            arguments, configs, return_config = resolve_config_arguments(self.__f_signature, bound_args, spaces)
+            bound_args = inspect.BoundArguments(self.__f_signature, arguments)
+            if self.interface is not None:
+                return self.interface._dispatch(bound_args.args, bound_args.kwargs, configs, return_config)
+            method = self._with_model_configs(configs, return_config)
+            bound_args = method.__f_signature.bind(*bound_args.args, **bound_args.kwargs)
+            return MergeRecipeNode(method, bound_args)
+
         if self.interface is not None:
             return self.interface.dispatch(*args, **kwargs)
 
-        return MergeRecipeNode(self, self.__f_signature.bind(*args, **kwargs))
+        return MergeRecipeNode(self, bound_args)
+
+    def _with_model_configs(self, configs, return_config):
+        """Copy the method with concrete model configs for one recipe call.
+
+        Args:
+            configs: The resolved input configs, keyed by parameter name.
+            return_config: The resolved output config, or None to retain the declaration.
+
+        Returns:
+            A MergeMethod with the resolved config annotations for key planning.
+        """
+        def specialize(annotation, config, name):
+            declared = annotation.data.model_config
+            if declared is not None and not isinstance(declared, ModelConfigRef) and declared != config:
+                raise TypeError(f"{name} requires {declared.identifier!r}, got {config.identifier!r}.")
+            return type(annotation.__name__, (annotation,), {
+                "data": dataclasses.replace(annotation.data, model_config=config),
+            })
+
+        method = copy(self)
+        signature = self.__f_signature
+        method.__f_signature = signature.replace(
+            parameters=[
+                param.replace(annotation=specialize(param.annotation, configs[name], f"Parameter {name!r}"))
+                if name in configs else param
+                for name, param in signature.parameters.items()
+            ],
+            return_annotation=(specialize(signature.return_annotation, return_config, "Return value")
+                               if return_config is not None else signature.return_annotation),
+        )
+        method._has_config_arguments = False
+        method.__validate()
+        return method
 
     def get_signature(self):
         return self.__f_signature
@@ -438,7 +499,7 @@ class MergeMethod:
 
         return FunctionArgs(args_merge_spaces, varargs_merge_space, kwargs_merge_spaces)
 
-    def get_input_configs(self) -> FunctionArgs[Optional[ModelConfig]]:
+    def get_input_configs(self) -> FunctionArgs[Optional[ModelConfig | ModelConfigRef]]:
         params = self.get_params()
         return FunctionArgs(
             [arg.model_config for arg in params.args],
@@ -502,6 +563,8 @@ class MergeMethodInterface:
         )
 
     def register_implementation(self, candidate: MergeMethod):
+        if candidate._has_config_arguments:
+            raise TypeError("Declare config references and implicit conversion on the merge method interface.")
         candidate_signature = candidate.get_signature()
         new_parameters = []
 
@@ -521,7 +584,8 @@ class MergeMethodInterface:
                 raise TypeError(f"Expected parameter '{candidate_name}' to have type {contract_data.interface} but got {candidate_data.interface}.")
             if contract_data.merge_space is not None and candidate_data.merge_space != contract_data.merge_space:
                 raise TypeError(f"Expected parameter '{candidate_name}' to use merge space(s) {contract_data.merge_space} but got {candidate_data.merge_space}.")
-            if contract_data.model_config is not None and candidate_data.model_config != contract_data.model_config:
+            if (contract_data.model_config is not None and not isinstance(contract_data.model_config, ModelConfigRef)
+                    and candidate_data.model_config != contract_data.model_config):
                 raise TypeError(f"Expected parameter '{candidate_name}' to use model config {contract_data.model_config} but got {candidate_data.model_config}.")
             if contract_param.default == inspect.Parameter.empty and candidate_param.default != inspect.Parameter.empty:
                 raise TypeError(f"Expected parameter '{candidate_name}' to have no default value.")
@@ -536,19 +600,30 @@ class MergeMethodInterface:
             raise TypeError(f"Expected return type {contract_data.interface} but got {candidate_data.interface}.")
         if contract_data.merge_space is not None and candidate_data.merge_space != contract_data.merge_space:
             raise TypeError(f"Expected return merge space {contract_data.merge_space} but got {candidate_data.merge_space}.")
-        if contract_data.model_config is not None and candidate_data.model_config != contract_data.model_config:
+        if (contract_data.model_config is not None and not isinstance(contract_data.model_config, ModelConfigRef)
+                and candidate_data.model_config != contract_data.model_config):
             raise TypeError(f"Expected return model config {contract_data.model_config} but got {candidate_data.model_config}.")
 
         candidate_signature = candidate_signature.replace(parameters=new_parameters)
         self.candidates.append((candidate, candidate_signature))
 
     def dispatch(self, *args, **kwargs):
+        return self._dispatch(args, kwargs, {}, None)
+
+    def _dispatch(self, args, kwargs, configs, return_config):
         argument_graphs = {}
         failures: list[tuple[str, str]] = []
 
         with contextlib.ExitStack() as stack:
             for candidate, candidate_signature in self.candidates:
                 try:
+                    if configs or return_config is not None:
+                        candidate = candidate._with_model_configs(configs, return_config)
+                        signature = candidate.get_signature()
+                        candidate_signature = candidate_signature.replace(parameters=[
+                            parameter.replace(annotation=signature.parameters[name].annotation)
+                            for name, parameter in candidate_signature.parameters.items()
+                        ])
                     bound_args = self._try_candidate(
                         candidate,
                         candidate_signature,
@@ -923,6 +998,8 @@ def _register_interface(
 
 
 def validate_config_converter(merge_method: MergeMethod):
+    if merge_method._has_config_arguments:
+        raise TypeError("Registered converters must declare concrete configs and cannot opt into implicit conversion.")
     params = merge_method.get_param_names()
     args_varargs = params.args if params.args else params.args_varargs()
     assert len(args_varargs) == 1, f"the merge method should be able to take exactly 1 positional argument"
