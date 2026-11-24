@@ -1,4 +1,5 @@
 identifier: sdxl-kohya
+missing_key_handler: sd_mecha.extensions.builtin.model_configs.sdxl_missing_keys.sdxl_kohya_missing_key_handler
 components:
   vae:
     first_stage_model.decoder.conv_in.bias: {shape: [512], dtype: float32}

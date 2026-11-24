@@ -49,6 +49,8 @@ def _to_lycoris_keys(
     prefixes = ("lycoris", "lora")
 
     for base_key, meta in base_keys.items():
+        if meta.generated:
+            continue
         for algo in algorithms:
             if not algo.targets_key(base_key, meta) or not getattr(meta.dtype, "is_floating_point", True):
                 continue

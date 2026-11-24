@@ -27,8 +27,11 @@ class KeyMetadata:
     dtype: Optional[str] | torch.dtype = None
     aliases: Iterable[str] = dataclasses.field(default_factory=tuple, metadata={"exclude": lambda p: bool(p)})
     optional: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
+    generated: bool = dataclasses.field(default=False, metadata={"exclude": lambda p: not p})
 
     def __post_init__(self):
+        if self.optional and self.generated:
+            raise ValueError("A model config key cannot be both optional and generated.")
         if isinstance(self.shape, Sequence):
             self.shape = torch.Size(self.shape)
         if isinstance(self.dtype, str):

@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import functools
+import itertools
 import logging
 import os
 import pathlib
@@ -22,7 +23,7 @@ from .recipe_nodes import (
 )
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
@@ -71,7 +72,7 @@ def merge(
         output_device (optional):
             Final output device (e.g., "cpu").
         output_dtype (optional):
-            Final dtype for the saved model.
+            Final dtype for the saved model. Generated keys use the model config's dtype.
         threads (optional):
             Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
         total_buffer_size (optional):
@@ -82,7 +83,8 @@ def merge(
             "weight", "delta", "param", <user-defined>.
             Defaults to None.
         strict_mandatory_keys (optional):
-            If True and an input model is missing non-optional keys, raises RuntimeError. Defaults to False.
+            If True, reject inputs that omit required merge keys. Generated keys are supplied
+            at output time. Defaults to False.
         check_extra_keys (optional):
             If True, warns about unrecognized keys from the input models. Defaults to True.
         check_finite_output (optional):
@@ -197,11 +199,20 @@ def merge(
         )
         recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
         produced_root_keys = finalized_res.node_to_keys.get(recipe, set())
-        if not produced_root_keys and not allow_empty_merge:
-            raise RuntimeError(
-                "The finalized recipe produces no output keys. "
-                "Pass allow_empty_merge=True to allow an empty result."
-            )
+        model_keys = recipe.model_config.keys()
+        missing_key_resolver = functools.partial(
+            recipe.model_config.create_missing_key, device=output_device, dtype=output_dtype,
+        )
+        unplanned_outputs = _generate_unplanned_outputs(model_keys, produced_root_keys, missing_key_resolver)
+        first_unplanned_output = None
+        if not produced_root_keys:
+            first_unplanned_output = next(unplanned_outputs, None)
+            if first_unplanned_output is None and not allow_empty_merge:
+                raise RuntimeError(
+                    "The finalized recipe produces no output keys. "
+                    "Pass allow_empty_merge=True to allow an empty result."
+                )
+
         if original_to_casted is not None:
             original_to_finalized = {original: finalized_res.to_finalized_node[node] for original, node in original_to_casted.items()}
         else:
@@ -210,7 +221,16 @@ def merge(
         cache = {original_to_finalized[node]: cache_object for node, cache_object in cache.items()}
         original_recipe = ReplaceSolvedComponents(original_to_finalized).process(original_recipe)
 
-        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in produced_root_keys}
+        graph_metadata = {key: meta for key, meta in model_keys.items() if key in produced_root_keys}
+        output_header = {}
+        if isinstance(output, (str, pathlib.Path)):
+            output_header = {
+                key: TensorMetadata(meta.shape, meta.dtype if meta.generated or output_dtype is None else output_dtype)
+                for key, meta in model_keys.items() if meta.generated or key in graph_metadata
+            }
+            if first_unplanned_output is not None:
+                key, value = first_unplanned_output
+                output_header[key] = TensorMetadata(value.shape, value.dtype)
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
         merge_methods_context = create_merge_method_context(
             recipe,
@@ -218,21 +238,14 @@ def merge(
             finalized_res.node_to_keys,
             memoize_intermediates,
         )
-        missing_key_resolver = functools.partial(
-            recipe.model_config.create_missing_key,
-            device=output_device,
-            dtype=output_dtype,
-        )
-
         with (
             executor,
             tqdm(total=len(graph_metadata), desc="Merging recipe") as progress,
             _get_output_dict(
                 output,
-                graph_metadata,
+                output_header,
                 original_recipe,
                 buffer_size_per_file_per_thread,
-                output_dtype=output_dtype,
             ) as output_dict,
         ):
             _fix_torch_threading()
@@ -246,6 +259,11 @@ def merge(
                 futures.append(executor.submit(fn, merge_visitor))
             _resolve_futures(futures)
 
+            if first_unplanned_output is not None:
+                unplanned_outputs = itertools.chain((first_unplanned_output,), unplanned_outputs)
+            for key, value in unplanned_outputs:
+                output_dict[key] = value
+
             for node, mm_context in merge_methods_context.items():
                 unique_refs = {id(ref): ref for ref in mm_context.output_refs.values()}.values()
                 num_leaked = sum(not output_ref.was_freed() for output_ref in unique_refs)
@@ -254,6 +272,17 @@ def merge(
 
             if output is None:
                 return output_dict
+
+
+def _generate_unplanned_outputs(model_keys, produced_keys, missing_key_resolver):
+    for key, meta in model_keys.items():
+        if key in produced_keys:
+            continue
+        value = missing_key_resolver(key, dtype=meta.dtype) if meta.generated else missing_key_resolver(key)
+        if value is not None:
+            yield key, value
+        elif meta.generated:
+            raise RuntimeError(f"The missing-key handler did not supply generated key {key!r}.")
 
 
 def _fix_torch_threading():
@@ -269,11 +298,9 @@ def _fix_torch_threading():
 @contextlib.contextmanager
 def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
-    merged_header: Mapping[str, KeyMetadata],
+    merged_header: Mapping[str, TensorMetadata],
     recipe: RecipeNode,
     buffer_size_per_thread: int,
-    *,
-    output_dtype: Optional[torch.dtype],
 ):
     try:
         serialized_recipe = serialization.serialize(recipe, finalize=False)  # already finalized
@@ -292,10 +319,7 @@ def _get_output_dict(
 
         streamed_output = OutSafetensorsDict(
             output,
-            OrderedDict(
-                (key, TensorMetadata(meta.shape, output_dtype if output_dtype is not None else meta.dtype))
-                for key, meta in merged_header.items()
-            ),
+            merged_header,
             serialized_recipe,
             buffer_size_per_thread,
         )

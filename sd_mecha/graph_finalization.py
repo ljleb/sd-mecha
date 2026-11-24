@@ -204,6 +204,7 @@ class RecipeGraph:
             finalized_node_to_indices[finalized_node].add(index)
 
         component_keys: Dict[ComponentIndex, Set[str]] = {}
+        generated_keys: Dict[ModelConfig, Set[str]] = {}
         for idx in set().union(*finalized_node_to_indices.values()):
             solved = solutions[ModelConfigComponentType][idx]
             cand = candidates[ModelConfigComponentType][idx]
@@ -215,6 +216,13 @@ class RecipeGraph:
                     keys.update(match.intersection)
                 elif not keys:
                     keys.update(solved.keys())
+                if solved not in generated_keys:
+                    generated_keys[solved] = {
+                        name
+                        for key, meta in solved.keys().items() if meta.generated
+                        for name in (key, *meta.aliases)
+                    }
+                keys.difference_update(generated_keys[solved])
             component_keys[idx] = keys
 
         node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
@@ -1066,7 +1074,7 @@ def create_config_stats(config: ModelConfig, dict_keys: Optional[Set[str]] = Non
 
     state_dict_miss = set()
     for k, meta in config.keys().items():
-        if k in dict_keys or meta.optional:
+        if k in dict_keys or meta.optional or meta.generated:
             continue
         state_dict_miss.add(k)
 
@@ -1164,7 +1172,7 @@ def check_model_config(
     if check_mandatory_keys:
         missing = []
         for key, meta in config.keys().items():
-            if meta.optional:
+            if meta.optional or meta.generated:
                 continue
             if key in state_dict_keys:
                 continue
@@ -1231,8 +1239,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
                 if not root.accept(self, probe_key):
                     continue
 
-                relation = self._partition_memo[(root, outputs)]
-                assert relation is not None
+                relation = self._active_relations_by_key[root][probe_key]
 
                 # Root is special: if a root partition is realizable,
                 # all outputs in that root partition belong to the final model.
