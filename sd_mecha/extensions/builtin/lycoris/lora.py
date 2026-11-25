@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Optional, Tuple
 
 import torch
@@ -10,6 +9,7 @@ from sd_mecha.extensions.merge_methods import Parameter, Return, StateDict, merg
 from sd_mecha.extensions.model_configs import ModelConfig
 from sd_mecha.keys_map import ComposeObject, KeysAccessor, ReqExpr
 
+from ..merge_methods._tensor_cache import create_tensor_cache, tensor_cache_for_key
 from ..merge_methods.svd import _truncated_svd
 from ._common import (
     BaseToLycoris, LycorisAlgorithm, LycorisModelConfig, StateDictKeyHelper,
@@ -27,8 +27,8 @@ class lora(LycorisAlgorithm):
         "alpha",
     )
     suffix_aliases = {
-        "lora_up.weight": ("lora_B.weight", "lora_B.default.weight", "lora_B"),
-        "lora_down.weight": ("lora_A.weight", "lora_A.default.weight", "lora_A"),
+        "lora_up.weight": ("lora_B.weight", "lora_B.default.weight", "lora_B", "lora.up.weight"),
+        "lora_down.weight": ("lora_A.weight", "lora_A.default.weight", "lora_A", "lora.down.weight"),
     }
     supports_delta_conversion = True
 
@@ -110,7 +110,7 @@ class lora(LycorisAlgorithm):
         @merge_method(
             identifier=extraction_implementation_name(cls.__name__, lyco_config),
             implements=cls.extract_method,
-            cache_factory=lambda: defaultdict(dict),
+            cache_factory=create_tensor_cache,
             globals=globals(),
             locals=locals(),
         )
@@ -137,11 +137,11 @@ class lora(LycorisAlgorithm):
                 base_2d = base.flatten(1)
                 rank = min(max(rank, 1), *base_2d.shape)
 
-                if (cache := kwargs.get("cache")) is not None:
-                    cache = cache[up_key]
+                cache, cache_device, cache_dtype = tensor_cache_for_key(kwargs.get("cache"), up_key)
 
                 u, s, vh = _truncated_svd(
-                    base_2d, rank, use_approximate_basis, approximate_basis_iters, approximate_basis_seed, cache
+                    base_2d, rank, use_approximate_basis, approximate_basis_iters, approximate_basis_seed, cache,
+                    cache_device=cache_device, cache_dtype=cache_dtype,
                 )
                 s = s.sqrt()
                 up = (u * s.unsqueeze(-2)).reshape(base.shape[0], rank, *((1,) * (base.ndim - 2)))

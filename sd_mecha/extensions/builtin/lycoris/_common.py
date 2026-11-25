@@ -49,6 +49,8 @@ def _to_lycoris_keys(
     prefixes = ("lycoris", "lora")
 
     for base_key, meta in base_keys.items():
+        if meta.generated:
+            continue
         for algo in algorithms:
             if not algo.targets_key(base_key, meta) or not getattr(meta.dtype, "is_floating_point", True):
                 continue
@@ -83,7 +85,7 @@ class LycorisAlgorithm(abc.ABC, metaclass=ClassObject):
 
     Subclasses declare the suffixes and input aliases they read for each base key.
     `build_input_keys` picks the tensors and the function that reconstructs their update.
-    Subclasses that implement extraction generate adapter tensors from a weight difference.
+    Subclasses that implement extraction generate adapter tensors from a weight difference or a pair of weights.
     """
 
     suffixes: ClassVar[Tuple[str, ...]]
@@ -151,7 +153,7 @@ def extraction_implementation_name(algo_name: str, lyco_config: LycorisModelConf
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class BaseToLycoris(abc.ABC):
-    """Map a base-model delta key to the adapter tensors extracted from it."""
+    """Map a base-model key to the adapter tensors extracted for that key."""
 
     @classmethod
     def map_keys(cls, b: KeyMapBuilder):

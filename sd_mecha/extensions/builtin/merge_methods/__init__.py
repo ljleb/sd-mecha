@@ -28,6 +28,7 @@ from .logistics import (
 )
 from .slicing import top_k_tensor_sum
 from .svd import truncate_rank, get_rank_from_ratio
+from .kronecker import truncate_kronecker, lokr_dims, lokr_dims_lycoris
 from .ties import (
     ties_sum_with_dropout,
     ties_sum,

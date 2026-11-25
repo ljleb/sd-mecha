@@ -12,3 +12,14 @@ Target the `dev` branch to submit PRs:
  cd sd-mecha
  git checkout -b my-branch
  ```
+
+## Build the docs
+
+From the repository root, install the documentation theme and build the site.
+
+```sh
+python -m pip install mkdocs-material
+python -m mkdocs build --strict
+```
+
+Run `python -m mkdocs serve` to preview changes locally.

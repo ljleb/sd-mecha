@@ -8,5 +8,7 @@ __pycache__
 /config
 /venv
 /model_configs/venvs
+/site
 
 /examples/*_test.py
+/examples/merge_mask_study

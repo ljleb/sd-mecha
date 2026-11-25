@@ -1,6 +1,7 @@
 import contextlib
 import dataclasses
 import functools
+import itertools
 import logging
 import os
 import pathlib
@@ -11,7 +12,7 @@ import torch
 import sd_mecha
 from .extensions import merge_spaces, model_dirs
 from sd_mecha.merge_context import create_merge_method_context, MergeMethodContext
-from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT
+from .extensions.merge_methods import value_to_node, StateDict, T as MergeMethodT, _string_literal_choices, _validate_literal_choice
 from .extensions.merge_spaces import MergeSpace
 from .extensions.model_configs import ModelConfig, KeyMetadata
 from .graph_finalization import open_graph
@@ -22,7 +23,7 @@ from .recipe_nodes import (
 )
 from .streaming import OutSafetensorsDict, TensorMetadata, StateDictKeyError
 from . import recipe_nodes, serialization
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, Future
 from contextlib import nullcontext
 from tqdm import tqdm as tqdm_original
@@ -71,7 +72,7 @@ def merge(
         output_device (optional):
             Final output device (e.g., "cpu").
         output_dtype (optional):
-            Final dtype for the saved model.
+            Final dtype for the saved model. Generated keys use the model config's dtype.
         threads (optional):
             Number of threads to spawn for parallel merges. Defaults to a reasonable guess.
         total_buffer_size (optional):
@@ -82,7 +83,8 @@ def merge(
             "weight", "delta", "param", <user-defined>.
             Defaults to None.
         strict_mandatory_keys (optional):
-            If True and an input model is missing non-optional keys, raises RuntimeError. Defaults to False.
+            If True, reject inputs that omit required merge keys. Generated keys are supplied
+            at output time. Defaults to False.
         check_extra_keys (optional):
             If True, warns about unrecognized keys from the input models. Defaults to True.
         check_finite_output (optional):
@@ -100,8 +102,8 @@ def merge(
             and do not read other inputs than those reported by `map_keys`. Defaults to True.
             Raises RuntimeError for keys
         cache (optional):
-            Dictionary of caches for any recipe nodes in `recipe`.
-            Items should be created like this: `node: node.create_cache()`.
+            Dictionary of caches keyed by merge nodes in `recipe`.
+            Use `node.merge_method.create_cache()` to construct a cache for a node.
             This can speed up certain merge methods when testing multiple parameter variations with fixed inputs.
         tqdm (optional):
             A custom progress-bar factory. By default, uses `tqdm.tqdm`.
@@ -197,11 +199,20 @@ def merge(
         )
         recipe, realized_key_maps = finalized_res.root, finalized_res.realized_key_maps
         produced_root_keys = finalized_res.node_to_keys.get(recipe, set())
-        if not produced_root_keys and not allow_empty_merge:
-            raise RuntimeError(
-                "The finalized recipe produces no output keys. "
-                "Pass allow_empty_merge=True to allow an empty result."
-            )
+        model_keys = recipe.model_config.keys()
+        missing_key_resolver = functools.partial(
+            recipe.model_config.create_missing_key, device=output_device, dtype=output_dtype,
+        )
+        unplanned_outputs = _generate_unplanned_outputs(model_keys, produced_root_keys, missing_key_resolver)
+        first_unplanned_output = None
+        if not produced_root_keys:
+            first_unplanned_output = next(unplanned_outputs, None)
+            if first_unplanned_output is None and not allow_empty_merge:
+                raise RuntimeError(
+                    "The finalized recipe produces no output keys. "
+                    "Pass allow_empty_merge=True to allow an empty result."
+                )
+
         if original_to_casted is not None:
             original_to_finalized = {original: finalized_res.to_finalized_node[node] for original, node in original_to_casted.items()}
         else:
@@ -210,7 +221,16 @@ def merge(
         cache = {original_to_finalized[node]: cache_object for node, cache_object in cache.items()}
         original_recipe = ReplaceSolvedComponents(original_to_finalized).process(original_recipe)
 
-        graph_metadata = {k: v for k, v in recipe.model_config.keys().items() if k in produced_root_keys}
+        graph_metadata = {key: meta for key, meta in model_keys.items() if key in produced_root_keys}
+        output_header = {}
+        if isinstance(output, (str, pathlib.Path)):
+            output_header = {
+                key: TensorMetadata(meta.shape, meta.dtype if meta.generated or output_dtype is None else output_dtype)
+                for key, meta in model_keys.items() if meta.generated or key in graph_metadata
+            }
+            if first_unplanned_output is not None:
+                key, value = first_unplanned_output
+                output_header[key] = TensorMetadata(value.shape, value.dtype)
         buffer_size_per_file_per_thread = buffer_size_per_file // max(1, threads)
         merge_methods_context = create_merge_method_context(
             recipe,
@@ -218,18 +238,12 @@ def merge(
             finalized_res.node_to_keys,
             memoize_intermediates,
         )
-        missing_key_resolver = functools.partial(
-            recipe.model_config.create_missing_key,
-            device=output_device,
-            dtype=output_dtype,
-        )
-
         with (
             executor,
             tqdm(total=len(graph_metadata), desc="Merging recipe") as progress,
             _get_output_dict(
                 output,
-                graph_metadata,
+                output_header,
                 original_recipe,
                 buffer_size_per_file_per_thread,
             ) as output_dict,
@@ -245,6 +259,11 @@ def merge(
                 futures.append(executor.submit(fn, merge_visitor))
             _resolve_futures(futures)
 
+            if first_unplanned_output is not None:
+                unplanned_outputs = itertools.chain((first_unplanned_output,), unplanned_outputs)
+            for key, value in unplanned_outputs:
+                output_dict[key] = value
+
             for node, mm_context in merge_methods_context.items():
                 unique_refs = {id(ref): ref for ref in mm_context.output_refs.values()}.values()
                 num_leaked = sum(not output_ref.was_freed() for output_ref in unique_refs)
@@ -253,6 +272,17 @@ def merge(
 
             if output is None:
                 return output_dict
+
+
+def _generate_unplanned_outputs(model_keys, produced_keys, missing_key_resolver):
+    for key, meta in model_keys.items():
+        if key in produced_keys:
+            continue
+        value = missing_key_resolver(key, dtype=meta.dtype) if meta.generated else missing_key_resolver(key)
+        if value is not None:
+            yield key, value
+        elif meta.generated:
+            raise RuntimeError(f"The missing-key handler did not supply generated key {key!r}.")
 
 
 def _fix_torch_threading():
@@ -268,7 +298,7 @@ def _fix_torch_threading():
 @contextlib.contextmanager
 def _get_output_dict(
     output: Optional[MutableMapping[str, torch.Tensor]] | pathlib.Path | str,
-    merged_header: Mapping[str, KeyMetadata],
+    merged_header: Mapping[str, TensorMetadata],
     recipe: RecipeNode,
     buffer_size_per_thread: int,
 ):
@@ -289,7 +319,7 @@ def _get_output_dict(
 
         streamed_output = OutSafetensorsDict(
             output,
-            OrderedDict((k, TensorMetadata(v.shape, v.dtype)) for k, v in merged_header.items()),
+            merged_header,
             serialized_recipe,
             buffer_size_per_thread,
         )
@@ -486,10 +516,11 @@ class KeyMergeVisitor(RecipeVisitor):
             parent_port = (node, self.output_key, index)
             input_name = input_names[index]
             input_type = input_types[index]
+            literal_choices = _string_literal_choices(input_type)
             input_node = node.bound_args.args[index] if isinstance(index, int) else node.bound_args.kwargs[index]
             input_visitor = dataclasses.replace(self, parent_port=parent_port)
             input_keys = key_relation.inputs.get(input_name, ())
-            if is_subclass(input_type, StateDict):
+            if literal_choices is None and is_subclass(input_type, StateDict):
                 expected_type = next(iter(typing.get_args(input_type) or (MergeMethodT,)))
                 merged[index] = error_holder.intercept(MergeNodeWrapperStateDict, input_node, expected_type, input_visitor, input_keys, self.validate_mm_contract)
             else:
@@ -503,12 +534,18 @@ class KeyMergeVisitor(RecipeVisitor):
                     )
                 if input_keys:
                     input_visitor.output_key = input_keys[0]
-                merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_type)
+                if literal_choices is None:
+                    merged[index] = cast_node_value(error_holder.intercept(input_node.accept, input_visitor), input_type)
+                else:
+                    merged[index] = error_holder.intercept(input_visitor._visit_literal_argument, input_node, literal_choices, input_name)
 
         merged_args = tuple(merged.get(index) for index in range(len(node.bound_args.args)))
         merged_kwargs = {k: v for k, v in merged.items() if not isinstance(k, int)}
         error_holder.try_raise()
         return merged_args, merged_kwargs
+
+    def _visit_literal_argument(self, node, choices, param_name):
+        return _validate_literal_choice(node.accept(self), choices, param_name)
 
 
 @dataclasses.dataclass
@@ -603,6 +640,7 @@ class MergeNodeWrapperStateDict(StateDict):
     ):
         self.node = node
         self.expected_type = expected_type
+        self.literal_choices = _string_literal_choices(expected_type)
         self.original_merge_visitor = original_merge_visitor
         self.inputs = inputs
         self.validate_mm_contract = validate_mm_contract
@@ -616,8 +654,9 @@ class MergeNodeWrapperStateDict(StateDict):
 
         key_merger = dataclasses.replace(self.original_merge_visitor, output_key=key)
         res_raw = self.node.accept(key_merger)
-        res = cast_node_value(res_raw, self.expected_type)
-        return res
+        if self.literal_choices is not None:
+            return _validate_literal_choice(res_raw, self.literal_choices, key, subject=f"input key {key!r}")
+        return cast_node_value(res_raw, self.expected_type)
 
     def __len__(self):
         return len(self.inputs)

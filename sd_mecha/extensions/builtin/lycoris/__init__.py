@@ -21,6 +21,7 @@ from .lokr import lokr
 from .norm import norm
 from .loha import loha
 from .full import full
+from .boft import boft
 
 
 __all__ = [
@@ -29,9 +30,9 @@ __all__ = [
     "norm",
     "loha",
     "full",
+    "boft",
     "apply",
     "to_base",
-    "to_lycoris",
 ]
 
 
@@ -42,7 +43,8 @@ def _register_all_lycoris_configs():
         "sdxl-kohya_but_diffusers",
         "sd1-kohya",
         "anima-diffusion_pipe",
-        "moss_image-diffusers",
+        "kolors-diffusers",
+        "moss_image-openmoss",
     ):
         base_config = model_configs.resolve(base_config_id)
         lyco_config = LycorisModelConfig(base_config, algorithms)
@@ -77,43 +79,19 @@ def _recipe_model_config(recipe: RecipeNode) -> ModelConfig:
 
 
 def to_base(recipe: RecipeNodeOrValue) -> RecipeNode:
-    """Convert an adapter to the layout of its associated base model.
+    """Convert an adapter to the key format of its associated base model.
 
     Args:
-        recipe: An adapter recipe, or a recipe already in a base model layout.
+        recipe: An adapter recipe, or a recipe already in a base model's key format.
 
     Returns:
-        The conversion recipe. A LyCORIS adapter produces a delta. If the input already
-        uses the base layout, return it directly. To apply the adapter to checkpoint
-        weights, use apply_lycoris with the base checkpoint.
+        The conversion recipe. Supported additive updates produce a delta. If the input
+        already uses the base key format, return it directly. BOFT updates need the base
+        weights, so use apply_lycoris with the base checkpoint to apply them.
     """
     recipe = merge_methods.value_to_node(recipe)
     config = _recipe_model_config(recipe)
     return convert(recipe, config.base_config if isinstance(config, LycorisModelConfig) else config)
-
-
-def to_lycoris(recipe: RecipeNodeOrValue) -> RecipeNode:
-    """Convert a recipe to the LyCORIS layout associated with its base model.
-
-    Args:
-        recipe: A recipe in a base or adapter layout with a registered path to LyCORIS.
-
-    Returns:
-        The conversion recipe. If the input already uses the LyCORIS config, return it directly.
-
-    Raises:
-        TypeError: If the associated LyCORIS config is missing or ambiguous, or no registered
-            path reaches it. Use an extraction method to create an adapter from a model delta.
-    """
-    recipe = merge_methods.value_to_node(recipe)
-    config = _recipe_model_config(recipe)
-    if isinstance(config, LycorisModelConfig):
-        return convert(recipe, config)
-    targets = _adapter_configs_for(config)
-    if len(targets) != 1:
-        raise TypeError(f"Expected one LyCORIS config for {config.identifier!r}, got {len(targets)}.")
-    target, = targets
-    return convert(recipe, target)
 
 
 @merge_method(identifier="apply_lycoris", is_interface=True)
@@ -196,11 +174,21 @@ def define_conversion(lyco_config: LycorisModelConfig):
     class LycorisToBase:
         @staticmethod
         def map_keys(b: KeyMapBuilder):
-            warnings.warn("converting lycoris to base is deprecated, consider using sd_mecha.apply_lycoris instead.")
             for base_key in base_config.keys():
                 lyco_inputs = _adapter_keys(b.keys, lyco_config, base_key, algorithms)
                 if lyco_inputs is not None:
                     b[base_key] = lyco_inputs
+
+        @staticmethod
+        def _check_first_input_keys(keys, reachable_keys):
+            config_keys = lyco_config.keys()
+            boft_keys = (key for key in keys if key.endswith(".oft_blocks") and key in config_keys)
+            if next(reachable_keys(boft_keys), None) is not None:
+                warnings.warn(
+                    "Adapter-to-delta conversion skipped BOFT updates because they require the base weights. "
+                    "Use sd_mecha.apply_lycoris(base, adapter) to apply them.",
+                    stacklevel=3,
+                )
 
         def __call__(
             self,
@@ -219,10 +207,11 @@ def resolve(identifier: str) -> MergeMethod:
     """Look up the extraction method for an adapter algorithm.
 
     Args:
-        identifier: The name of an algorithm with an extractor, such as `lora`, `lokr`, or `norm`.
+        identifier: The algorithm name, such as `lora`, `lokr`, `norm`, or `boft`.
 
     Returns:
-        The merge method that builds an extraction recipe from a weight difference.
+        The merge method that builds an extraction recipe. BOFT takes the base and target weights.
+        LoRA, LoKr, and Norm take a weight difference.
 
     Raises:
         KeyError: If the algorithm has no registered extraction method.

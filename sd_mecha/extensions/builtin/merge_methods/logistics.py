@@ -1,7 +1,8 @@
 import torch
 from torch import Tensor
-from typing import TypeVar
-from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, Return
+from types import ModuleType
+from typing import Literal, Optional, TypeVar
+from sd_mecha.extensions.merge_methods import merge_method, StateDict, Parameter, ParameterInfo, Return, param_ref
 from sd_mecha.keys_map import KeyMapBuilder
 from sd_mecha.streaming import StateDictKeyError, NonFiniteStateDictKeyError
 
@@ -35,24 +36,6 @@ class fallback:
         raise StateDictKeyError(key)
 
 
-@merge_method(reuse_outputs=False)
-def cast(
-    a: Parameter(Tensor),
-    device: Parameter(str) = None,
-    dtype: Parameter(str) = None,
-) -> Return(Tensor):
-    to_kwargs = {}
-    if device is not None:
-        to_kwargs["device"] = device
-
-    if dtype is not None:
-        if dtype not in cast_dtype_map:
-            raise ValueError(f"Unknown dtype {dtype}. Possible values are None, {', '.join(cast_dtype_map.keys())}")
-        to_kwargs["dtype"] = cast_dtype_map[dtype]
-
-    return a.to(**to_kwargs)
-
-
 cast_dtype_map = {
     "float64": torch.float64,
     "int64": torch.int64,
@@ -78,34 +61,80 @@ for dtype_str in (
     if hasattr(torch, dtype_str):
         cast_dtype_map[dtype_str] = getattr(torch, dtype_str)
 cast_dtype_map_reversed = {v: k for k, v in cast_dtype_map.items()}
+CastDtype = Literal[tuple(cast_dtype_map)]
+
+
+def _cast_device_choices():
+    devices = ["cpu", "cpu:0"]
+    for name, backend in sorted(vars(torch).items()):
+        if name == "cpu" or not isinstance(backend, ModuleType):
+            continue
+        available = getattr(backend, "is_available", None)
+        count_devices = getattr(backend, "device_count", None)
+        if not callable(available):
+            continue
+        try:
+            torch.device(name)
+        except RuntimeError:
+            continue
+        if available():
+            count = count_devices() if callable(count_devices) else None
+            if count != 0:
+                devices.append(name)
+                devices.extend(f"{name}:{index}" for index in range(count or 0))
+    return tuple(devices)
+
+
+CastDevice = Literal[_cast_device_choices()]
+
+
+@merge_method(reuse_outputs=False)
+def cast(
+    a: Parameter(Tensor),
+    device: Parameter(Optional[CastDevice]) = None,
+    dtype: Parameter(Optional[CastDtype]) = None,
+) -> Return(Tensor):
+    """Move or cast weights to a device or dtype.
+
+    Args:
+        a: The input weights.
+        device: A device visible to PyTorch when sd-mecha was imported, or a recipe that produces
+            its name. None keeps the input device.
+        dtype: A name from cast_dtype_map, or a recipe that produces one, such as get_dtype().
+            None keeps the input dtype. Available names depend on the installed PyTorch build.
+    """
+    to_kwargs = {}
+    if device is not None:
+        to_kwargs["device"] = device
+    if dtype is not None:
+        to_kwargs["dtype"] = cast_dtype_map[dtype]
+    return a.to(**to_kwargs)
 
 
 @merge_method(reuse_outputs=False)
 def get_dtype(
-    a: Parameter(Tensor),
-) -> Return(str, "param"):
+    a: Parameter(Tensor, ("weight", "delta", "param")),
+) -> Return(CastDtype):
     return cast_dtype_map_reversed[a.dtype]
 
 
 @merge_method(reuse_outputs=False)
 def get_device(
-    a: Parameter(Tensor),
-) -> Return(str, "param"):
+    a: Parameter(Tensor, ("weight", "delta", "param")),
+) -> Return(CastDevice):
     return str(a.device)
+
+
+def _component_type(info: ParameterInfo):
+    return Literal[tuple(info.model_config.components())]
 
 
 @merge_method(reuse_outputs=False)
 def pick_component(
     a: Parameter(StateDict[T]),
-    component: Parameter(str, "param"),
+    component: Parameter(param_ref("a").map(_component_type), "param"),
     **kwargs,
 ) -> Return(T):
-    if component not in a.model_config.components():
-        raise ValueError(
-            f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
-            f"Valid components: {tuple(a.model_config.components())}"
-        )
-
     key = kwargs["key"]
     if key in a.model_config.components()[component].keys():
         return a[key]
@@ -116,15 +145,9 @@ def pick_component(
 @merge_method(reuse_outputs=False)
 def omit_component(
     a: Parameter(StateDict[T]),
-    component: Parameter(str, "param"),
+    component: Parameter(param_ref("a").map(_component_type), "param"),
     **kwargs,
 ) -> Return(T):
-    if component not in a.model_config.components():
-        raise ValueError(
-            f'Component "{component}" does not exist in config "{a.model_config.identifier}". '
-            f"Valid components: {tuple(a.model_config.components())}"
-        )
-
     key = kwargs["key"]
     if key in a.model_config.components()[component].keys():
         raise StateDictKeyError(key)

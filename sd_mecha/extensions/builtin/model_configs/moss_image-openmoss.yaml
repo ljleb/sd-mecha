@@ -2,7 +2,8 @@
 # https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base/tree/5f40f07/transformer
 # Optional Qwen3.5 text encoder and FLUX.2 small VAE from the Comfy-Org package.
 # https://huggingface.co/Comfy-Org/MOSS-Image/tree/2929efe
-identifier: moss_image-diffusers
+identifier: moss_image-openmoss
+missing_key_handler: sd_mecha.extensions.builtin.model_configs.moss_image_missing_keys.moss_image_missing_key_handler
 components:
   diffuser:
     final_linear_video.weight: {shape: [128, 3072], dtype: bfloat16, aliases: [diffusion_model.final_linear_video.weight, model.diffusion_model.final_linear_video.weight, unet.final_linear_video.weight, transformer.final_linear_video.weight]}
@@ -427,7 +428,7 @@ components:
     layers.9.proj.q.weight: {shape: [3072, 3072], dtype: bfloat16, aliases: [diffusion_model.layers.9.proj.q.weight, model.diffusion_model.layers.9.proj.q.weight, unet.layers.9.proj.q.weight, transformer.layers.9.proj.q.weight]}
     layers.9.proj.v.weight: {shape: [3072, 3072], dtype: bfloat16, aliases: [diffusion_model.layers.9.proj.v.weight, model.diffusion_model.layers.9.proj.v.weight, unet.layers.9.proj.v.weight, transformer.layers.9.proj.v.weight]}
     layers.9.q_norm.weight: {shape: [128], dtype: bfloat16, aliases: [diffusion_model.layers.9.q_norm.weight, model.diffusion_model.layers.9.q_norm.weight, unet.layers.9.q_norm.weight, transformer.layers.9.q_norm.weight]}
-    rope.bands: {shape: [16], dtype: float32, aliases: [diffusion_model.rope.bands, model.diffusion_model.rope.bands, unet.rope.bands, transformer.rope.bands]}
+    rope.bands: {shape: [16], dtype: float32, aliases: [diffusion_model.rope.bands, model.diffusion_model.rope.bands, unet.rope.bands, transformer.rope.bands], generated: true}
     shared_block_modulation.bias: {shape: [18432], dtype: bfloat16, aliases: [diffusion_model.shared_block_modulation.bias, model.diffusion_model.shared_block_modulation.bias, unet.shared_block_modulation.bias, transformer.shared_block_modulation.bias]}
     shared_block_modulation.weight: {shape: [18432, 3072], dtype: bfloat16, aliases: [diffusion_model.shared_block_modulation.weight, model.diffusion_model.shared_block_modulation.weight, unet.shared_block_modulation.weight, transformer.shared_block_modulation.weight]}
     text_embedder.blocks.0.ffn_down.bias: {shape: [3072], dtype: bfloat16, aliases: [diffusion_model.text_embedder.blocks.0.ffn_down.bias, model.diffusion_model.text_embedder.blocks.0.ffn_down.bias, unet.text_embedder.blocks.0.ffn_down.bias, transformer.text_embedder.blocks.0.ffn_down.bias]}

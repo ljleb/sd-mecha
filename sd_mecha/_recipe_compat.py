@@ -7,11 +7,24 @@ from .extensions import merge_methods
 
 
 _ANIMA_ADAPTER_CONFIG_ID = "anima-diffusion_pipe_lycoris_lora"
+_MOSS_ADAPTER_CONFIG_ID = "moss_image-openmoss_lycoris_lora"
 _DEPRECATED_MODEL_CONFIG_IDS = {
     "anima-diffuser": "anima-diffusion_pipe",
     "anima-diffuser_kohya_lora": _ANIMA_ADAPTER_CONFIG_ID,
     "anima-diffuser_kohya_lokr": _ANIMA_ADAPTER_CONFIG_ID,
     "anima-diffuser_kohya_loha": _ANIMA_ADAPTER_CONFIG_ID,
+    "moss_image-diffusers": "moss_image-openmoss",
+    "moss_image-diffusers_lycoris_lora": _MOSS_ADAPTER_CONFIG_ID,
+    "moss_image-diffusers_kohya_lora": _MOSS_ADAPTER_CONFIG_ID,
+}
+_DEPRECATED_MOSS_METHOD_IDS = {
+    "convert_moss_image_diffusers_to_comfyui": "convert_moss_image_openmoss_to_comfyui",
+    "convert_moss_image_comfyui_to_diffusers": "convert_moss_image_comfyui_to_openmoss",
+    "convert_moss_image_blocks_to_diffusers": "convert_moss_image_blocks_to_openmoss",
+    "apply_lycoris_moss_image-diffusers_lycoris_lora": f"apply_lycoris_{_MOSS_ADAPTER_CONFIG_ID}",
+    "extract_lora_moss_image-diffusers_lycoris_lora": f"extract_lora_{_MOSS_ADAPTER_CONFIG_ID}",
+    "extract_lokr_moss_image-diffusers_lycoris_lora": f"extract_lokr_{_MOSS_ADAPTER_CONFIG_ID}",
+    "extract_norm_moss_image-diffusers_lycoris_lora": f"extract_norm_{_MOSS_ADAPTER_CONFIG_ID}",
 }
 
 
@@ -62,6 +75,12 @@ def deserialize_merge_call(identifier, args, kwargs):
 
 
 def _deserialize_legacy_merge_call(identifier, args, kwargs):
+    if replacement := _DEPRECATED_MOSS_METHOD_IDS.get(identifier):
+        return merge_methods.resolve(replacement)(*args, **kwargs)
+
+    if match := re.fullmatch(r"extract_boft_(?:svd_sweeps|lbfgs)_(.+_lycoris_lora)", identifier):
+        return merge_methods.resolve(f"extract_boft_{match[1]}")(*args, **kwargs)
+
     if match := re.fullmatch(r"convert_'([^']+)'_to_'([^']+)'", identifier):
         source, target = match.groups()
         if source != target and (source.endswith("_kohya_lora") or target.endswith("_kohya_lora")):
@@ -91,8 +110,9 @@ def _deserialize_legacy_merge_call(identifier, args, kwargs):
         legacy_lokr = algorithm == "lokr"
         method = merge_methods.resolve(f"extract_{algorithm}")
     elif match := re.fullmatch(r"(extract_.+)_kohya_lora", identifier):
+        replacement = f"{match[1]}_lycoris_lora"
         try:
-            method = merge_methods.resolve(f"{match[1]}_lycoris_lora")
+            method = merge_methods.resolve(_DEPRECATED_MOSS_METHOD_IDS.get(replacement, replacement))
         except KeyError:
             return None
     else:

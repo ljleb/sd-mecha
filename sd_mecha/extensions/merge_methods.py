@@ -2,6 +2,7 @@ import abc
 import contextlib
 import dataclasses
 import threading
+import warnings
 from collections import defaultdict
 import fuzzywuzzy.process
 import inspect
@@ -16,7 +17,7 @@ from . import merge_spaces, model_configs
 from .merge_spaces import MergeSpace, MergeSpaceSymbol, AnyMergeSpace
 from .model_configs import ModelConfig
 from ._model_config_arguments import ModelConfigRef, ParameterInfo, param_ref, resolve_config_arguments, validate_config_arguments
-from types import MappingProxyType, SimpleNamespace
+from types import MappingProxyType, SimpleNamespace, UnionType
 from typing import Optional, Callable, Dict, Tuple, List, Iterable, Any, Generic, TypeVar, Mapping, Sequence
 from ..keys_map import Clause, KeyMapBuilder, KeyMap, KeyRelation, RealizedKeyRelation
 from ..typing_ import is_subclass, is_instance
@@ -42,7 +43,7 @@ class StateDict(Mapping[str, T], Generic[T], abc.ABC):
 
 @dataclasses.dataclass
 class ParameterData:
-    interface: type | TypeVar
+    interface: type | TypeVar | ModelConfigRef
     merge_space: Optional[MergeSpace | AnyMergeSpace]
     model_config: Optional[ModelConfig | ModelConfigRef]
     allow_conversion: bool = False
@@ -54,7 +55,7 @@ class ParameterType:
 
 
 def Parameter(
-    annotation: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar,
+    annotation: type[NonDictLiteralValue | StateDict[NonDictLiteralValue]] | TypeVar | ModelConfigRef,
     merge_space: Optional[MergeSpace | str | Iterable[MergeSpace | str] | MergeSpaceSymbol] = None,
     model_config: Optional[ModelConfig | ModelConfigRef | str] = None,
     *,
@@ -70,6 +71,12 @@ def Parameter(
         annotation (type):
             The Python or Torch type passed to the method for each output key. Use Tensor
             for a single tensor or StateDict[Tensor] to read the input's mapped keys by name.
+            Use typing.Literal["fast", "accurate"] for a string from a fixed set of choices
+            in "param" space by default. Wrap it in Optional to also accept None. Pass a
+            string, per-key values, or a recipe that declares only accepted return choices.
+            Use param_ref("name").map(fn) to derive a string Literal type from another
+            argument's model config and merge space on a standalone merge method.
+            Plain str parameters are deprecated.
         merge_space (str, MergeSpace, iterable or MergeSpaceSymbol, optional):
             The allowed merge space or spaces. For example, "weight" selects checkpoint
             weights and "delta" selects weight differences. If omitted, use the method's default.
@@ -85,13 +92,31 @@ def Parameter(
     Returns:
         A type annotation that @merge_method uses to build the recipe and plan its input keys.
     """
-    if type(None) in (typing.get_args(annotation) or ()):
-        annotation = typing.get_args(annotation)[0]
-
-    if not isinstance(annotation, TypeVar):
-        supported_types = [StateDict] + list(T.__constraints__)
-        if not any(issubclass(typing.get_origin(annotation) or annotation, supported_type) for supported_type in supported_types):
-            raise TypeError(f"type {annotation} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
+    value_type = _state_dict_value_type(annotation)
+    literal_choices = _string_literal_choices(value_type)
+    if isinstance(annotation, ModelConfigRef):
+        if annotation.mapping is None:
+            raise TypeError("Use param_ref(name).map(fn) to derive a string Literal parameter type.")
+        if merge_space is None:
+            merge_space = "param"
+    elif literal_choices is not None:
+        _validate_literal_annotation(value_type, literal_choices, "Parameter")
+        if merge_space is None:
+            merge_space = "param"
+    else:
+        if type(None) in typing.get_args(annotation):
+            annotation = typing.get_args(annotation)[0]
+        if annotation is str:
+            warnings.warn(
+                "Using str as a merge method parameter type is deprecated and will be removed in sd-mecha 1.3.0. "
+                "Use typing.Literal for fixed string choices.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if not isinstance(annotation, TypeVar):
+            supported_types = [StateDict] + list(T.__constraints__)
+            if not any(issubclass(typing.get_origin(annotation) or annotation, supported_type) for supported_type in supported_types):
+                raise TypeError(f"type {annotation} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
 
     if isinstance(merge_space, (str, MergeSpace)):
         merge_space = (merge_space,)
@@ -129,6 +154,9 @@ def Return(
     Args:
         annotation (type):
             The Python or Torch type (e.g., `torch.Tensor`) returned by the merge method.
+            Use typing.Literal["fast", "accurate"] to declare possible string results.
+            Wrap it in Optional to also allow None, or in StateDict for multiple output keys.
+            Literal results use "param" space by default.
         merge_space (MergeSpace, str or MergeSpaceSymbol, optional):
             The output merge space. Use a shared symbol to tie the output space to an input.
         model_config (ModelConfig, ModelConfigRef or str, optional):
@@ -139,7 +167,13 @@ def Return(
     Returns:
         A type annotation object used by `@merge_method` for the return signature.
     """
-    if not isinstance(annotation, TypeVar):
+    value_type = _state_dict_value_type(annotation)
+    literal_choices = _string_literal_choices(value_type)
+    if literal_choices is not None:
+        _validate_literal_annotation(value_type, literal_choices, "Return")
+        if merge_space is None:
+            merge_space = "param"
+    elif not isinstance(annotation, TypeVar):
         supported_types = [StateDict] + list(T.__constraints__)
         if not any(issubclass(typing.get_origin(annotation) or annotation, supported_type) for supported_type in supported_types):
             raise TypeError(f"type {annotation} should be one of {', '.join(map(lambda x: x.__name__, supported_types))}")
@@ -201,7 +235,7 @@ class MergeMethod:
         default_merge_space: MergeSpaceSymbol,
         interface: Optional["MergeMethodInterface"],
         reuse_outputs: bool,
-        cache_factory: Callable[[], Any],
+        cache_factory: Callable[..., Any],
         globals_: Optional[Dict[str, Any]],
         locals_: Optional[Dict[str, Any]],
     ):
@@ -219,6 +253,9 @@ class MergeMethod:
 
         signature = inspect.signature(fn, globals=globals_, locals=locals_, eval_str=True)
         return_annotation = _ensure_return(signature.return_annotation, self.default_merge_space)
+        return_type = return_annotation.data.interface
+        self._literal_return_choices = _literal_value_choices(return_type)
+        self._literal_return_is_mapping = typing.get_origin(return_type) is StateDict
         self.__f_signature = signature.replace(
             parameters=[
                 p.replace(annotation=_ensure_parameter(p.annotation, p.name, p.default, self.default_merge_space, return_annotation.data.interface) if p.annotation != p.empty else p)
@@ -237,6 +274,13 @@ class MergeMethod:
         self.reuse_outputs = reuse_outputs
         self.cache_factory = cache_factory
         self._has_config_arguments = validate_config_arguments(self.__f_signature)
+        self._parameter_type_refs = {
+            name: param.annotation.data.interface
+            for name, param in self.__f_signature.parameters.items()
+            if param.kind != inspect.Parameter.VAR_KEYWORD and isinstance(param.annotation.data.interface, ModelConfigRef)
+        }
+        if self.interface is not None and self._parameter_type_refs:
+            raise TypeError("Mapped parameter types are only supported on standalone merge methods.")
 
         self.__validate()
 
@@ -267,7 +311,7 @@ class MergeMethod:
 
         configs_involved = (set(getattr(config, "identifier", None) for config in input_configs.as_dict().values()) | {getattr(return_data.model_config, "identifier", None)}).difference({None})
         is_conversion_implicitly = len(configs_involved) > 1
-        is_return_dict = is_subclass(return_data.interface, StateDict)
+        is_return_dict = _string_literal_choices(return_data.interface) is None and is_subclass(return_data.interface, StateDict)
         is_map_keys_defined = self.wrapped_is_class and isinstance(inspect.getattr_static(self.__wrapped__, "map_keys", None), (staticmethod, classmethod))
         if self.interface is None:
             if (is_conversion_implicitly or is_return_dict) and not is_map_keys_defined:
@@ -285,8 +329,9 @@ class MergeMethod:
             return self.__wrapped__()
         return None
 
-    def create_cache(self):
-        return self.cache_factory()
+    def create_cache(self, *args, **kwargs):
+        """Create a cache by forwarding arguments to the method's cache factory."""
+        return self.cache_factory(*args, **kwargs)
 
     def build_key_map(
         self, args_configs: Sequence[ModelConfig], kwargs_configs: Mapping[str, ModelConfig], return_config: ModelConfig,
@@ -359,11 +404,23 @@ class MergeMethod:
         output_reused: bool,
     ) -> NonDictLiteralValue | Mapping[str, NonDictLiteralValue]:
         args, kwargs = self.__get_args_kwargs(input_args, input_kwargs, key, key_relation, cache, output_reused)
-        fn = self.__wrapped__
         if self.wrapped_is_class:
             assert context is not None, f"class merge method {self.identifier} received self=None"
-            return context(*args, **kwargs)
-        return fn(*args, **kwargs)
+        fn = context if self.wrapped_is_class else self.__wrapped__
+        result = fn(*args, **kwargs)
+        if self._literal_return_choices is not None:
+            if self._literal_return_is_mapping:
+                if not isinstance(result, dict):
+                    raise TypeError(f"Merge method {self.identifier!r} must return a dict of literal values.")
+                values = result.items()
+            else:
+                values = ((key, result),)
+            for output_key, value in values:
+                _validate_literal_choice(
+                    value, self._literal_return_choices, output_key,
+                    subject=f"output {output_key!r} of merge method {self.identifier!r}",
+                )
+        return result
 
     def __get_args_kwargs(
         self,
@@ -389,19 +446,21 @@ class MergeMethod:
         return self.create_recipe(bound_args)
 
     def create_recipe(self, bound_args: inspect.BoundArguments) -> MergeRecipeNode:
-        types = self.get_input_types()
+        params = self.get_params()
+        names = self.get_param_names()
         args = tuple(
-            value_to_node(arg, arg_type)
-            for arg, arg_type in zip(bound_args.args, types.args_varargs(len(bound_args.args)))
+            _parameter_value_to_node(arg, param, name)
+            for arg, param, name in zip(
+                bound_args.args, params.args_varargs(len(bound_args.args)), names.args_varargs(len(bound_args.args)),
+            )
         )
         kwargs = {
-            k: value_to_node(arg, types.kwargs[k])
+            k: _parameter_value_to_node(arg, params.kwargs[k], k)
             for k, arg in bound_args.kwargs.items()
         }
 
         bound_args = self.__f_signature.bind(*args, **kwargs)
         if self._has_config_arguments:
-            names = self.get_param_names()
             input_spaces = self.get_input_merge_spaces()
             spaces = dict(zip(names.args, input_spaces.args)) | input_spaces.kwargs
             if names.has_varargs():
@@ -409,17 +468,60 @@ class MergeMethod:
             arguments, configs, return_config = resolve_config_arguments(
                 self.__f_signature, bound_args, spaces, is_interface=self.interface is not None,
             )
+            for name, argument in arguments.items():
+                if argument is bound_args.arguments[name]:
+                    continue
+                choices = _literal_value_choices(self.__f_signature.parameters[name].annotation.data.interface)
+                if choices is not None:
+                    _validate_literal_argument(argument, choices, name)
             bound_args = inspect.BoundArguments(self.__f_signature, arguments)
             if self.interface is not None:
                 return self.interface._dispatch(bound_args.args, bound_args.kwargs, configs, return_config)
             method = self._with_model_configs(configs, return_config)
             bound_args = method.__f_signature.bind(*bound_args.args, **bound_args.kwargs)
+            method, bound_args = method._resolve_parameter_types(bound_args)
             return MergeRecipeNode(method, bound_args)
 
         if self.interface is not None:
             return self.interface.dispatch(*args, **kwargs)
 
-        return MergeRecipeNode(self, bound_args)
+        method, bound_args = self._resolve_parameter_types(bound_args)
+        return MergeRecipeNode(method, bound_args)
+
+    def _resolve_parameter_types(self, bound_args):
+        """Specialize and validate mapped literals whose source metadata is known."""
+        if not self._parameter_type_refs:
+            return self, bound_args
+
+        parameters = dict(self.__f_signature.parameters)
+        remaining = {}
+        for name, ref in self._parameter_type_refs.items():
+            source = bound_args.arguments[ref.parameter]
+            if source.model_config is None or source.merge_space is None:
+                remaining[name] = ref
+                continue
+            info = ParameterInfo(source.model_config, frozenset((source.merge_space,)))
+            mapped = ref.mapping(info)
+            choices = _string_literal_choices(mapped)
+            if choices is None:
+                raise TypeError(f"The type mapping for parameter {name!r} must return a string Literal type.")
+            param = parameters[name]
+            data = param.annotation.data
+            annotation = Parameter(
+                mapped,
+                data.merge_space,
+                data.model_config,
+                allow_conversion=data.allow_conversion,
+            )
+            _validate_literal_argument(bound_args.arguments[name], choices, name)
+            parameters[name] = param.replace(annotation=annotation)
+
+        if len(remaining) == len(self._parameter_type_refs):
+            return self, bound_args
+        method = copy(self)
+        method.__f_signature = self.__f_signature.replace(parameters=parameters.values())
+        method._parameter_type_refs = remaining
+        return method, inspect.BoundArguments(method.__f_signature, bound_args.arguments)
 
     def _with_model_configs(self, configs, return_config):
         """Copy the method with concrete model configs for one recipe call.
@@ -573,9 +675,14 @@ class MergeMethodInterface:
         )
 
     def register_implementation(self, candidate: MergeMethod):
+        if candidate._parameter_type_refs:
+            raise TypeError("Mapped parameter types are only supported on standalone merge methods.")
         if candidate._has_config_arguments:
             raise TypeError("Declare config references and implicit conversion on the merge method interface.")
         candidate_signature = candidate.get_signature()
+        for name, parameter in self.signature.parameters.items():
+            if name not in candidate_signature.parameters and _literal_value_choices(parameter.annotation.data.interface) is not None:
+                raise TypeError(f"Implementation {candidate.identifier!r} must declare parameter {name!r} of {self.identifier!r}.")
         new_parameters = []
 
         for (contract_name, contract_param), (candidate_name, candidate_param) in zip(
@@ -606,7 +713,12 @@ class MergeMethodInterface:
 
         candidate_data = candidate_signature.return_annotation.data
         contract_data = self.signature.return_annotation.data
-        if not _same_state_dict_interface(candidate_data.interface, contract_data.interface):
+        contract_choices = _literal_value_choices(contract_data.interface)
+        if contract_choices is not None:
+            candidate_choices = candidate._literal_return_choices
+            if candidate_choices is None or not set(candidate_choices).issubset(contract_choices):
+                raise TypeError(f"Return type must declare a Literal subset of {contract_choices}.")
+        elif not _same_state_dict_interface(candidate_data.interface, contract_data.interface):
             raise TypeError(f"Expected return type {contract_data.interface} but got {candidate_data.interface}.")
         if contract_data.merge_space is not None and candidate_data.merge_space != contract_data.merge_space:
             raise TypeError(f"Expected return merge space {contract_data.merge_space} but got {candidate_data.merge_space}.")
@@ -673,7 +785,12 @@ class MergeMethodInterface:
         except TypeError as e:
             raise CandidateDispatchError(candidate.identifier, f"signature mismatch: {e}") from e
 
-        for parameter_name, argument_node in bound_args.arguments.copy().items():
+        argument_nodes = [
+            (name, node)
+            for name, value in bound_args.arguments.items()
+            for node in (value if candidate_signature.parameters[name].kind == inspect.Parameter.VAR_POSITIONAL else (value,))
+        ]
+        for parameter_name, argument_node in argument_nodes:
             contract_data = candidate_signature.parameters[parameter_name].annotation.data
             contract_model_config = contract_data.model_config
             contract_merge_spaces = contract_data.merge_space
@@ -688,7 +805,7 @@ class MergeMethodInterface:
 
                 argument_candidates = argument_graph.root_candidates(
                     model_config=contract_model_config,
-                    merge_space_preference=(contract_merge_spaces,),
+                    merge_space_preference=contract_merge_spaces,
                 )
             except Exception as e:
                 raise CandidateDispatchError(
@@ -696,7 +813,10 @@ class MergeMethodInterface:
                     f"parameter '{parameter_name}': failed to analyze argument graph: {e}"
                 ) from e
 
-            mc_satisfied = bool(argument_candidates.model_config)
+            # A broadcast constant can get its config later from the recipe that uses it.
+            mc_satisfied = bool(argument_candidates.model_config) or (
+                contract_model_config is None and _literal_value_choices(contract_data.interface) is not None
+            )
             ms_satisfied = contract_merge_spaces is None or (
                     argument_candidates.merge_space is not None and
                     any(ms in contract_merge_spaces for ms in argument_candidates.merge_space)
@@ -730,18 +850,99 @@ class CandidateDispatchError(TypeError):
         self.candidate_identifier = candidate_identifier
 
 
+def _state_dict_value_type(annotation):
+    if typing.get_origin(annotation) is StateDict:
+        return typing.get_args(annotation)[0]
+    return annotation
+
+
 def _same_state_dict_interface(i1, i2):
-    if typing.get_origin(i1) == StateDict:
-        i1 = typing.get_args(i1)[0]
-    if typing.get_origin(i2) == StateDict:
-        i2 = typing.get_args(i2)[0]
-    return i1 == i2
+    return _state_dict_value_type(i1) == _state_dict_value_type(i2)
+
+
+def _string_literal_choices(annotation):
+    origin = typing.get_origin(annotation)
+    if origin is typing.Literal:
+        return typing.get_args(annotation)
+    if origin in (typing.Union, UnionType):
+        args = typing.get_args(annotation)
+        if len(args) == 2 and type(None) in args:
+            literal = next(arg for arg in args if arg is not type(None))
+            if typing.get_origin(literal) is typing.Literal:
+                return (*typing.get_args(literal), None)
+    return None
+
+
+def _literal_value_choices(annotation):
+    return _string_literal_choices(_state_dict_value_type(annotation))
+
+
+def _validate_literal_annotation(annotation, choices, role):
+    string_choices = choices if typing.get_origin(annotation) is typing.Literal else choices[:-1]
+    if not string_choices or not all(isinstance(choice, str) for choice in string_choices):
+        raise TypeError(f"{role} Literal annotations must contain one or more string choices.")
+
+
+def _unwrap_scalar_literal(value):
+    node = value
+    if isinstance(value, MergeRecipeNode) and value.merge_method is _module_state.merge_methods_registry.get("convert_singleton"):
+        node = value.bound_args.args[0]
+    if (isinstance(node, LiteralRecipeNode) and getattr(node.model_config, "identifier", None) == "singleton-mecha"
+            and node.value_dict.keys() == {"key"}):
+        return node.value_dict["key"]
+    return value
+
+
+def _validate_literal_choice(value, choices, name, *, subject=None):
+    if (value is None or isinstance(value, str)) and value in choices:
+        return value
+    subject = subject or f"parameter {name!r}"
+    if not isinstance(value, str):
+        raise TypeError(f"{subject[0].upper()}{subject[1:]} requires a string from {choices}.")
+    raise ValueError(f"Invalid value {value!r} for {subject}. Expected one of {choices}.")
+
+
+def _validate_literal_argument(value, choices, name):
+    literal = _unwrap_scalar_literal(value)
+    if isinstance(literal, LiteralRecipeNode):
+        literal = literal.value_dict
+    if isinstance(literal, dict):
+        for key, item in literal.items():
+            _validate_literal_argument(item, choices, f"{name}[{key!r}]")
+    elif isinstance(literal, MergeRecipeNode):
+        method = literal.merge_method
+        output_choices = method._literal_return_choices
+        if output_choices is None:
+            if method is _module_state.merge_methods_registry.get("convert_singleton"):
+                _validate_literal_argument(literal.bound_args.args[0], choices, name)
+                return
+            raise TypeError(f"Parameter {name!r} requires a string Literal return type, but {method.identifier!r} does not declare one.")
+        if not set(output_choices).issubset(choices):
+            raise TypeError(f"Parameter {name!r} accepts {choices}, but {method.identifier!r} can return {output_choices}.")
+    elif isinstance(literal, RecipeNode):
+        raise TypeError(f"Parameter {name!r} requires a recipe with a string Literal return type or explicit string values.")
+    else:
+        _validate_literal_choice(literal, choices, name)
+
+
+def _parameter_value_to_node(value, param, name):
+    choices = _literal_value_choices(param.interface)
+    if choices is not None:
+        _validate_literal_argument(value, choices, name)
+    elif not isinstance(param.interface, ModelConfigRef):
+        return value_to_node(value, param.interface)
+
+    if isinstance(value, LiteralRecipeNode) and _unwrap_scalar_literal(value) is not value:
+        return _module_state.merge_methods_registry["convert_singleton"](value)
+    if isinstance(value, dict):
+        return LiteralRecipeNode(value)
+    return value_to_node(value, str)
 
 
 def _ensure_parameter(hint: type, param_name: str, default: Any, default_merge_space: MergeSpaceSymbol, return_interface: type):
     # remove outer `| None`
     hint_args = [arg for arg in (typing.get_args(hint) or ()) if arg is not type(None)]
-    if hint_args:
+    if hint_args and _literal_value_choices(hint) is None:
         hint = hint_args[0]
 
     if hint is Parameter:
@@ -750,13 +951,19 @@ def _ensure_parameter(hint: type, param_name: str, default: Any, default_merge_s
     if not inspect.isclass(hint) or not issubclass(hint, ParameterType):
         hint = Parameter(hint)
 
+    choices = _literal_value_choices(hint.data.interface)
+    if choices is not None and default is not inspect.Parameter.empty:
+        _validate_literal_argument(default, choices, param_name)
+
     if hint.data.merge_space is None:
         interface = hint.data.interface
         if is_subclass(hint.data.interface, StateDict):
             interface = (typing.get_args(interface) or (T,))[0]
 
-        if is_subclass(return_interface, StateDict):
+        if _string_literal_choices(return_interface) is None and is_subclass(return_interface, StateDict):
             return_interface = (typing.get_args(return_interface) or (T,))[0]
+        if _string_literal_choices(return_interface) is not None:
+            return_interface = str
 
         if default is inspect.Parameter.empty and is_subclass(interface, return_interface):
             hint.data.merge_space = default_merge_space
@@ -790,7 +997,7 @@ def merge_method(
     implements: Optional[str | MergeMethod] = None,
     is_interface: bool = False,
     reuse_outputs: bool = True,
-    cache_factory: Callable[[], Any] = type(None),
+    cache_factory: Callable[..., Any] = type(None),
     globals: Optional[dict[str, Any]] = None,
     locals: Optional[dict[str, Any]] = None,
 ) -> MergeMethod | Callable[[F], MergeMethod]:
@@ -812,14 +1019,18 @@ def merge_method(
             If True, marks this merge method as a config-conversion function. That means `convert()`
             will consider it as an implicit transition when converting between different model configs.
         implements (str | MergeMethod):
-            The interface to implement. The signature of the merge method must match that of the interface.
+            The interface to implement. Match its signature, including all string Literal
+            input choices. A string Literal return type may declare a subset of the
+            interface's output choices.
         is_interface (bool):
             If True, marks this merge method can be overloaded with multiple implementations.
             The appropriate candidate implementation will be resolved during recipe node creation.
         reuse_outputs (bool):
             If True, marks this merge method as computationally heavy.
-        cache_factory (Callable[[], Any])
-            Constructor of cache objects this merge method uses. Defaults to `lambda: None`.
+        cache_factory (Callable[..., Any]):
+            Constructor for the method's cache. create_cache() forwards arguments to it.
+            Give factory arguments defaults so callers can create a cache with no arguments.
+            Defaults to a factory that returns None.
 
     Returns:
         A `MergeMethod` object or a decorator returning such an object.
@@ -863,7 +1074,7 @@ def _merge_method_impl(
     implements: Optional[str | MergeMethod],
     is_interface: bool,
     reuse_outputs: bool,
-    cache_factory: Callable[[], Any],
+    cache_factory: Callable[..., Any],
     globals_: Optional[dict[str, Any]],
     locals_: Optional[dict[str, Any]],
 ) -> MergeMethod:

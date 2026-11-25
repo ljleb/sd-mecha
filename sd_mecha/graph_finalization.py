@@ -204,6 +204,7 @@ class RecipeGraph:
             finalized_node_to_indices[finalized_node].add(index)
 
         component_keys: Dict[ComponentIndex, Set[str]] = {}
+        generated_keys: Dict[ModelConfig, Set[str]] = {}
         for idx in set().union(*finalized_node_to_indices.values()):
             solved = solutions[ModelConfigComponentType][idx]
             cand = candidates[ModelConfigComponentType][idx]
@@ -215,6 +216,13 @@ class RecipeGraph:
                     keys.update(match.intersection)
                 elif not keys:
                     keys.update(solved.keys())
+                if solved not in generated_keys:
+                    generated_keys[solved] = {
+                        name
+                        for key, meta in solved.keys().items() if meta.generated
+                        for name in (key, *meta.aliases)
+                    }
+                keys.difference_update(generated_keys[solved])
             component_keys[idx] = keys
 
         node_to_key_domain: Dict[RecipeNode, Set[str]] = {}
@@ -1066,7 +1074,7 @@ def create_config_stats(config: ModelConfig, dict_keys: Optional[Set[str]] = Non
 
     state_dict_miss = set()
     for k, meta in config.keys().items():
-        if k in dict_keys or meta.optional:
+        if k in dict_keys or meta.optional or meta.generated:
             continue
         state_dict_miss.add(k)
 
@@ -1116,7 +1124,8 @@ class FinalizeVisitor(RecipeVisitor):
 
         cfg, ms = self._solve_info(node)
 
-        res = MergeRecipeNode(node.merge_method, bound_args, cfg, ms)
+        method, bound_args = node.merge_method._resolve_parameter_types(bound_args)
+        res = MergeRecipeNode(method, bound_args, cfg, ms)
         self.node_map[node] = res
         return res
 
@@ -1163,7 +1172,7 @@ def check_model_config(
     if check_mandatory_keys:
         missing = []
         for key, meta in config.keys().items():
-            if meta.optional:
+            if meta.optional or meta.generated:
                 continue
             if key in state_dict_keys:
                 continue
@@ -1201,6 +1210,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
     realized_key_maps: Dict[MergeRecipeNode, ActiveKeyMap[RealizedKeyRelation]] = dataclasses.field(default_factory=dict)
     _candidate_keys: Dict[RecipeNode, Set[str]] = dataclasses.field(default_factory=dict)
     _planned_key_maps: Dict[MergeRecipeNode, KeyMap[KeyRelation]] = dataclasses.field(default_factory=dict)
+    _check_inputs: bool = True
 
     # Exact-key memo for literal/model nodes only
     _key_memo: Dict[Tuple[RecipeNode, str], bool] = dataclasses.field(default_factory=dict)
@@ -1229,8 +1239,7 @@ class PropagatableKeyVisitor(RecipeVisitor):
                 if not root.accept(self, probe_key):
                     continue
 
-                relation = self._partition_memo[(root, outputs)]
-                assert relation is not None
+                relation = self._active_relations_by_key[root][probe_key]
 
                 # Root is special: if a root partition is realizable,
                 # all outputs in that root partition belong to the final model.
@@ -1377,6 +1386,8 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
         keys = self.node_to_key_domain.get(node, set())
         if isinstance(node, MergeRecipeNode):
+            if self._check_inputs:
+                self._check_first_input_keys(node)
             if node.merge_method._can_map_first_input_keys:
                 source = node.bound_args.args[0]
                 key_map = node._plan_key_map(first_input_keys=self._possible_keys(source))
@@ -1395,6 +1406,19 @@ class PropagatableKeyVisitor(RecipeVisitor):
 
         self._candidate_keys[node] = keys
         return keys
+
+    def _check_first_input_keys(self, node: MergeRecipeNode):
+        check = getattr(node.merge_method.__wrapped__, "_check_first_input_keys", None)
+        if check is None:
+            return
+        source = node.bound_args.args[0]
+
+        def reachable_keys(keys):
+            # Keep diagnostics out of the execution plan and its reachability memo.
+            probe = PropagatableKeyVisitor(self.node_to_key_domain, _check_inputs=False)
+            yield from (key for key in keys if source.accept(probe, key))
+
+        check(self._possible_keys(source), reachable_keys)
 
     @staticmethod
     def _possible_leaf_keys(

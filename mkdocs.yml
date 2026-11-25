@@ -1,0 +1,27 @@
+site_name: sd-mecha
+theme:
+  name: material
+  features:
+    - content.code.copy
+nav:
+  - Home: index.md
+  - Guide:
+      - Overview: guide/README.md
+      - Introduction: guide/0-introduction.md
+      - Typical use cases: guide/1-typical-use-cases.md
+      - User-defined merge methods: guide/2-user-defined-merge-methods.md
+      - Merge method reference: guide/3-merge-methods-listing.md
+extra_css:
+  - style.css
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@2/MathJax.js
+  - javascripts/mathjax_config.js
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.arithmatex:
+      generic: true

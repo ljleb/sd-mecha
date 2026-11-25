@@ -1,0 +1,84 @@
+# Anima diffusion transformer, LLM adapter, and optional Qwen3-0.6B text encoder.
+identifier: anima-blocks
+components:
+  blocks:
+    # Diffuser patch projection and shared timestep and position embeddings.
+    # net.x_embedder, net.t_embedder, net.t_embedding_norm, and net.pos_embedder.
+    DIFFUSER_IN: {shape: [], dtype: float32}
+    # net.blocks.<index>. Each block includes attention, feed-forward, and modulation weights.
+    DIFFUSER00: {shape: [], dtype: float32}
+    DIFFUSER01: {shape: [], dtype: float32}
+    DIFFUSER02: {shape: [], dtype: float32}
+    DIFFUSER03: {shape: [], dtype: float32}
+    DIFFUSER04: {shape: [], dtype: float32}
+    DIFFUSER05: {shape: [], dtype: float32}
+    DIFFUSER06: {shape: [], dtype: float32}
+    DIFFUSER07: {shape: [], dtype: float32}
+    DIFFUSER08: {shape: [], dtype: float32}
+    DIFFUSER09: {shape: [], dtype: float32}
+    DIFFUSER10: {shape: [], dtype: float32}
+    DIFFUSER11: {shape: [], dtype: float32}
+    DIFFUSER12: {shape: [], dtype: float32}
+    DIFFUSER13: {shape: [], dtype: float32}
+    DIFFUSER14: {shape: [], dtype: float32}
+    DIFFUSER15: {shape: [], dtype: float32}
+    DIFFUSER16: {shape: [], dtype: float32}
+    DIFFUSER17: {shape: [], dtype: float32}
+    DIFFUSER18: {shape: [], dtype: float32}
+    DIFFUSER19: {shape: [], dtype: float32}
+    DIFFUSER20: {shape: [], dtype: float32}
+    DIFFUSER21: {shape: [], dtype: float32}
+    DIFFUSER22: {shape: [], dtype: float32}
+    DIFFUSER23: {shape: [], dtype: float32}
+    DIFFUSER24: {shape: [], dtype: float32}
+    DIFFUSER25: {shape: [], dtype: float32}
+    DIFFUSER26: {shape: [], dtype: float32}
+    DIFFUSER27: {shape: [], dtype: float32}
+    # net.final_layer. Projects the diffuser output back to latent patches.
+    DIFFUSER_OUT: {shape: [], dtype: float32}
+
+    # LLM adapter. Turns Qwen features and adapter token IDs into diffuser conditioning.
+    # net.llm_adapter.embed and the input projection, when present.
+    LLM_ADAPTER_IN: {shape: [], dtype: float32}
+    # net.llm_adapter.blocks.<index>.
+    LLM_ADAPTER00: {shape: [], dtype: float32}
+    LLM_ADAPTER01: {shape: [], dtype: float32}
+    LLM_ADAPTER02: {shape: [], dtype: float32}
+    LLM_ADAPTER03: {shape: [], dtype: float32}
+    LLM_ADAPTER04: {shape: [], dtype: float32}
+    LLM_ADAPTER05: {shape: [], dtype: float32}
+    # net.llm_adapter.out_proj and .norm.
+    LLM_ADAPTER_OUT: {shape: [], dtype: float32}
+
+    # Optional Qwen3-0.6B encoder under text_encoders.qwen3_06b.transformer.model.
+    # embed_tokens, layers.<index>, and the final norm.
+    QWEN_TEXT_IN: {shape: [], dtype: float32}
+    QWEN_TEXT00: {shape: [], dtype: float32}
+    QWEN_TEXT01: {shape: [], dtype: float32}
+    QWEN_TEXT02: {shape: [], dtype: float32}
+    QWEN_TEXT03: {shape: [], dtype: float32}
+    QWEN_TEXT04: {shape: [], dtype: float32}
+    QWEN_TEXT05: {shape: [], dtype: float32}
+    QWEN_TEXT06: {shape: [], dtype: float32}
+    QWEN_TEXT07: {shape: [], dtype: float32}
+    QWEN_TEXT08: {shape: [], dtype: float32}
+    QWEN_TEXT09: {shape: [], dtype: float32}
+    QWEN_TEXT10: {shape: [], dtype: float32}
+    QWEN_TEXT11: {shape: [], dtype: float32}
+    QWEN_TEXT12: {shape: [], dtype: float32}
+    QWEN_TEXT13: {shape: [], dtype: float32}
+    QWEN_TEXT14: {shape: [], dtype: float32}
+    QWEN_TEXT15: {shape: [], dtype: float32}
+    QWEN_TEXT16: {shape: [], dtype: float32}
+    QWEN_TEXT17: {shape: [], dtype: float32}
+    QWEN_TEXT18: {shape: [], dtype: float32}
+    QWEN_TEXT19: {shape: [], dtype: float32}
+    QWEN_TEXT20: {shape: [], dtype: float32}
+    QWEN_TEXT21: {shape: [], dtype: float32}
+    QWEN_TEXT22: {shape: [], dtype: float32}
+    QWEN_TEXT23: {shape: [], dtype: float32}
+    QWEN_TEXT24: {shape: [], dtype: float32}
+    QWEN_TEXT25: {shape: [], dtype: float32}
+    QWEN_TEXT26: {shape: [], dtype: float32}
+    QWEN_TEXT27: {shape: [], dtype: float32}
+    QWEN_TEXT_OUT: {shape: [], dtype: float32}

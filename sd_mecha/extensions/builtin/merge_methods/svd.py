@@ -4,10 +4,12 @@ import torch
 from typing import Optional, Tuple
 from torch import Tensor
 from sd_mecha.extensions.merge_methods import merge_method, Parameter, StateDict, Return
-from collections import defaultdict
+from ._tensor_cache import (
+    DEFAULT_CACHE_DEVICE, DEFAULT_CACHE_DTYPE, create_tensor_cache, matches_cache_storage, tensor_cache_for_key,
+)
 
 
-@merge_method(cache_factory=lambda: defaultdict(dict))
+@merge_method(cache_factory=create_tensor_cache)
 def rotate(
     a: Parameter(StateDict[Tensor]),
     b: Parameter(StateDict[Tensor]),
@@ -44,15 +46,7 @@ def rotate(
     else:
         shape_2d = a.shape[:1].numel(), a.shape[1:].numel()
 
-    if (cache := kwargs.get("cache")) is not None:
-        cache = cache[kwargs["key"]]
-
-        # if centralization is different from the cached value, invalidate cache
-        if "centralization" in cache:
-            if not math.isclose(cache["centralization"], centralization):
-                cache.clear()
-        else:
-            cache["centralization"] = centralization
+    cache, cache_device, cache_dtype = tensor_cache_for_key(kwargs.get("cache"), key)
 
     a_2d = a.reshape(*shape_2d)
     b_2d = b.reshape(*shape_2d)
@@ -61,12 +55,17 @@ def rotate(
     a_2d = a_2d - a_centralization
     b_2d = b_2d - b_centralization
 
-    if cache is not None and "transform" in cache:
-        transform = cache["transform"].to(device=a.device, dtype=a.dtype)
+    cached_transform = cache.get("transform") if cache is not None else None
+    if (
+        cached_transform is not None
+        and math.isclose(cache.get("centralization", math.nan), centralization)
+        and cached_transform.matches_cache_storage(cache_device, cache_dtype)
+    ):
+        transform = cached_transform.to(device=a.device, dtype=a.dtype)
     else:
         transform = orthogonal_procrustes(a_2d, b_2d)
         if cache is not None:
-            cache["transform"] = transform.to(device="cpu", dtype=torch.float16)
+            cache.update(transform=transform.to(device=cache_device, dtype=cache_dtype), centralization=centralization)
 
     if alpha.numel() > 1 or not math.isclose(alpha.item(), 0):
         a_2d = torch.lerp(a_2d, transform(b_2d, inverse=True), alpha)
@@ -76,7 +75,7 @@ def rotate(
     return a_2d.reshape_as(a)
 
 
-@merge_method(cache_factory=dict)
+@merge_method(cache_factory=create_tensor_cache)
 def truncate_rank(
     a: Parameter(Tensor, merge_space="delta"),
     rank: Parameter(int) = 8,
@@ -90,18 +89,14 @@ def truncate_rank(
     When the cache contains enough singular components, a lower rank reuses their prefix.
     Exact factors can serve any basis request. Approximate factors require matching iteration
     and seed settings. Changing `use_approximate_basis` alone does not invalidate the cache.
-    The cache stores the factors on the CPU in float16 to limit memory use. Reuse casts them
-    back to the input dtype and device.
+    The cache stores factors on the CPU in float16 by default. Pass device or dtype
+    to create_cache() to choose a different placement. Reuse casts factors to the input
+    dtype and device.
     """
     if a.dim() < 2:
         return a
 
-    cache = kwargs.get("cache")
-    if cache is not None:
-        key = kwargs["key"]
-        if key not in cache:
-            cache[key] = {}
-        cache = cache[key]
+    cache, cache_device, cache_dtype = tensor_cache_for_key(kwargs.get("cache"), kwargs.get("key"))
 
     a_2d = a.flatten(start_dim=1)
     max_rank = min(a_2d.shape)
@@ -112,17 +107,22 @@ def truncate_rank(
         return torch.zeros_like(a)
 
     u, s, vh = _truncated_svd(
-        a_2d, target_rank, use_approximate_basis, approximate_basis_iters, approximate_basis_seed, cache
+        a_2d, target_rank, use_approximate_basis, approximate_basis_iters, approximate_basis_seed, cache,
+        cache_device=cache_device, cache_dtype=cache_dtype,
     )
     return (u * s.unsqueeze(-2) @ vh).reshape(a.shape)
 
 
-def _truncated_svd(a: Tensor, rank: int, approximate: bool, iters: int, seed: Optional[int], cache: Optional[dict]):
+def _truncated_svd(
+    a: Tensor, rank: int, approximate: bool, iters: int, seed: Optional[int], cache: Optional[dict],
+    *, cache_device: torch.device = DEFAULT_CACHE_DEVICE, cache_dtype: torch.dtype = DEFAULT_CACHE_DTYPE,
+):
     if (
         cache is not None and
         "s" in cache and cache["s"].numel() >= rank and
         cache.get("iters", iters) == iters and
-        cache.get("seed", seed) == seed
+        cache.get("seed", seed) == seed and
+        all(name in cache and matches_cache_storage(cache[name], cache_device, cache_dtype) for name in ("u", "s", "vh"))
     ):
         return cache["u"][..., :rank].to(a), cache["s"][..., :rank].to(a), cache["vh"][..., :rank, :].to(a)
 
@@ -132,9 +132,11 @@ def _truncated_svd(a: Tensor, rank: int, approximate: bool, iters: int, seed: Op
     else:
         u, s, vh = torch.linalg.svd(a, full_matrices=False, driver=svd_driver)
     if cache is not None:
-        cache["u"] = u.to(device="cpu", dtype=torch.float16)
-        cache["s"] = s.to(device="cpu", dtype=torch.float16)
-        cache["vh"] = vh.to(device="cpu", dtype=torch.float16)
+        cache.update(
+            u=u.to(device=cache_device, dtype=cache_dtype),
+            s=s.to(device=cache_device, dtype=cache_dtype),
+            vh=vh.to(device=cache_device, dtype=cache_dtype),
+        )
         if approximate:
             cache["iters"] = iters
             cache["seed"] = seed
@@ -188,6 +190,9 @@ class LowRankOrthogonalMatmul:
     def to(self, *args, **kwargs):
         return LowRankOrthogonalMatmul(self.u.to(*args, **kwargs), self.v.mH.to(*args, **kwargs))
 
+    def matches_cache_storage(self, device, dtype):
+        return matches_cache_storage(self.u, device, dtype) and matches_cache_storage(self.v, device, dtype)
+
 
 class FullRankOrthogonalMatmul:
     def __init__(self, rotation):
@@ -204,6 +209,9 @@ class FullRankOrthogonalMatmul:
 
     def to(self, *args, **kwargs):
         return FullRankOrthogonalMatmul(self.rotation.to(*args, **kwargs))
+
+    def matches_cache_storage(self, device, dtype):
+        return matches_cache_storage(self.rotation, device, dtype)
 
 
 # src: https://github.com/pytorch/pytorch/blob/f714599c57b3854460002335df7d67af98f12176/torch/_lowrank.py#L150

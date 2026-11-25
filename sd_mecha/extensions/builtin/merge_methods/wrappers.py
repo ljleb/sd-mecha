@@ -10,6 +10,7 @@ def add_difference(
     a: RecipeNodeOrValue, b: RecipeNodeOrValue, c: Optional[RecipeNodeOrValue] = None, *,
     alpha: Parameter(Tensor) = 1.0,
     clamp_to_ab: Parameter(bool) = False,
+    fallback_to_a: bool = True,
 ) -> recipe_nodes.RecipeNode:
     a = value_to_node(a)
     b = value_to_node(b)
@@ -36,7 +37,7 @@ def add_difference(
             res, a, b,
         )
 
-    return res | a
+    return res | a if fallback_to_a else res
 
 
 def add_perpendicular(

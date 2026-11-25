@@ -3,6 +3,8 @@
 [![PyPI version](https://badge.fury.io/py/sd-mecha.svg)](https://badge.fury.io/py/sd-mecha)
 [![Discord Server](https://dcbadge.vercel.app/api/server/2EPaw6fxxm?style=flat)](https://discord.gg/invite/2EPaw6fxxm)
 
+sd-mecha is a memory efficient model merging and conversion library. Quick example:
+
 ```python
 import sd_mecha
 
@@ -15,27 +17,18 @@ recipe = sd_mecha.weighted_sum(a, b, alpha=0.5)
 sd_mecha.merge(recipe, output="path/to/model_out.safetensors")
 ```
 
-sd-mecha is a general memory-efficient model merging library. It can merge *any* model:
-- Diffusion models
-- LLMs
-- VLMs
-- Aesthetic scorers
-- etc.
-
 ## Features
 
-- Memory efficient model merging: merge a very large number of models in a single execution
-- Textual and interpretable format for storage and execution (.mecha)
+- Memory efficient model merging: merge a very large number of models in one execution
+- Per-key merge control: set a different blend weight or use a different merge method for each parameter tensor
+- Human-readable serialization format (.mecha)
 - Extensible library interface:
-  - add custom models
-  - add custom merge methods
-- Builtin support for popular diffusion models:
-  - Stable Diffusion 1.5
-  - Stable Diffusion XL
-  - Stable Diffusion 3
-  - FLUX Schnell/Dev
-- Merge LyCORIS networks together and to checkpoints
-- Block-wise hyperparameters for precise control of blocks (aka MBW)
+  - user-defined models
+  - user-defined merge methods and architecture conversions
+- Built-in support for [popular diffusion models and their checkpoint key formats](docs/guide/0-introduction.md#built-in-checkpoint-key-formats)
+- Merge LyCORIS networks together and apply them to checkpoints
+- Extract LoRA, LoKr, Norm, and BOFT adapters
+- [Merge Block Weighted (MBW)](docs/guide/1-typical-use-cases.md#blocks-merging-mbw)
 
 ## Install
 
@@ -47,12 +40,13 @@ Make sure to install the appropriate release of [`torch`](https://pytorch.org/ge
 
 ## Usage
 
+See the [sd-mecha guide](docs/guide) for an in-depth exploration of the library.
+
+## Examples
+
 ### Merge models
 
-To merge models, mecha uses recipes.
-A recipe is a list of instructions that describes the exact steps needed to derive a state dict from inputs.
-
-Here's an example script that merges three models:
+Here's an example script that merges two models:
 
 ```python
 import sd_mecha
@@ -80,11 +74,11 @@ from sd_mecha.extensions import model_configs
 all_configs = model_configs.get_all()
 
 print([config.identifier for config in all_configs])
-# ["sd1-ldm-base", "sdxl-sgm-base", "sd3-sgm-base", ...]
+# Includes "sd1-ldm", "sdxl-sgm", "sd3-comfyui", ...
 ```
 
-A *component* of a model config is a subset of keys of the config that belong to the same logical group.
-For example, all keys starting with "first_stage_model." in Stable Diffusion models belong to the component "vae".
+A component of a model config is a subset of keys of the config that belong to the same logical group.
+For example, all keys starting with "first_stage_model." in Stable Diffusion 1 models belong to the component "vae".
 
 It is possible to query the different components of a model config:
 
@@ -93,13 +87,15 @@ from sd_mecha.extensions import model_configs
 
 config = model_configs.resolve("sd1-ldm")
 for component_id, component in config.components().items():
-      # component.keys contains the state dict keys that the component owns
+      # component.keys() returns the state dict keys and their metadata
       print(f"{component_id}")
 
 # this prints:
 #   clip_l
 #   vae
 #   diffuser
+#   ema
+#   scheduler
 ```
 
 ## Motivation
@@ -118,3 +114,7 @@ sd-mecha doesn't have this problem as it saves keys as soon as it can:
 ![image of sd-mecha merge graph](/media/did-you-see-something.PNG)
 
 This allows to merge a very large number of models simultaneously on low-end hardware.
+
+## Special mentions
+
+Thanks to @blue-pen5805 for their work that helped bring Anima support to sd-mecha. [Original comfy-mecha extension](https://github.com/blue-pen5805/comfy-mecha-extensions-anima)
